@@ -1,0 +1,9 @@
+*.o
+src/arena
+src/libagent.a
+example-agent/agent
+bin
+*.log
+*.log.gz
+__pycache__
+*.pyc

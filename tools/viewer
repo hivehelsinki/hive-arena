@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+decomp=gzcat
+
+if ! command -v $decomp; then
+	decomp=zcat
+fi
+
+cd tools
+lua viewer.lua <($decomp ../$1)
