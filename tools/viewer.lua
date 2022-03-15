@@ -1,3 +1,10 @@
+do
+    local relpath = arg[0]:match("(.*)/[^/]+")
+    if relpath then
+        package.path = package.path .. ";" .. relpath .. "/?.lua"
+    end
+end
+
 local term = require "plterm"
 local constants = require "constants"
 

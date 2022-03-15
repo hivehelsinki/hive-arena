@@ -2,9 +2,9 @@
 
 decomp=gzcat
 
-if ! command -v $decomp; then
+if ! command -v $decomp >/dev/null; then
 	decomp=zcat
 fi
 
-cd tools
-lua viewer.lua <($decomp ../$1)
+toolsdir=$(dirname $0)
+lua $toolsdir/viewer.lua <($decomp $1)
