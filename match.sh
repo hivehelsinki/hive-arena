@@ -2,8 +2,8 @@
 
 set -e
 
-if [ $# -ne 2 ]; then
-    echo "Usage: ./match agent0_directory agent1_directory"
+if [ $# -lt 2 ] || [ $# -gt 3 ]; then
+    echo "Usage: ./match agent0_directory agent1_directory [log_directory]"
     exit 1
 fi
 
@@ -14,7 +14,7 @@ make -C $2
 team1=$(basename $1)
 team2=$(basename $2)
 isodate=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-logfile="${team1}-${team2}-${isodate}.log"
+logfile="${3:-.}/${team1}-${team2}-${isodate}.log"
 
 port=8000
 
@@ -24,4 +24,6 @@ port=8000
 bin/arena $port $logfile
 gzip $logfile
 
-tools/viewer $logfile
+if [ -z $3 ]; then
+    tools/viewer $logfile
+fi

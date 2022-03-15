@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+decomp=gzcat
+
+if ! command -v $decomp >/dev/null; then
+	decomp=zcat
+fi
+
+$decomp $1 | tail -1
