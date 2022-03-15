@@ -164,7 +164,7 @@ function print_help()
     printnl("[←/→: previous/next turn, ↑/↓, previous/next round]")
     printnl("[A/D: start/end]")
     printnl("[space: play next ten rounds, enter: play whole match]")
-    printnl("[esc/Q: quit]")
+    printnl("[Q: quit]")
 end
 
 function clamp(x, min, max)
@@ -235,7 +235,7 @@ function input_loop(turns, pname0, pname1)
                 play(10 * 10)
             elseif k == 13 or k == 10 then
                 play(#turns)
-            elseif k == term.keys.esc or k == key 'q' then
+            elseif k == key 'q' then
                 break
             end
 
