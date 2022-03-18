@@ -5,8 +5,12 @@ if #arg ~= 3 then
     os.exit(1)
 end
 
+local function dirname(path)
+    return path:match "[^/]+$"
+end
+
 local day = arg[1]
-local team1, team2 = arg[2], arg[3]
+local team1, team2 = dirname(arg[2]), dirname(arg[3])
 local dir = "day" .. day .. "-" .. team1 .. "-" .. team2
 
 os.execute("mkdir -p " .. dir)
