@@ -10,15 +10,16 @@ local function dirname(path)
 end
 
 local day = arg[1]
-local team1, team2 = dirname(arg[2]), dirname(arg[3])
-local dir = "day" .. day .. "-" .. team1 .. "-" .. team2
+local team1_path, team2_path = arg[2], arg[3]
+local team1_name, team2_name = dirname(team1_path), dirname(team2_path)
+local dir = "day" .. day .. "-" .. team1_name .. "-" .. team2_name
 
 os.execute("mkdir -p " .. dir)
 
 for i = 1, runs_per_match do
     print "==========="
     print("Run " .. i)
-    local cmd = string.format("./match.sh %s %s %s", team1, team2, dir)
+    local cmd = string.format("./match.sh %s %s %s", team1_path, team2_path, dir)
     os.execute(cmd)
 
 end
@@ -28,7 +29,7 @@ end
 local report = {}
 local counts = {}
 
-table.insert(report, string.format("## Day %s: %s vs. %s", day, team1, team2))
+table.insert(report, string.format("## Day %s: %s vs. %s", day, team1_name, team2_name))
 table.insert(report, "")
 
 for file in io.popen("ls " .. dir):lines() do
