@@ -1,3 +1,0 @@
-#!/bin/sh
-
-lua agent.lua $1 $2 $3
