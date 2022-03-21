@@ -26,7 +26,7 @@
 - [Tribe13-builder-bees-2022-03-21T10:59:04Z.log.gz](day1-Tribe13-builder-bees/Tribe13-builder-bees-2022-03-21T10:59:04Z.log.gz) | tribe13_agent
 - [Tribe13-builder-bees-2022-03-21T10:59:17Z.log.gz](day1-Tribe13-builder-bees/Tribe13-builder-bees-2022-03-21T10:59:17Z.log.gz) | tribe13_agent
 
-tribe13_agent
+**tribe13_agent**
 
 ## Day 1: Dumbledores vs. builder-bees
 
@@ -41,7 +41,7 @@ tribe13_agent
 - [Dumbledores-builder-bees-2022-03-21T11:01:11Z.log.gz](day1-Dumbledores-builder-bees/Dumbledores-builder-bees-2022-03-21T11:01:11Z.log.gz) | three_hive_encasers
 - [Dumbledores-builder-bees-2022-03-21T11:01:13Z.log.gz](day1-Dumbledores-builder-bees/Dumbledores-builder-bees-2022-03-21T11:01:13Z.log.gz) | three_hive_encasers
 
-three_hive_encasers
+**three_hive_encasers**
 
 ## Day 1: team-aleph vs. smileyface
 
@@ -56,7 +56,7 @@ three_hive_encasers
 - [team-aleph-smileyface-2022-03-21T11:02:27Z.log.gz](day1-team-aleph-smileyface/team-aleph-smileyface-2022-03-21T11:02:27Z.log.gz) | thinking emoji
 - [team-aleph-smileyface-2022-03-21T11:02:30Z.log.gz](day1-team-aleph-smileyface/team-aleph-smileyface-2022-03-21T11:02:30Z.log.gz) | thinking emoji
 
-thinking emoji
+**thinking emoji**
 
 ## Day 1: team-aleph vs. beenet
 
@@ -86,7 +86,7 @@ thinking emoji
 - [smileyface-beenet-2022-03-21T11:04:10Z.log.gz](day1-smileyface-beenet/smileyface-beenet-2022-03-21T11:04:10Z.log.gz) | thinking emoji
 - [smileyface-beenet-2022-03-21T11:04:12Z.log.gz](day1-smileyface-beenet/smileyface-beenet-2022-03-21T11:04:12Z.log.gz) | thinking emoji
 
-thinking emoji
+**thinking emoji**
 
 ## Day 1: eerikinpippuri vs. DeepBlueC
 
@@ -101,7 +101,7 @@ thinking emoji
 - [eerikinpippuri-DeepBlueC-2022-03-21T11:04:58Z.log.gz](day1-eerikinpippuri-DeepBlueC/eerikinpippuri-DeepBlueC-2022-03-21T11:04:58Z.log.gz) | Builders_sun
 - [eerikinpippuri-DeepBlueC-2022-03-21T11:05:01Z.log.gz](day1-eerikinpippuri-DeepBlueC/eerikinpippuri-DeepBlueC-2022-03-21T11:05:01Z.log.gz) | Builders_sun
 
-Builders_sun
+**Builders_sun**
 
 ## Day 1: eerikinpippuri vs. johnnyailiday
 
@@ -116,7 +116,7 @@ Builders_sun
 - [eerikinpippuri-johnnyailiday-2022-03-21T11:05:28Z.log.gz](day1-eerikinpippuri-johnnyailiday/eerikinpippuri-johnnyailiday-2022-03-21T11:05:28Z.log.gz) | Builders_sun
 - [eerikinpippuri-johnnyailiday-2022-03-21T11:05:30Z.log.gz](day1-eerikinpippuri-johnnyailiday/eerikinpippuri-johnnyailiday-2022-03-21T11:05:30Z.log.gz) | Builders_sun
 
-Builders_sun
+**Builders_sun**
 
 ## Day 1: DeepBlueC vs. johnnyailiday
 
@@ -131,5 +131,4 @@ Builders_sun
 - [DeepBlueC-johnnyailiday-2022-03-21T11:06:23Z.log.gz](day1-DeepBlueC-johnnyailiday/DeepBlueC-johnnyailiday-2022-03-21T11:06:23Z.log.gz) | Deep Blue C
 - [DeepBlueC-johnnyailiday-2022-03-21T11:06:25Z.log.gz](day1-DeepBlueC-johnnyailiday/DeepBlueC-johnnyailiday-2022-03-21T11:06:25Z.log.gz) | Deep Blue C
 
-Deep Blue C
-
+**Deep Blue C**
