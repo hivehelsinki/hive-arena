@@ -1,3 +1,11 @@
+## Day 2: Dumbledores vs. smileyface
+
+**smileyface**
+
+## Day 2: Dumbledores vs. eerikinpippuri
+
+**eerikinpippuri**
+
 ## Day 2: smileyface vs. eerikinpippuri
 
 - [smileyface-eerikinpippuri-2022-03-22T11:43:18Z.log.gz](day2-smileyface-eerikinpippuri/smileyface-eerikinpippuri-2022-03-22T11:43:18Z.log.gz) | Eerikin Pippuri Kebab
@@ -102,4 +110,3 @@
 - [team-aleph-johnnyailiday-2022-03-22T11:48:00Z.log.gz](day2-team-aleph-johnnyailiday/team-aleph-johnnyailiday-2022-03-22T11:48:00Z.log.gz)
 
 **Framboisier**
-
