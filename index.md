@@ -40,6 +40,8 @@
 
 ## Day 2
 
+[Full results and logs](day2.md)
+
 ### Groups
 
 | Team                  | Score |
