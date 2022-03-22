@@ -1,3 +1,6 @@
+---
+---
+
 ## Day 1: Tribe13 vs. Dumbledores
 
 - [Tribe13-Dumbledores-2022-03-21T10:56:38Z.log.gz](day1-Tribe13-Dumbledores/Tribe13-Dumbledores-2022-03-21T10:56:38Z.log.gz) - tribe13_agent

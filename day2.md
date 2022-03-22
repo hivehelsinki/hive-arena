@@ -1,3 +1,6 @@
+---
+---
+
 ## Day 2: Dumbledores vs. smileyface
 
 - [Dumbledores-smileyface-2022-03-22T10:29:46Z.log.gz](day2-Dumbledores-smileyface/Dumbledores-smileyface-2022-03-22T10:29:46Z.log.gz) | three_hive_encasers
@@ -132,4 +135,3 @@ Draw
 - [team-aleph-johnnyailiday-2022-03-22T10:40:04Z.log.gz](day2-team-aleph-johnnyailiday/team-aleph-johnnyailiday-2022-03-22T10:40:04Z.log.gz) | team_aleph_agent
 
 **team_aleph_agent**
-
