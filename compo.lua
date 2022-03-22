@@ -42,7 +42,7 @@ for file in io.popen("ls " .. dir):lines() do
         local winner = result:match "Winner.*%((.*)%)"
         if winner then
             counts[winner] = (counts[winner] or 0) + 1
-            line = line .. " | " .. winner
+            line = line .. " - " .. winner
         end
 
         table.insert(report, line)
