@@ -49,9 +49,9 @@
 
 | Team                  | Score |
 |-----------------------|-------|
-| Dumbledores           |     4 |
-| 🤔                     |    0  |
-| Eerikin Pippuri Kebab |     4 |
+| Dumbledores           |     0 |
+| 🤔                     |    3  |
+| Eerikin Pippuri Kebab |     6 |
 
 | Team                  | Score |
 |-----------------------|-------|
@@ -62,39 +62,39 @@
 | Team                  | Score |
 |-----------------------|-------|
 | Builder Bees          |     0 |
-| Team Aleph            |     6 |
-| Johnny A.I.liday      |     3 |
+| Team Aleph            |     3 |
+| Johnny A.I.liday      |     6 |
 
 ### Standing scores
 
 | Team                  | Score |
 |-----------------------|-------|
-| Dumbledores           |    10 |
-| Eerikin Pippuri Kebab |    10 |
+| Eerikin Pippuri Kebab |    12 |
+| 🤔                     |     9 |
 | Tribe 13              |     9 |
-| 🤔                     |     6 |
+| Dumbledores           |     6 |
 | Deep Blue C           |     6 |
-| Team Aleph            |     6 |
+| Johnny A.I.liday      |     6 |
 | Beenet                |     3 |
-| Johnny A.I.liday      |     3 |
+| Team Aleph            |     3 |
 | Builder Bees          |     0 |
 
 ## Day 3
 
 | Team                  | Score |
 |-----------------------|-------|
-| Dumbledores           |       |
-| Eerikin Pippuri Kebab |       |
-| Tribe 13              |       |
+| Eerikin Pippuri Kebab |     |
+| 🤔                     |      |
+| Tribe 13              |      |
 
 | Team                  | Score |
 |-----------------------|-------|
-| 🤔                     |       |
-| Deep Blue C           |       |
-| Team Aleph            |       |
+| Dumbledores           |      |
+| Deep Blue C           |      |
+| Johnny A.I.liday      |      |
 
 | Team                  | Score |
 |-----------------------|-------|
-| Beenet                |       |
-| Johnny A.I.liday      |       |
-| Builder Bees          |       |
+| Beenet                |      |
+| Team Aleph            |      |
+| Builder Bees          |      |
