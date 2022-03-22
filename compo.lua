@@ -61,7 +61,7 @@ table.sort(flat, function(a,b) return counts[a] < counts[b] end)
 if #flat == 0 then
     table.insert(report, "Draw")
 elseif #flat == 1 then
-    table.insert(report, flat[1])
+    table.insert(report, "**" .. flat[1] .. "**")
 elseif #flat == 2 then
     if counts[flat[1]] == counts[flat[2]] then
         table.insert(report, "Draw")
