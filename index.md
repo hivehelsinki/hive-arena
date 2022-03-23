@@ -81,6 +81,8 @@
 
 ## Day 3
 
+[Full results and logs](day3.md)
+
 | Team                  | Score |
 |-----------------------|-------|
 | Eerikin Pippuri Kebab |     3 |
