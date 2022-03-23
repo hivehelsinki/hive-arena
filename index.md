@@ -83,17 +83,53 @@
 
 | Team                  | Score |
 |-----------------------|-------|
-| Eerikin Pippuri Kebab |     |
-| 🤔                     |      |
-| Tribe 13              |      |
+| Eerikin Pippuri Kebab |     3 |
+| 🤔                     |    3 |
+| Tribe 13              |     3 |
 
 | Team                  | Score |
 |-----------------------|-------|
-| Dumbledores           |      |
+| Dumbledores           |     6 |
+| Deep Blue C           |     3 |
+| Johnny A.I.liday      |     0 |
+
+| Team                  | Score |
+|-----------------------|-------|
+| Beenet                |     3 |
+| Team Aleph            |     3 |
+| Builder Bees          |     3 |
+
+### Standing scores
+
+| Team name             | Score | Sum of opponents' scores |
+|-----------------------|-------|--------------------------|
+| Eerikin Pippuri Kebab |    15 |                          |
+| 🤔                     |    12 |                       66 |
+| Dumbledores           |    12 |                       57 |
+| Tribe 13              |    12 |                       57 |
+| Deep Blue C           |     9 |                          |
+| Johnny A.I.liday      |     6 |                       54 |
+| Beenet                |     6 |                       48 |
+| Team Aleph            |     6 |                       36 |
+| Builder Bees          |     3 |                          |
+
+([Deciding match](day3draw.md) between Dumbledores and Tribe 13: **Dumbledores**)
+
+## Day 4
+
+| Team name             | Score |
+|-----------------------|-------|
+| Eerikin Pippuri Kebab |     |
+| 🤔                     |     |
+| Dumbledores           |     |
+
+| Team name             | Score |
+|-----------------------|-------|
+| Tribe 13              |     |
 | Deep Blue C           |      |
 | Johnny A.I.liday      |      |
 
-| Team                  | Score |
+| Team name             | Score |
 |-----------------------|-------|
 | Beenet                |      |
 | Team Aleph            |      |
