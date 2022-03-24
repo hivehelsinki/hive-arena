@@ -83,6 +83,8 @@
 
 [Full results and logs](day3.md)
 
+### Groups
+
 | Team                  | Score |
 |-----------------------|-------|
 | Eerikin Pippuri Kebab |     3 |
@@ -119,20 +121,51 @@
 
 ## Day 4
 
-| Team name             | Score |
-|-----------------------|-------|
-| Eerikin Pippuri Kebab |     |
-| 🤔                     |     |
-| Dumbledores           |     |
+[Full results and logs](day4.md)
+
+### Groups
 
 | Team name             | Score |
 |-----------------------|-------|
-| Tribe 13              |     |
-| Deep Blue C           |      |
-| Johnny A.I.liday      |      |
+| Eerikin Pippuri Kebab |    6 |
+| 🤔                     |    1 |
+| Dumbledores           |    1 |
 
 | Team name             | Score |
 |-----------------------|-------|
-| Beenet                |      |
-| Team Aleph            |      |
-| Builder Bees          |      |
+| Tribe 13              |     3 |
+| Deep Blue C           |     6 |
+| Johnny A.I.liday      |     0 |
+
+| Team name             | Score |
+|-----------------------|-------|
+| Beenet                |     3 |
+| Team Aleph            |     6 |
+| Builder Bees          |     0 |
+
+### Final scores
+
+| Team                  | Score | Sum of opponents' scores |
+|-----------------------|-------|--------------------------|
+| Eerikin Pippuri Kebab |    21 |                          |
+| Tribe 13              |    15 |                          |
+| Deep Blue C           |    15 |                          |
+| 🤔                     |    13 |                      125 |
+| Dumbledores           |    13 |                      107 |
+| Team Aleph            |    12 |                          |
+| Beenet                |     9 |                          |
+| Johnny A.I.liday      |     6 |                          |
+| Builder Bees          |     3 |                          |
+
+
+## Semifinals
+
+| Team                  | Winner |
+|-----------------------|--------|
+| Eerikin Pippuri Kebab |        |
+| Tribe 13              |        |
+
+| Team                  | Winner |
+|-----------------------|--------|
+| Deep Blue C           |        |
+| 🤔                     |        |
