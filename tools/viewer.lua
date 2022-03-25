@@ -256,7 +256,7 @@ function input_loop(turns, pname0, pname1)
                 play_target = nil
             end
 
-            os.execute("sleep 0.08")
+            os.execute("sleep 0.15")
         end
     end
 end
