@@ -160,12 +160,26 @@
 
 ## Semifinals
 
-| Team                  | Winner |
+| Team                  | Wins |
 |-----------------------|--------|
-| Eerikin Pippuri Kebab |        |
-| Tribe 13              |        |
+| **Eerikin Pippuri Kebab** |     5   |
+| Tribe 13              |     1   |
 
-| Team                  | Winner |
+| Team                  | Wins |
 |-----------------------|--------|
-| Deep Blue C           |        |
-| 🤔                     |        |
+| **Deep Blue C**           |     5   |
+| 🤔                     |    4    |
+
+## Match for third place
+
+| Team                  | Wins |
+|-----------------------|--------|
+| **Tribe 13** |     5   |
+|   🤔            |     0   |
+
+## Finals
+
+| Team                  | Wins |
+|-----------------------|--------|
+| **Eerikin Pippuri Kebab** |     5   |
+| Deep Blue C              |     2   |
