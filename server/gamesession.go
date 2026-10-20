@@ -13,7 +13,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	. "hive-arena/common"
+	"hive-arena/common"
 )
 
 const MinTurnDuration = 500 * time.Millisecond
@@ -34,12 +34,12 @@ type GameSession struct {
 	AdminToken   string
 	PlayerTokens []string
 	Players      []Player
-	State        *GameState
+	State        *common.GameState
 
-	PendingOrders [][]*Order
+	PendingOrders [][]*common.Order
 	Posted        []bool
 	TurnStart     time.Time
-	History       []Turn
+	History       []common.Turn
 
 	Sockets []*Socket
 }
@@ -54,10 +54,10 @@ func generateTokens(count int) []string {
 	return slices.Collect(maps.Keys(tokens))
 }
 
-func NewGameSession(id string, players int, mapname string, mapdata MapData) *GameSession {
+func NewGameSession(id string, players int, mapname string, mapdata common.MapData) *GameSession {
 
 	tokens := generateTokens(players + 1)
-	state := NewGameState(mapdata, players)
+	state := common.NewGameState(mapdata, players)
 
 	return &GameSession{
 		ID:           id,
@@ -66,7 +66,7 @@ func NewGameSession(id string, players int, mapname string, mapdata MapData) *Ga
 		AdminToken:   tokens[0],
 		PlayerTokens: tokens[1:],
 		State:        state,
-		History:      []Turn{{Orders: nil, State: state.Clone()}},
+		History:      []common.Turn{{Orders: nil, State: state.Clone()}},
 	}
 }
 
@@ -90,7 +90,7 @@ func (session *GameSession) IsOver() bool {
 }
 
 // FullState returns a copy of the current state, safe to use without holding the lock
-func (session *GameSession) FullState() *GameState {
+func (session *GameSession) FullState() *common.GameState {
 	session.mutex.Lock()
 	defer session.mutex.Unlock()
 
@@ -128,7 +128,7 @@ func (session *GameSession) Player(token string) (Player, bool) {
 	return session.Players[playerid], true
 }
 
-func (session *GameSession) GetView(token string) *GameState {
+func (session *GameSession) GetView(token string) *common.GameState {
 	session.mutex.Lock()
 	defer session.mutex.Unlock()
 
@@ -147,7 +147,7 @@ func (session *GameSession) BeginTurn() {
 		return
 	}
 
-	session.PendingOrders = make([][]*Order, session.State.NumPlayers)
+	session.PendingOrders = make([][]*common.Order, session.State.NumPlayers)
 	session.Posted = make([]bool, session.State.NumPlayers)
 	session.TurnStart = time.Now()
 
@@ -167,7 +167,7 @@ func (session *GameSession) processTurnAfter(delay time.Duration) {
 	})
 }
 
-func (session *GameSession) SetOrders(playerid int, turn uint, orders []*Order) error {
+func (session *GameSession) SetOrders(playerid int, turn uint, orders []*common.Order) error {
 	session.mutex.Lock()
 	defer session.mutex.Unlock()
 
@@ -211,7 +211,7 @@ func (session *GameSession) processTurn() {
 		log.Printf("Could not process orders for game %s: %s", session.ID, err)
 		return
 	}
-	session.History = append(session.History, Turn{Orders: results, State: session.State.Clone()})
+	session.History = append(session.History, common.Turn{Orders: results, State: session.State.Clone()})
 
 	if session.State.GameOver {
 		log.Printf("Game %s is over", session.ID)
@@ -294,7 +294,7 @@ func (session *GameSession) persist() error {
 		players[i] = player.Name
 	}
 
-	info := PersistedGame{
+	info := common.PersistedGame{
 		Id:          session.ID,
 		Map:         session.Map,
 		CreatedDate: session.CreatedDate,
@@ -318,7 +318,7 @@ func (session *GameSession) persist() error {
 	return file.Close()
 }
 
-func (session *GameSession) Status() SessionStatus {
+func (session *GameSession) Status() common.SessionStatus {
 	session.mutex.Lock()
 	defer session.mutex.Unlock()
 
@@ -327,7 +327,7 @@ func (session *GameSession) Status() SessionStatus {
 		players = append(players, player.Name)
 	}
 
-	return SessionStatus{
+	return common.SessionStatus{
 		Id:          session.ID,
 		CreatedDate: session.CreatedDate,
 		Map:         session.Map,
