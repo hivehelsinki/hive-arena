@@ -38,6 +38,7 @@ type GameSession struct {
 
 	PendingOrders [][]*Order
 	Posted        []bool
+	TurnStart     time.Time
 	History       []Turn
 
 	Sockets []*websocket.Conn
@@ -140,11 +141,6 @@ func (session *GameSession) GetView(token string) *GameState {
 }
 
 func (session *GameSession) BeginTurn() {
-
-	if !DevMode {
-		time.Sleep(MinTurnDuration)
-	}
-
 	session.notifySockets()
 
 	if session.State.GameOver {
@@ -153,13 +149,19 @@ func (session *GameSession) BeginTurn() {
 
 	session.PendingOrders = make([][]*Order, session.State.NumPlayers)
 	session.Posted = make([]bool, session.State.NumPlayers)
+	session.TurnStart = time.Now()
 
+	session.processTurnAfter(TurnTimeout)
+}
+
+// processTurnAfter processes the current turn after a delay, unless it has been processed in the meantime
+func (session *GameSession) processTurnAfter(delay time.Duration) {
 	currentTurn := session.State.Turn
-	time.AfterFunc(TurnTimeout, func() {
+	time.AfterFunc(delay, func() {
 		session.mutex.Lock()
 		defer session.mutex.Unlock()
 
-		if session.State.Turn == currentTurn {
+		if session.State.Turn == currentTurn && !session.State.GameOver {
 			session.processTurn()
 		}
 	})
@@ -185,7 +187,13 @@ func (session *GameSession) SetOrders(playerid int, turn uint, orders []*Order) 
 	log.Printf("Player %s posted orders in game %s", session.Players[playerid].Name, session.ID)
 
 	if session.allPlayed() {
-		session.processTurn()
+		// Turns last at least MinTurnDuration, so that games can be followed live
+		delay := MinTurnDuration - time.Since(session.TurnStart)
+		if DevMode || delay <= 0 {
+			session.processTurn()
+		} else {
+			session.processTurnAfter(delay)
+		}
 	}
 
 	return nil

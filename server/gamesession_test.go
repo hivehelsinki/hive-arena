@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"sync"
 	"testing"
+	"time"
 
 	. "hive-arena/common"
 )
@@ -115,5 +116,30 @@ func TestEmptyOrdersCountAsPlayed(t *testing.T) {
 
 	if turn := session.FullState().Turn; turn != 1 {
 		t.Errorf("turn should be processed once all players have posted, current turn is %d", turn)
+	}
+}
+
+func TestMinTurnDuration(t *testing.T) {
+	session, players := newTestSession(t, 2)
+
+	DevMode = false
+	t.Cleanup(func() { DevMode = true })
+
+	start := time.Now()
+	for _, player := range players {
+		if err := session.SetOrders(player.ID, 0, []*Order{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if time.Since(start) > MinTurnDuration/2 {
+		t.Error("posting orders should not block until the turn is processed")
+	}
+	if session.FullState().Turn != 0 {
+		t.Error("turn should not be processed before the minimum turn duration")
+	}
+
+	time.Sleep(MinTurnDuration + 100*time.Millisecond)
+	if session.FullState().Turn != 1 {
+		t.Error("turn should be processed after the minimum turn duration")
 	}
 }
