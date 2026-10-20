@@ -36,7 +36,9 @@ end
 
 local function joinGame(host, gameid, name)
 
-	local q = string.format("?id=%s&name=%s", gameid, name)
+	local util = require "http.util"
+
+	local q = string.format("?id=%s&name=%s", util.encodeURIComponent(gameid), util.encodeURIComponent(name))
 	local res = req(host, "/join" .. q)
 
 	print("Joined game:" .. gameid, "token:", res.token, "player:", res.id)

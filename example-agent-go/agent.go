@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 
 	"github.com/gorilla/websocket"
@@ -45,8 +46,8 @@ type WebSocketMessage struct {
 
 func joinGame(host string, id string, name string) JoinResponse {
 
-	url := "http://" + host + fmt.Sprintf("/join?id=%s&name=%s", id, name)
-	body := request(url)
+	query := url.Values{"id": {id}, "name": {name}}
+	body := request("http://" + host + "/join?" + query.Encode())
 
 	var response JoinResponse
 	json.Unmarshal([]byte(body), &response)
