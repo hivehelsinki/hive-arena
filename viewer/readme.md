@@ -10,9 +10,10 @@ Usage:
 
 Input:
 
-- left/right: move to previous/next turn
+- left/right: move to previous/next turn (hold shift to move 10 turns, ctrl or alt to move 50 turns)
 - up/down: move to first/last turn
-- q/z or mouse wheel: zoom in/out
+- space: play/pause
+- w/q or mouse wheel: zoom in/out
 - click: center view
 
 ## License
