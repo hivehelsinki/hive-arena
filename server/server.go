@@ -110,6 +110,7 @@ func (server *Server) removeIfNotStarted(id string) {
 	game := server.Sessions[id]
 	if game != nil && !game.Started() {
 		delete(server.Sessions, id)
+		game.CloseSockets()
 		log.Printf("Removed game %s because of timeout", id)
 	}
 }

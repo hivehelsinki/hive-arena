@@ -41,7 +41,7 @@ type GameSession struct {
 	TurnStart     time.Time
 	History       []Turn
 
-	Sockets []*websocket.Conn
+	Sockets []*Socket
 }
 
 func generateTokens(count int) []string {
@@ -217,10 +217,16 @@ func (session *GameSession) processTurn() {
 	session.BeginTurn()
 }
 
-func (session *GameSession) RegisterWebSocket(socket *websocket.Conn) {
+func (session *GameSession) RegisterWebSocket(conn *websocket.Conn) {
 	session.mutex.Lock()
 	defer session.mutex.Unlock()
 
+	socket := NewSocket(conn, func(socket *Socket) {
+		session.mutex.Lock()
+		defer session.mutex.Unlock()
+
+		session.closeSocket(socket)
+	})
 	session.Sockets = append(session.Sockets, socket)
 
 	if session.isFull() {
@@ -228,22 +234,43 @@ func (session *GameSession) RegisterWebSocket(socket *websocket.Conn) {
 	}
 }
 
-func (session *GameSession) notifySocket(socket *websocket.Conn) {
+func (session *GameSession) notifySocket(socket *Socket) {
 	message, _ := json.Marshal(map[string]any{
 		"turn":     session.State.Turn,
 		"gameOver": session.State.GameOver,
 	})
 
-	socket.WriteMessage(websocket.TextMessage, message)
-
-	if session.State.GameOver {
-		socket.Close()
+	if !socket.Send(message) {
+		log.Printf("Closing a websocket of game %s that is not keeping up", session.ID)
+		session.closeSocket(socket)
+	} else if session.State.GameOver {
+		session.closeSocket(socket)
 	}
 }
 
 func (session *GameSession) notifySockets() {
-	for _, socket := range session.Sockets {
+	for _, socket := range slices.Clone(session.Sockets) {
 		session.notifySocket(socket)
+	}
+}
+
+// closeSocket removes a socket from the game, and closes it after its pending messages are sent
+func (session *GameSession) closeSocket(socket *Socket) {
+	index := slices.Index(session.Sockets, socket)
+	if index < 0 {
+		return
+	}
+
+	session.Sockets = slices.Delete(session.Sockets, index, index+1)
+	socket.Close()
+}
+
+func (session *GameSession) CloseSockets() {
+	session.mutex.Lock()
+	defer session.mutex.Unlock()
+
+	for _, socket := range slices.Clone(session.Sockets) {
+		session.closeSocket(socket)
 	}
 }
 
