@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"hive-arena/common"
+	"github.com/hivehelsinki/hive-arena/common"
 )
 
 func newTestSession(t *testing.T, players int) (*GameSession, []Player) {

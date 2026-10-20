@@ -1,4 +1,4 @@
-module hive-arena
+module github.com/hivehelsinki/hive-arena
 
 go 1.25.1
 

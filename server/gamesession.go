@@ -13,7 +13,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"hive-arena/common"
+	"github.com/hivehelsinki/hive-arena/common"
 )
 
 const MinTurnDuration = 500 * time.Millisecond

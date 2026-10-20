@@ -9,7 +9,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"hive-arena/common"
+	"github.com/hivehelsinki/hive-arena/common"
 )
 
 // dialSession opens a websocket registered to the given session

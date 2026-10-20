@@ -9,7 +9,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 
-	"hive-arena/common"
+	"github.com/hivehelsinki/hive-arena/common"
 
 	_ "embed"
 )

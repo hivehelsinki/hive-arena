@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"os"
 
-	"hive-arena/common"
+	"github.com/hivehelsinki/hive-arena/common"
 )
 
 var dirs = []common.Direction{common.E, common.SE, common.SW, common.W, common.NW, common.NE}

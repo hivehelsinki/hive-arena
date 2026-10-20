@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"hive-arena/common"
+	"github.com/hivehelsinki/hive-arena/common"
 )
 
 func newTestServer(t *testing.T) *httptest.Server {
