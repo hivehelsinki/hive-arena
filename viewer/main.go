@@ -26,6 +26,18 @@ var PlayerColors = []color.Color{
 	color.RGBA{255, 100, 255, 255},
 }
 
+func playerColor(player int) color.Color {
+	return PlayerColors[player%len(PlayerColors)]
+}
+
+// playerName works even when the player names are unknown, e.g. while a live game is loading
+func (viewer *Viewer) playerName(player int) string {
+	if player < len(viewer.Game.Players) {
+		return viewer.Game.Players[player]
+	}
+	return "?"
+}
+
 const AutoplaySpeed = 10 // ebiten runs 60 ticks per second, so 6 turns per second
 
 type Viewer struct {
@@ -180,7 +192,7 @@ func (viewer *Viewer) DrawState(screen *ebiten.Image) {
 		opt := ebiten.DrawImageOptions{}
 		opt.GeoM = viewer.CoordsToTransform(hex.Coords)
 		opt.GeoM.Translate(0, -EntityOffset[entity.Type]*viewer.Scale)
-		opt.ColorScale.ScaleWithColor(PlayerColors[entity.Player])
+		opt.ColorScale.ScaleWithColor(playerColor(entity.Player))
 		screen.DrawImage(EntityTiles[entity.Type], &opt)
 
 		if entity.HasFlower {
@@ -205,11 +217,11 @@ func (viewer *Viewer) DrawInfo(screen *ebiten.Image, state *GameState) {
 	txtOp.GeoM.Translate(0, LineHeight)
 	text.Draw(screen, fmt.Sprintf("Turn: %d", state.Turn), Font, txtOp)
 
-	for i, player := range viewer.Game.Players {
+	for i, resources := range state.PlayerResources {
 		txtOp.GeoM.Translate(0, LineHeight)
 		txtOp.ColorScale.Reset()
-		txtOp.ColorScale.ScaleWithColor(PlayerColors[i])
-		text.Draw(screen, fmt.Sprintf("Player %d: %s (%d flowers)", i, player, state.PlayerResources[i]), Font, txtOp)
+		txtOp.ColorScale.ScaleWithColor(playerColor(i))
+		text.Draw(screen, fmt.Sprintf("Player %d: %s (%d flowers)", i, viewer.playerName(i), resources), Font, txtOp)
 	}
 
 	txtOp.ColorScale.Reset()
@@ -220,7 +232,7 @@ func (viewer *Viewer) DrawInfo(screen *ebiten.Image, state *GameState) {
 		txtOp.GeoM.Translate(0, LineHeight)
 		var winners []string
 		for _, winnerId := range state.Winners {
-			winners = append(winners, viewer.Game.Players[winnerId])
+			winners = append(winners, viewer.playerName(winnerId))
 		}
 		txt := "Winner: "
 		if len(winners) > 1 {
