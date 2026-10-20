@@ -81,8 +81,8 @@ func getState(host string, id string, token string) GameState {
 	return response
 }
 
-func sendOrders(host string, id string, token string, orders []Order) {
-	url := "http://" + host + fmt.Sprintf("/orders?id=%s&token=%s", id, token)
+func sendOrders(host string, id string, token string, turn uint, orders []Order) {
+	url := "http://" + host + fmt.Sprintf("/orders?id=%s&token=%s&turn=%d", id, token, turn)
 	payload, err := json.Marshal(orders)
 
 	resp, err := http.Post(url, "application/json", bytes.NewReader(payload))
@@ -112,7 +112,7 @@ func Run(host string, id string, name string, callback func(*GameState, int) []O
 		currentTurn = state.Turn
 
 		orders := callback(&state, playerInfo.Id)
-		sendOrders(host, id, playerInfo.Token, orders)
+		sendOrders(host, id, playerInfo.Token, state.Turn, orders)
 	}
 
 	for {

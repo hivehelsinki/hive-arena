@@ -163,7 +163,7 @@ func (session *GameSession) BeginTurn() {
 	})
 }
 
-func (session *GameSession) SetOrders(playerid int, orders []*Order) error {
+func (session *GameSession) SetOrders(playerid int, turn uint, orders []*Order) error {
 	session.mutex.Lock()
 	defer session.mutex.Unlock()
 
@@ -172,6 +172,9 @@ func (session *GameSession) SetOrders(playerid int, orders []*Order) error {
 	}
 	if session.State.GameOver {
 		return fmt.Errorf("Game is over")
+	}
+	if turn != session.State.Turn {
+		return fmt.Errorf("Orders are for turn %d, but the current turn is %d", turn, session.State.Turn)
 	}
 
 	session.PendingOrders[playerid] = orders

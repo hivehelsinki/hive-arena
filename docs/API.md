@@ -124,6 +124,7 @@ Query string parameters:
 
 - `id`: the ID of the game to send commands for
 - `token`: the access token for the user
+- `turn`: the turn the commands are meant for, which must be the current turn (the `turn` value of the state the commands were computed from)
 
 Expected payload: an array of objects. Each command is in the following format:
 
@@ -137,7 +138,9 @@ Expected payload: an array of objects. Each command is in the following format:
 
 The relative order of the commands in the array is significant (see [rules](rules.md)). The `direction` value is used only for certain orders and can be omitted for the others (see [rules](rules.md)).
 
-If the token is correct, and the JSON is valid, the HTTP status code is always OK. This does not relate to whether the commands were successfully applied.
+If the token is correct, the JSON is valid, and the turn is the current one, the HTTP status code is always OK. This does not relate to whether the commands were successfully applied.
+
+If the turn is not the current one (for example, if the commands were sent after the turn timeout), the commands are rejected with error code Bad Request.
 
 The turn is processed once commands from all players are received, or after a fixed timeout (2 seconds).
 

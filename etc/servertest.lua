@@ -77,7 +77,7 @@ while true do
 			}
 		}
 
-		local res = post("orders?id=%s&token=%s", orders, g.id, player.token)
+		local res = post("orders?id=%s&token=%s&turn=%d", orders, g.id, player.token, state.turn)
 		print(json.encode(res))
 	end
 end

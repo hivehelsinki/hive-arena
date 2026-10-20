@@ -50,9 +50,11 @@ func TestConcurrentReadsDuringTurns(t *testing.T) {
 		}
 	}()
 
-	for range 20 {
+	for turn := range uint(20) {
 		for _, player := range players {
-			session.SetOrders(player.ID, []*Order{})
+			if err := session.SetOrders(player.ID, turn, []*Order{}); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 
@@ -61,5 +63,42 @@ func TestConcurrentReadsDuringTurns(t *testing.T) {
 
 	if session.FullState().Turn != 20 {
 		t.Errorf("expected 20 turns to be played, got %d", session.FullState().Turn)
+	}
+}
+
+func TestOrdersForAnotherTurnAreRejected(t *testing.T) {
+	session, players := newTestSession(t, 2)
+
+	if err := session.SetOrders(players[0].ID, 1, []*Order{}); err == nil {
+		t.Error("orders for a future turn should be rejected")
+	}
+
+	for _, player := range players {
+		if err := session.SetOrders(player.ID, 0, []*Order{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := session.SetOrders(players[0].ID, 0, []*Order{}); err == nil {
+		t.Error("orders for a past turn should be rejected")
+	}
+	if err := session.SetOrders(players[0].ID, 1, []*Order{}); err != nil {
+		t.Errorf("orders for the current turn should be accepted: %s", err)
+	}
+}
+
+func TestOrdersBeforeStartAreRejected(t *testing.T) {
+	DevMode = true
+
+	mapdata, err := LoadMap("../maps/tiny.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	session := NewGameSession("test", 2, "tiny", mapdata)
+	player := session.AddPlayer("team")
+
+	if err := session.SetOrders(player.ID, 0, []*Order{}); err == nil {
+		t.Error("orders before the game starts should be rejected")
 	}
 }

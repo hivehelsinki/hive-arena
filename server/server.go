@@ -234,8 +234,14 @@ func (server *Server) handleOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	turn, err := strconv.ParseUint(r.URL.Query().Get("turn"), 10, 0)
+	if err != nil {
+		writeJson(w, "Invalid turn: "+r.URL.Query().Get("turn"), http.StatusBadRequest)
+		return
+	}
+
 	var orders []*Order
-	err := json.NewDecoder(r.Body).Decode(&orders)
+	err = json.NewDecoder(r.Body).Decode(&orders)
 	if err != nil {
 		writeJson(w, "Invalid or malformed JSON: "+err.Error(), http.StatusBadRequest)
 		return
@@ -246,7 +252,7 @@ func (server *Server) handleOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := game.SetOrders(player.ID, orders); err != nil {
+	if err := game.SetOrders(player.ID, uint(turn), orders); err != nil {
 		writeJson(w, err.Error(), http.StatusBadRequest)
 		return
 	}

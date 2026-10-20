@@ -52,9 +52,9 @@ local function getState(host, gameid, token)
 	return res
 end
 
-local function sendOrders(host, gameid, token, orders)
+local function sendOrders(host, gameid, token, turn, orders)
 
-	local q = string.format("?id=%s&token=%s", gameid, token)
+	local q = string.format("?id=%s&token=%s&turn=%d", gameid, token, turn)
 	local res = req(host, "/orders" .. q, "POST", orders)
 
 	return res
@@ -84,7 +84,7 @@ local function runAgent(host, gameid, name, callback)
 		currentTurn = state.turn
 
 		local orders = callback(state, player)
-		sendOrders(host, gameid, token, orders)
+		sendOrders(host, gameid, token, state.turn, orders)
 	end
 
 	for text in socket:each() do
