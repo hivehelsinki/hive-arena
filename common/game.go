@@ -162,12 +162,15 @@ func (gs *GameState) ProcessOrders(orders [][]*Order) ([]*Order, error) {
 		return nil, fmt.Errorf("cannot process orders in a finished game")
 	}
 
-	// Fill in player ids
+	// Drop null orders and fill in player ids
 
+	orders = slices.Clone(orders)
 	for player, playerOrders := range orders {
+		playerOrders = slices.DeleteFunc(slices.Clone(playerOrders), func(o *Order) bool { return o == nil })
 		for _, order := range playerOrders {
 			order.Player = player
 		}
+		orders[player] = playerOrders
 	}
 
 	// Count how many rounds there will be (the length of the longer player orders list)

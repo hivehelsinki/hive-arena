@@ -182,6 +182,16 @@ func TestOrdersForEnemyUnitsDoNotUseTheirAction(t *testing.T) {
 	expectEntity(t, gs, 0, 8, BEE, 1)
 }
 
+func TestNullOrdersAreIgnored(t *testing.T) {
+	gs := newState(t, 1, smallMap...)
+
+	move := order(MOVE, 0, 2, SE)
+	play(t, gs, nil, move, nil)
+
+	expectStatus(t, move, OK)
+	expectEntity(t, gs, 1, 3, BEE, 0)
+}
+
 func TestForageAndDrop(t *testing.T) {
 	gs := newState(t, 1, smallMap...)
 

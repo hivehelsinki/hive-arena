@@ -251,6 +251,11 @@ func (server *Server) handleOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if slices.Contains(orders, nil) {
+		writeJson(w, "Invalid order: null", http.StatusBadRequest)
+		return
+	}
+
 	game.SetOrders(player.ID, orders)
 	writeJson(w, "OK", http.StatusOK)
 }
