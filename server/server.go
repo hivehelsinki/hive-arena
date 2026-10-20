@@ -283,6 +283,22 @@ func (server *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	game.RegisterWebSocket(socket)
 }
 
+func (server *Server) Handler() http.Handler {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("GET /newgame", server.handleNewGame)
+	mux.HandleFunc("GET /status", server.handleStatus)
+	mux.HandleFunc("GET /join", server.handleJoin)
+	mux.HandleFunc("GET /game", server.handleGame)
+	mux.HandleFunc("POST /orders", server.handleOrders)
+	mux.HandleFunc("GET /ws", server.handleWebSocket)
+
+	fs := http.FileServer(http.Dir("./" + HistoryDir + "/"))
+	mux.Handle("GET /history/", http.StripPrefix("/history/", fs))
+
+	return mux
+}
+
 func RunServer(port int) {
 
 	server := Server{
@@ -290,18 +306,8 @@ func RunServer(port int) {
 		Sessions: make(map[string]*GameSession),
 	}
 
-	http.HandleFunc("GET /newgame", server.handleNewGame)
-	http.HandleFunc("GET /status", server.handleStatus)
-	http.HandleFunc("GET /join", server.handleJoin)
-	http.HandleFunc("GET /game", server.handleGame)
-	http.HandleFunc("POST /orders", server.handleOrders)
-	http.HandleFunc("GET /ws", server.handleWebSocket)
-
-	fs := http.FileServer(http.Dir("./" + HistoryDir + "/"))
-	http.Handle("GET /history/", http.StripPrefix("/history/", fs))
-
 	log.Printf("Listening on port %d", port)
 
-	err := http.ListenAndServe(":"+strconv.Itoa(port), nil)
+	err := http.ListenAndServe(":"+strconv.Itoa(port), server.Handler())
 	fmt.Println(err)
 }
