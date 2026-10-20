@@ -85,6 +85,10 @@ func getState(host string, id string, token string) GameState {
 func sendOrders(host string, id string, token string, turn uint, orders []Order) {
 	url := "http://" + host + fmt.Sprintf("/orders?id=%s&token=%s&turn=%d", id, token, turn)
 	payload, err := json.Marshal(orders)
+	if err != nil {
+		fmt.Println("Could not encode orders:", err)
+		os.Exit(1)
+	}
 
 	resp, err := http.Post(url, "application/json", bytes.NewReader(payload))
 	if err != nil {
