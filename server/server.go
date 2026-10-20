@@ -19,8 +19,9 @@ import (
 )
 
 const MapDir = "maps"
-const HistoryDir = "history"
 const GameStartTimeout = 5 * time.Minute
+
+var HistoryDir = "history"
 
 type Server struct {
 	mutex sync.Mutex

@@ -206,12 +206,18 @@ func (session *GameSession) allPlayed() bool {
 func (session *GameSession) processTurn() {
 	log.Printf("Processing orders for game %s, turn %d", session.ID, session.State.Turn)
 
-	results, _ := session.State.ProcessOrders(session.PendingOrders)
+	results, err := session.State.ProcessOrders(session.PendingOrders)
+	if err != nil {
+		log.Printf("Could not process orders for game %s: %s", session.ID, err)
+		return
+	}
 	session.History = append(session.History, Turn{Orders: results, State: session.State.Clone()})
 
 	if session.State.GameOver {
 		log.Printf("Game %s is over", session.ID)
-		session.persist()
+		if err := session.persist(); err != nil {
+			log.Printf("Could not save the history of game %s: %s", session.ID, err)
+		}
 	}
 
 	session.BeginTurn()
@@ -274,7 +280,7 @@ func (session *GameSession) CloseSockets() {
 	}
 }
 
-func (session *GameSession) persist() {
+func (session *GameSession) persist() error {
 	date, _ := session.CreatedDate.MarshalText()
 	path := fmt.Sprintf("%s/%s-%s-%s.json",
 		HistoryDir,
@@ -296,10 +302,20 @@ func (session *GameSession) persist() {
 		History:     session.History,
 	}
 
-	file, _ := os.Create(path)
-	defer file.Close()
+	if err := os.MkdirAll(HistoryDir, 0o755); err != nil {
+		return err
+	}
 
-	json.NewEncoder(file).Encode(info)
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+
+	if err := json.NewEncoder(file).Encode(info); err != nil {
+		file.Close()
+		return err
+	}
+	return file.Close()
 }
 
 func (session *GameSession) Status() SessionStatus {

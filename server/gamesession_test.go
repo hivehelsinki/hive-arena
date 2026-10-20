@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -13,6 +15,7 @@ func newTestSession(t *testing.T, players int) (*GameSession, []Player) {
 	t.Helper()
 
 	DevMode = true
+	HistoryDir = t.TempDir()
 
 	mapdata, err := LoadMap("../maps/tiny.txt")
 	if err != nil {
@@ -141,5 +144,36 @@ func TestMinTurnDuration(t *testing.T) {
 	time.Sleep(MinTurnDuration + 100*time.Millisecond)
 	if session.FullState().Turn != 1 {
 		t.Error("turn should be processed after the minimum turn duration")
+	}
+}
+
+func TestPersist(t *testing.T) {
+	session, _ := newTestSession(t, 2)
+
+	if err := session.persist(); err != nil {
+		t.Fatal(err)
+	}
+
+	files, _ := filepath.Glob(filepath.Join(HistoryDir, "*-test-tiny.json"))
+	if len(files) != 1 {
+		t.Fatalf("expected one history file, got %v", files)
+	}
+
+	data, err := os.ReadFile(files[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var game PersistedGame
+	if err := json.Unmarshal(data, &game); err != nil {
+		t.Fatal(err)
+	}
+	if game.Id != "test" || len(game.Players) != 2 || len(game.History) != 1 {
+		t.Errorf("unexpected history content: %+v", game)
+	}
+
+	// A file in place of the history directory
+	HistoryDir = files[0]
+	if err := session.persist(); err == nil {
+		t.Error("expected an error when the history directory cannot be created")
 	}
 }
