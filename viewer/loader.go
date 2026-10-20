@@ -101,37 +101,37 @@ func getState(host string, id string, token string) *GameState {
 	return &response
 }
 
-func fillGameInfo(host string, id string, game *PersistedGame) {
+func getGameInfo(host string, id string) *SessionStatus {
 	url := fmt.Sprintf("http://%s/status", host)
 	body, err := request(url)
 
 	if err != nil {
 		fmt.Println(err, body)
-		return
+		return nil
 	}
 
 	var response StatusResponse
 	if err := json.Unmarshal([]byte(body), &response); err != nil {
 		fmt.Println("Invalid status:", err)
-		return
+		return nil
 	}
 
 	for _, status := range response.Games {
 		if status.Id == id {
-			game.Players = status.Players
-			game.Map = status.Map
-			game.CreatedDate = status.CreatedDate
-			return
+			return &status
 		}
 	}
+	return nil
 }
 
-type LiveGame struct {
-	Host, Id, Token string
-	Channel         chan int
+// A new state of a live game, and the game information once all players have joined
+type LiveUpdate struct {
+	State *GameState
+	Info  *SessionStatus
 }
 
-func StartLiveWatch(host string, gameId string, token string) (*PersistedGame, *LiveGame) {
+// StartLiveWatch follows a live game in the background, and sends its new states to the returned channel
+func StartLiveWatch(host string, gameId string, token string) (*PersistedGame, <-chan LiveUpdate) {
 
 	url := fmt.Sprintf("ws://%s/ws?id=%s", host, gameId)
 	ws, _, err := websocket.DefaultDialer.Dial(url, nil)
@@ -141,9 +141,12 @@ func StartLiveWatch(host string, gameId string, token string) (*PersistedGame, *
 		return nil, nil
 	}
 
-	liveChannel := make(chan int)
+	updates := make(chan LiveUpdate)
 
 	updateGame := func() {
+		defer ws.Close()
+		hasInfo := false
+
 		for {
 			var message WebSocketMessage
 			err := ws.ReadJSON(&message)
@@ -151,14 +154,31 @@ func StartLiveWatch(host string, gameId string, token string) (*PersistedGame, *
 				fmt.Println("Websocket error:", err)
 				return
 			}
-			liveChannel <- message.Turn
+
+			fmt.Printf("Turn %d\n", message.Turn)
+
+			state := getState(host, gameId, token)
+			if state == nil {
+				continue
+			}
+
+			update := LiveUpdate{State: state}
+			if !hasInfo {
+				info := getGameInfo(host, gameId)
+				if info != nil && len(info.Players) == info.NumPlayers {
+					update.Info = info
+					hasInfo = true
+				}
+			}
+			updates <- update
+
 			if message.GameOver {
-				break
+				return
 			}
 		}
 	}
 
 	go updateGame()
 
-	return &PersistedGame{Id: gameId}, &LiveGame{host, gameId, token, liveChannel}
+	return &PersistedGame{Id: gameId}, updates
 }

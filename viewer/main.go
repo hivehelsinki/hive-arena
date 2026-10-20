@@ -35,7 +35,7 @@ type Viewer struct {
 	Cx, Cy float64
 	Scale  float64
 
-	Live *LiveGame
+	Live <-chan LiveUpdate
 
 	// Autoplay
 	Playing   bool
@@ -105,27 +105,29 @@ func (viewer *Viewer) Update() error {
 		viewer.Turn = len(viewer.Game.History) - 1
 	}
 
-	if viewer.Live != nil {
-		select {
-		case turn := <-viewer.Live.Channel:
-			fmt.Printf("Turn %d\n", turn)
-
-			state := getState(viewer.Live.Host, viewer.Live.Id, viewer.Live.Token)
-			if state != nil {
-				viewer.Game.History = append(viewer.Game.History, Turn{Orders: nil, State: state})
-				if viewer.Turn == len(viewer.Game.History)-2 {
-					viewer.Turn++
-				}
-
-				if len(viewer.Game.Players) < state.NumPlayers {
-					fillGameInfo(viewer.Live.Host, viewer.Live.Id, viewer.Game)
-				}
-			}
-		default:
-		}
-	}
+	viewer.applyLiveUpdates()
 
 	return nil
+}
+
+func (viewer *Viewer) applyLiveUpdates() {
+	for {
+		select {
+		case update := <-viewer.Live:
+			viewer.Game.History = append(viewer.Game.History, Turn{Orders: nil, State: update.State})
+			if viewer.Turn == len(viewer.Game.History)-2 {
+				viewer.Turn++
+			}
+
+			if update.Info != nil {
+				viewer.Game.Players = update.Info.Players
+				viewer.Game.Map = update.Info.Map
+				viewer.Game.CreatedDate = update.Info.CreatedDate
+			}
+		default:
+			return
+		}
+	}
 }
 
 type CoordHex struct {
@@ -266,7 +268,7 @@ func main() {
 	flag.Parse()
 
 	var game *PersistedGame
-	var live *LiveGame
+	var live <-chan LiveUpdate
 	if *url != "" {
 		game = GetURL(*url)
 	} else if *file != "" {
