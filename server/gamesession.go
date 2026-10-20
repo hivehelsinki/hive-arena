@@ -37,6 +37,7 @@ type GameSession struct {
 	State        *GameState
 
 	PendingOrders [][]*Order
+	Posted        []bool
 	History       []Turn
 
 	Sockets []*websocket.Conn
@@ -151,6 +152,7 @@ func (session *GameSession) BeginTurn() {
 	}
 
 	session.PendingOrders = make([][]*Order, session.State.NumPlayers)
+	session.Posted = make([]bool, session.State.NumPlayers)
 
 	currentTurn := session.State.Turn
 	time.AfterFunc(TurnTimeout, func() {
@@ -178,6 +180,7 @@ func (session *GameSession) SetOrders(playerid int, turn uint, orders []*Order) 
 	}
 
 	session.PendingOrders[playerid] = orders
+	session.Posted[playerid] = true
 
 	log.Printf("Player %s posted orders in game %s", session.Players[playerid].Name, session.ID)
 
@@ -189,12 +192,7 @@ func (session *GameSession) SetOrders(playerid int, turn uint, orders []*Order) 
 }
 
 func (session *GameSession) allPlayed() bool {
-	for _, orders := range session.PendingOrders {
-		if orders == nil {
-			return false
-		}
-	}
-	return true
+	return !slices.Contains(session.Posted, false)
 }
 
 func (session *GameSession) processTurn() {

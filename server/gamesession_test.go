@@ -102,3 +102,18 @@ func TestOrdersBeforeStartAreRejected(t *testing.T) {
 		t.Error("orders before the game starts should be rejected")
 	}
 }
+
+func TestEmptyOrdersCountAsPlayed(t *testing.T) {
+	session, players := newTestSession(t, 2)
+
+	// A JSON payload of null decodes to a nil slice
+	for _, player := range players {
+		if err := session.SetOrders(player.ID, 0, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if turn := session.FullState().Turn; turn != 1 {
+		t.Errorf("turn should be processed once all players have posted, current turn is %d", turn)
+	}
+}
