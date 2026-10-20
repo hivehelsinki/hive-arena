@@ -96,7 +96,7 @@ func (server *Server) handleNewGame(w http.ResponseWriter, r *http.Request) {
 
 	writeJson(w, map[string]any{
 		"id":          game.ID,
-		"numPlayers":  game.State.NumPlayers,
+		"numPlayers":  players,
 		"map":         game.Map,
 		"createdDate": game.CreatedDate,
 		"adminToken":  game.AdminToken,
@@ -108,7 +108,7 @@ func (server *Server) removeIfNotStarted(id string) {
 	defer server.mutex.Unlock()
 
 	game := server.Sessions[id]
-	if game != nil && !game.IsFull() {
+	if game != nil && !game.Started() {
 		delete(server.Sessions, id)
 		log.Printf("Removed game %s because of timeout", id)
 	}
@@ -119,7 +119,7 @@ func (server *Server) removeIfOver(id string) {
 	defer server.mutex.Unlock()
 
 	game := server.Sessions[id]
-	if game != nil && game.State.GameOver {
+	if game != nil && game.IsOver() {
 		delete(server.Sessions, id)
 		return
 	}
@@ -177,7 +177,7 @@ func (server *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Player %s joined game %s (#%d, %s)", player.Name, game.ID, player.ID, player.Token)
 
-	if game.IsFull() {
+	if game.Started() {
 		log.Printf("Game %s has started", id)
 	}
 
@@ -197,14 +197,14 @@ func (server *Server) handleGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !game.IsFull() {
+	if !game.Started() {
 		writeJson(w, "Game has not started", http.StatusBadRequest)
 		return
 	}
 
 	token := r.URL.Query().Get("token")
 	if token == game.AdminToken {
-		writeJson(w, game.State, http.StatusOK)
+		writeJson(w, game.FullState(), http.StatusOK)
 		return
 	}
 
@@ -227,19 +227,9 @@ func (server *Server) handleOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !game.IsFull() {
-		writeJson(w, "Game has not started", http.StatusBadRequest)
-		return
-	}
-
-	if game.State.GameOver {
-		writeJson(w, "Game is over", http.StatusBadRequest)
-		return
-	}
-
 	token := r.URL.Query().Get("token")
-	player := game.Player(token)
-	if player == nil {
+	player, ok := game.Player(token)
+	if !ok {
 		writeJson(w, "Invalid token", http.StatusForbidden)
 		return
 	}
@@ -256,7 +246,10 @@ func (server *Server) handleOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	game.SetOrders(player.ID, orders)
+	if err := game.SetOrders(player.ID, orders); err != nil {
+		writeJson(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	writeJson(w, "OK", http.StatusOK)
 }
 

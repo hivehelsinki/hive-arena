@@ -416,13 +416,13 @@ func (gs *GameState) PlayerView(player int) *GameState {
 		Turn:               gs.Turn,
 		Hexes:              make(map[Coords]*Hex),
 		LastResourceChange: gs.LastResourceChange,
-		Winners:            gs.Winners,
+		Winners:            slices.Clone(gs.Winners),
 		GameOver:           gs.GameOver,
 	}
 
 	for coords, hex := range gs.Hexes {
 		if gs.isVisibleBy(coords, player) {
-			view.Hexes[coords] = hex
+			view.Hexes[coords] = hex.clone()
 		}
 	}
 
@@ -437,17 +437,19 @@ func (gs *GameState) PlayerView(player int) *GameState {
 	return view
 }
 
+func (hex *Hex) clone() *Hex {
+	copy := *hex
+	if hex.Entity != nil {
+		entity := *hex.Entity
+		copy.Entity = &entity
+	}
+	return &copy
+}
+
 func (gs *GameState) Clone() *GameState {
 	hexes := make(map[Coords]*Hex)
 	for k, v := range gs.Hexes {
-		hex := *v
-
-		if hex.Entity != nil {
-			copy := *hex.Entity
-			hex.Entity = &copy
-		}
-
-		hexes[k] = &hex
+		hexes[k] = v.clone()
 	}
 
 	return &GameState{

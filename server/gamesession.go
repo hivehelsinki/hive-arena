@@ -68,15 +68,38 @@ func NewGameSession(id string, players int, mapname string, mapdata MapData) *Ga
 	}
 }
 
-func (session *GameSession) IsFull() bool {
+func (session *GameSession) isFull() bool {
 	return len(session.Players) == session.State.NumPlayers
+}
+
+// Started reports whether all players have joined
+func (session *GameSession) Started() bool {
+	session.mutex.Lock()
+	defer session.mutex.Unlock()
+
+	return session.isFull()
+}
+
+func (session *GameSession) IsOver() bool {
+	session.mutex.Lock()
+	defer session.mutex.Unlock()
+
+	return session.State.GameOver
+}
+
+// FullState returns a copy of the current state, safe to use without holding the lock
+func (session *GameSession) FullState() *GameState {
+	session.mutex.Lock()
+	defer session.mutex.Unlock()
+
+	return session.State.Clone()
 }
 
 func (session *GameSession) AddPlayer(name string) *Player {
 	session.mutex.Lock()
 	defer session.mutex.Unlock()
 
-	if session.IsFull() {
+	if session.isFull() {
 		return nil
 	}
 
@@ -85,22 +108,22 @@ func (session *GameSession) AddPlayer(name string) *Player {
 
 	session.Players = append(session.Players, player)
 
-	if session.IsFull() {
+	if session.isFull() {
 		session.BeginTurn()
 	}
 
 	return &player
 }
 
-func (session *GameSession) Player(token string) *Player {
+func (session *GameSession) Player(token string) (Player, bool) {
 	session.mutex.Lock()
 	defer session.mutex.Unlock()
 
 	playerid := slices.Index(session.PlayerTokens, token)
-	if playerid < 0 {
-		return nil
+	if playerid < 0 || playerid >= len(session.Players) {
+		return Player{}, false
 	}
-	return &session.Players[playerid]
+	return session.Players[playerid], true
 }
 
 func (session *GameSession) GetView(token string) *GameState {
@@ -108,7 +131,7 @@ func (session *GameSession) GetView(token string) *GameState {
 	defer session.mutex.Unlock()
 
 	playerid := slices.Index(session.PlayerTokens, token)
-	if playerid < 0 {
+	if playerid < 0 || playerid >= len(session.Players) {
 		return nil
 	}
 
@@ -140,9 +163,16 @@ func (session *GameSession) BeginTurn() {
 	})
 }
 
-func (session *GameSession) SetOrders(playerid int, orders []*Order) {
+func (session *GameSession) SetOrders(playerid int, orders []*Order) error {
 	session.mutex.Lock()
 	defer session.mutex.Unlock()
+
+	if !session.isFull() {
+		return fmt.Errorf("Game has not started")
+	}
+	if session.State.GameOver {
+		return fmt.Errorf("Game is over")
+	}
 
 	session.PendingOrders[playerid] = orders
 
@@ -151,6 +181,8 @@ func (session *GameSession) SetOrders(playerid int, orders []*Order) {
 	if session.allPlayed() {
 		session.processTurn()
 	}
+
+	return nil
 }
 
 func (session *GameSession) allPlayed() bool {
@@ -182,7 +214,7 @@ func (session *GameSession) RegisterWebSocket(socket *websocket.Conn) {
 
 	session.Sockets = append(session.Sockets, socket)
 
-	if session.IsFull() {
+	if session.isFull() {
 		session.notifySocket(socket)
 	}
 }
@@ -235,6 +267,8 @@ func (session *GameSession) persist() {
 }
 
 func (session *GameSession) Status() SessionStatus {
+	session.mutex.Lock()
+	defer session.mutex.Unlock()
 
 	var players []string
 	for _, player := range session.Players {
