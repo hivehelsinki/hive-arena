@@ -207,17 +207,14 @@ func (gs *GameState) ProcessOrders(orders [][]*Order) ([]*Order, error) {
 		for _, order := range roundOrders {
 			processed = append(processed, order)
 			unit := gs.EntityAt(order.Coords)
-			if unit == nil {
+			if unit == nil || unit.Type != order.UnitType() || unit.Player != order.Player {
 				order.Status = INVALID_UNIT
-				continue
 			} else if acted[unit] {
 				order.Status = UNIT_ALREADY_ACTED
-				continue
 			} else if gs.stunned[unit] {
 				order.Status = UNIT_STUNNED
-				continue
 			} else {
-				gs.applyOrder(order)
+				gs.applyOrder(order, unit)
 				acted[unit] = true
 			}
 		}
@@ -229,10 +226,10 @@ func (gs *GameState) ProcessOrders(orders [][]*Order) ([]*Order, error) {
 	return processed, nil
 }
 
-func (gs *GameState) applyOrder(order *Order) {
+func (gs *GameState) applyOrder(order *Order, unit *Entity) {
 	switch order.Type {
 	case MOVE:
-		gs.applyMoveOrder(order)
+		gs.applyMoveOrder(order, unit)
 	case ATTACK:
 		gs.applyAttackOrder(order)
 	case BUILD_WALL:
@@ -240,19 +237,10 @@ func (gs *GameState) applyOrder(order *Order) {
 	case BUILD_HIVE:
 		gs.applyBuildHiveOrder(order)
 	case FORAGE:
-		gs.applyForageOrder(order)
+		gs.applyForageOrder(order, unit)
 	case SPAWN:
 		gs.applySpawnOrder(order)
 	}
-}
-
-func (gs *GameState) getUnit(order *Order) *Entity {
-	unit := gs.EntityAt(order.Coords)
-	if unit == nil || unit.Type != order.UnitType() || unit.Player != order.Player {
-		order.Status = INVALID_UNIT
-		return nil
-	}
-	return unit
 }
 
 func (gs *GameState) TargetIsBlocked(order *Order) bool {
@@ -274,11 +262,7 @@ func (gs *GameState) tryToPay(order *Order, cost uint) bool {
 	return true
 }
 
-func (gs *GameState) applyMoveOrder(order *Order) {
-	bee := gs.getUnit(order)
-	if bee == nil {
-		return
-	}
+func (gs *GameState) applyMoveOrder(order *Order, bee *Entity) {
 	if gs.TargetIsBlocked(order) {
 		return
 	}
@@ -290,10 +274,6 @@ func (gs *GameState) applyMoveOrder(order *Order) {
 }
 
 func (gs *GameState) applyAttackOrder(order *Order) {
-	if gs.getUnit(order) == nil {
-		return
-	}
-
 	entity := gs.EntityAt(order.Target())
 	if entity == nil {
 		order.Status = INVALID_TARGET
@@ -312,9 +292,6 @@ func (gs *GameState) applyAttackOrder(order *Order) {
 }
 
 func (gs *GameState) applyBuildWallOrder(order *Order) {
-	if gs.getUnit(order) == nil {
-		return
-	}
 	if gs.TargetIsBlocked(order) {
 		return
 	}
@@ -329,9 +306,6 @@ func (gs *GameState) applyBuildWallOrder(order *Order) {
 }
 
 func (gs *GameState) applyBuildHiveOrder(order *Order) {
-	if gs.getUnit(order) == nil {
-		return
-	}
 	if !gs.tryToPay(order, HIVE_COST) {
 		return
 	}
@@ -342,12 +316,7 @@ func (gs *GameState) applyBuildHiveOrder(order *Order) {
 	order.Status = OK
 }
 
-func (gs *GameState) applyForageOrder(order *Order) {
-	bee := gs.getUnit(order)
-	if bee == nil {
-		return
-	}
-
+func (gs *GameState) applyForageOrder(order *Order, bee *Entity) {
 	if bee.HasFlower {
 
 		for _, n := range order.Coords.Neighbours() {
@@ -380,9 +349,6 @@ func (gs *GameState) applyForageOrder(order *Order) {
 }
 
 func (gs *GameState) applySpawnOrder(order *Order) {
-	if gs.getUnit(order) == nil {
-		return
-	}
 	if gs.TargetIsBlocked(order) {
 		return
 	}

@@ -163,6 +163,25 @@ func TestInvalidUnit(t *testing.T) {
 	expectStatus(t, beeSpawning, INVALID_UNIT)
 }
 
+func TestOrdersForEnemyUnitsDoNotUseTheirAction(t *testing.T) {
+	gs := newState(t, 2,
+		"H0  B0  F   .   F   B3  H3",
+	)
+
+	// Player 0 tries to use up the action of player 1's bee before player 1's own order
+	sabotage := order(MOVE, 0, 10, E)
+	padding := order(MOVE, 9, 9, W)
+	move := order(MOVE, 0, 10, W)
+
+	if _, err := gs.ProcessOrders([][]*Order{{sabotage}, {padding, move}}); err != nil {
+		t.Fatal(err)
+	}
+
+	expectStatus(t, sabotage, INVALID_UNIT)
+	expectStatus(t, move, OK)
+	expectEntity(t, gs, 0, 8, BEE, 1)
+}
+
 func TestForageAndDrop(t *testing.T) {
 	gs := newState(t, 1, smallMap...)
 
