@@ -467,3 +467,15 @@ func TestDistance(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkPlayerView(b *testing.B) {
+	mapdata, err := LoadMap("../maps/balanced.txt")
+	if err != nil {
+		b.Fatal(err)
+	}
+	gs := NewGameState(mapdata, 6)
+
+	for b.Loop() {
+		gs.PlayerView(0)
+	}
+}

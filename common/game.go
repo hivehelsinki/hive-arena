@@ -417,17 +417,6 @@ func (gs *GameState) checkEndGame() {
 	}
 }
 
-func (gs *GameState) isVisibleBy(coords Coords, player int) bool {
-	for hcoords, hex := range gs.Hexes {
-		if hex.Entity != nil &&
-			hex.Entity.Player == player &&
-			hcoords.Distance(coords) <= FIELD_OF_VIEW {
-			return true
-		}
-	}
-	return false
-}
-
 func (gs *GameState) PlayerView(player int) *GameState {
 	view := &GameState{
 		NumPlayers:         gs.NumPlayers,
@@ -438,8 +427,18 @@ func (gs *GameState) PlayerView(player int) *GameState {
 		GameOver:           gs.GameOver,
 	}
 
+	var ownEntities []Coords
 	for coords, hex := range gs.Hexes {
-		if gs.isVisibleBy(coords, player) {
+		if hex.Entity != nil && hex.Entity.Player == player {
+			ownEntities = append(ownEntities, coords)
+		}
+	}
+
+	for coords, hex := range gs.Hexes {
+		visible := slices.ContainsFunc(ownEntities, func(entity Coords) bool {
+			return entity.Distance(coords) <= FIELD_OF_VIEW
+		})
+		if visible {
 			view.Hexes[coords] = hex.clone()
 		}
 	}
