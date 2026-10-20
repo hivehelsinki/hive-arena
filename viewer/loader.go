@@ -9,7 +9,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/hivehelsinki/hive-arena/common"
+	"github.com/hivehelsinki/hive-arena/arena"
 )
 
 type WebSocketMessage struct {
@@ -17,8 +17,8 @@ type WebSocketMessage struct {
 	GameOver bool
 }
 
-func parseJSON(bytes []byte) *common.PersistedGame {
-	var game common.PersistedGame
+func parseJSON(bytes []byte) *arena.PersistedGame {
+	var game arena.PersistedGame
 	err := json.Unmarshal(bytes, &game)
 
 	if err != nil {
@@ -28,7 +28,7 @@ func parseJSON(bytes []byte) *common.PersistedGame {
 	return &game
 }
 
-func GetURL(url string) *common.PersistedGame {
+func GetURL(url string) *arena.PersistedGame {
 	res, err := http.Get(url)
 	if err != nil {
 		fmt.Println(err)
@@ -51,7 +51,7 @@ func GetURL(url string) *common.PersistedGame {
 	return parseJSON(body)
 }
 
-func GetFile(path string) *common.PersistedGame {
+func GetFile(path string) *arena.PersistedGame {
 	bytes, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Println(err)
@@ -82,7 +82,7 @@ func request(url string) (string, error) {
 	return body, nil
 }
 
-func getState(host string, id string, token string) *common.GameState {
+func getState(host string, id string, token string) *arena.GameState {
 
 	url := fmt.Sprintf("http://%s/game?id=%s&token=%s", host, id, token)
 	body, err := request(url)
@@ -92,7 +92,7 @@ func getState(host string, id string, token string) *common.GameState {
 		return nil
 	}
 
-	var response common.GameState
+	var response arena.GameState
 	if err := json.Unmarshal([]byte(body), &response); err != nil {
 		fmt.Println("Invalid game state:", err)
 		return nil
@@ -101,7 +101,7 @@ func getState(host string, id string, token string) *common.GameState {
 	return &response
 }
 
-func getGameInfo(host string, id string) *common.SessionStatus {
+func getGameInfo(host string, id string) *arena.SessionStatus {
 	url := fmt.Sprintf("http://%s/status", host)
 	body, err := request(url)
 
@@ -110,7 +110,7 @@ func getGameInfo(host string, id string) *common.SessionStatus {
 		return nil
 	}
 
-	var response common.StatusResponse
+	var response arena.StatusResponse
 	if err := json.Unmarshal([]byte(body), &response); err != nil {
 		fmt.Println("Invalid status:", err)
 		return nil
@@ -126,12 +126,12 @@ func getGameInfo(host string, id string) *common.SessionStatus {
 
 // A new state of a live game, and the game information once all players have joined
 type LiveUpdate struct {
-	State *common.GameState
-	Info  *common.SessionStatus
+	State *arena.GameState
+	Info  *arena.SessionStatus
 }
 
 // StartLiveWatch follows a live game in the background, and sends its new states to the returned channel
-func StartLiveWatch(host string, gameId string, token string) (*common.PersistedGame, <-chan LiveUpdate) {
+func StartLiveWatch(host string, gameId string, token string) (*arena.PersistedGame, <-chan LiveUpdate) {
 
 	url := fmt.Sprintf("ws://%s/ws?id=%s", host, gameId)
 	ws, _, err := websocket.DefaultDialer.Dial(url, nil)
@@ -180,5 +180,5 @@ func StartLiveWatch(host string, gameId string, token string) (*common.Persisted
 
 	go updateGame()
 
-	return &common.PersistedGame{Id: gameId}, updates
+	return &arena.PersistedGame{Id: gameId}, updates
 }

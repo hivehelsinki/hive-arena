@@ -11,7 +11,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/hivehelsinki/hive-arena/common"
+	"github.com/hivehelsinki/hive-arena/arena"
 )
 
 func request(url string) string {
@@ -71,18 +71,18 @@ func startWebSocket(host string, id string) *websocket.Conn {
 	return ws
 }
 
-func getState(host string, id string, token string) common.GameState {
+func getState(host string, id string, token string) arena.GameState {
 
 	url := "http://" + host + fmt.Sprintf("/game?id=%s&token=%s", id, token)
 	body := request(url)
 
-	var response common.GameState
+	var response arena.GameState
 	json.Unmarshal([]byte(body), &response)
 
 	return response
 }
 
-func sendOrders(host string, id string, token string, turn uint, orders []common.Order) {
+func sendOrders(host string, id string, token string, turn uint, orders []arena.Order) {
 	url := "http://" + host + fmt.Sprintf("/orders?id=%s&token=%s&turn=%d", id, token, turn)
 	payload, err := json.Marshal(orders)
 	if err != nil {
@@ -106,7 +106,7 @@ func sendOrders(host string, id string, token string, turn uint, orders []common
 	}
 }
 
-func Run(host string, id string, name string, callback func(*common.GameState, int) []common.Order) {
+func Run(host string, id string, name string, callback func(*arena.GameState, int) []arena.Order) {
 
 	playerInfo := joinGame(host, id, name)
 	ws := startWebSocket(host, id)

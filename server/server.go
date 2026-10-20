@@ -15,7 +15,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/hivehelsinki/hive-arena/common"
+	"github.com/hivehelsinki/hive-arena/arena"
 )
 
 const MapDir = "maps"
@@ -26,13 +26,13 @@ var HistoryDir = "history"
 type Server struct {
 	mutex sync.Mutex
 
-	Maps     map[string]common.MapData
+	Maps     map[string]arena.MapData
 	Sessions map[string]*GameSession
 }
 
-func loadMaps() map[string]common.MapData {
+func loadMaps() map[string]arena.MapData {
 
-	data := make(map[string]common.MapData)
+	data := make(map[string]arena.MapData)
 
 	entries, err := os.ReadDir(MapDir)
 	if err != nil {
@@ -45,7 +45,7 @@ func loadMaps() map[string]common.MapData {
 			continue
 		}
 
-		mapdata, err := common.LoadMap(MapDir + "/" + entry.Name())
+		mapdata, err := arena.LoadMap(MapDir + "/" + entry.Name())
 		if err != nil {
 			log.Fatalf("Could not load map %s: %s", name, err)
 		}
@@ -81,7 +81,7 @@ func (server *Server) handleNewGame(w http.ResponseWriter, r *http.Request) {
 
 	playerStr := r.URL.Query().Get("players")
 	players, ok := strconv.Atoi(playerStr)
-	if ok != nil || !common.IsValidNumPlayers(players) {
+	if ok != nil || !arena.IsValidNumPlayers(players) {
 		writeJson(w, "Invalid number of players: "+playerStr, http.StatusBadRequest)
 		return
 	}
@@ -144,12 +144,12 @@ func (server *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	server.mutex.Lock()
 	defer server.mutex.Unlock()
 
-	var statuses = []common.SessionStatus{}
+	var statuses = []arena.SessionStatus{}
 	for _, session := range server.Sessions {
 		statuses = append(statuses, session.Status())
 	}
 
-	response := common.StatusResponse{
+	response := arena.StatusResponse{
 		GitRevision: GitRevision(),
 		Games:       statuses,
 	}
@@ -244,7 +244,7 @@ func (server *Server) handleOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var orders []*common.Order
+	var orders []*arena.Order
 	err = json.NewDecoder(r.Body).Decode(&orders)
 	if err != nil {
 		writeJson(w, "Invalid or malformed JSON: "+err.Error(), http.StatusBadRequest)

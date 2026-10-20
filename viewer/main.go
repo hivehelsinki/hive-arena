@@ -12,7 +12,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 
-	"github.com/hivehelsinki/hive-arena/common"
+	"github.com/hivehelsinki/hive-arena/arena"
 )
 
 const Dx = 32
@@ -46,7 +46,7 @@ const MinScale = 0.1
 const MaxScale = 20
 
 type Viewer struct {
-	Game *common.PersistedGame
+	Game *arena.PersistedGame
 	Turn int
 
 	Cx, Cy float64
@@ -73,7 +73,7 @@ func (viewer *Viewer) Update() error {
 
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 		x, y := ebiten.CursorPosition()
-		m := viewer.CoordsToTransform(common.Coords{Row: 0, Col: 0})
+		m := viewer.CoordsToTransform(arena.Coords{Row: 0, Col: 0})
 		m.Invert()
 		tx, ty := m.Apply(float64(x), float64(y))
 		viewer.Cx = tx / Dx * 2
@@ -134,7 +134,7 @@ func (viewer *Viewer) applyLiveUpdates() {
 	for {
 		select {
 		case update := <-viewer.Live:
-			viewer.Game.History = append(viewer.Game.History, common.Turn{Orders: nil, State: update.State})
+			viewer.Game.History = append(viewer.Game.History, arena.Turn{Orders: nil, State: update.State})
 			if len(viewer.Game.History) == 1 {
 				viewer.CenterCamera()
 			}
@@ -154,11 +154,11 @@ func (viewer *Viewer) applyLiveUpdates() {
 }
 
 type CoordHex struct {
-	Coords common.Coords
-	Hex    *common.Hex
+	Coords arena.Coords
+	Hex    *arena.Hex
 }
 
-func (viewer *Viewer) CoordsToTransform(coords common.Coords) ebiten.GeoM {
+func (viewer *Viewer) CoordsToTransform(coords arena.Coords) ebiten.GeoM {
 	m := ebiten.GeoM{}
 	w, h := ebiten.WindowSize()
 
@@ -187,7 +187,7 @@ func (viewer *Viewer) DrawState(screen *ebiten.Image) {
 		opt := ebiten.DrawImageOptions{}
 		opt.GeoM = viewer.CoordsToTransform(hex.Coords)
 
-		if hex.Hex.Terrain == common.FIELD && hex.Hex.Resources == 0 {
+		if hex.Hex.Terrain == arena.FIELD && hex.Hex.Resources == 0 {
 			screen.DrawImage(EmptyFieldTile, &opt)
 		} else {
 			screen.DrawImage(TerrainTiles[hex.Hex.Terrain], &opt)
@@ -215,7 +215,7 @@ func (viewer *Viewer) DrawState(screen *ebiten.Image) {
 	viewer.DrawInfo(screen, state)
 }
 
-func (viewer *Viewer) DrawInfo(screen *ebiten.Image, state *common.GameState) {
+func (viewer *Viewer) DrawInfo(screen *ebiten.Image, state *arena.GameState) {
 	txtOp := &text.DrawOptions{}
 	txtOp.GeoM.Translate(LineHeight/2, LineHeight/2)
 
@@ -272,7 +272,7 @@ func (viewer *Viewer) CenterCamera() {
 	viewer.Cx, viewer.Cy = float64(cx), float64(cy)
 }
 
-func CenterTile(state *common.GameState) (int, int) {
+func CenterTile(state *arena.GameState) (int, int) {
 	cx, cy := 0, 0
 	count := 0
 	for coords, _ := range state.Hexes {
@@ -291,7 +291,7 @@ func main() {
 	token := flag.String("token", "", "access token for the live game to watch")
 	flag.Parse()
 
-	var game *common.PersistedGame
+	var game *arena.PersistedGame
 	var live <-chan LiveUpdate
 	if *url != "" {
 		game = GetURL(*url)

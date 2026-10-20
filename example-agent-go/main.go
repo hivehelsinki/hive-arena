@@ -5,22 +5,22 @@ import (
 	"math/rand"
 	"os"
 
-	"github.com/hivehelsinki/hive-arena/common"
+	"github.com/hivehelsinki/hive-arena/arena"
 )
 
-var dirs = []common.Direction{common.E, common.SE, common.SW, common.W, common.NW, common.NE}
+var dirs = []arena.Direction{arena.E, arena.SE, arena.SW, arena.W, arena.NW, arena.NE}
 
-func think(state *common.GameState, player int) []common.Order {
+func think(state *arena.GameState, player int) []arena.Order {
 
-	var orders []common.Order
+	var orders []arena.Order
 
 	for coords, hex := range state.Hexes {
 		unit := hex.Entity
 
-		if unit != nil && unit.Type == common.BEE && unit.Player == player {
+		if unit != nil && unit.Type == arena.BEE && unit.Player == player {
 			fmt.Println(coords, unit)
-			orders = append(orders, common.Order{
-				Type:      common.MOVE,
+			orders = append(orders, arena.Order{
+				Type:      arena.MOVE,
 				Coords:    coords,
 				Direction: dirs[rand.Intn(len(dirs))],
 			})

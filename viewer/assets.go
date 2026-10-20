@@ -9,20 +9,20 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 
-	"github.com/hivehelsinki/hive-arena/common"
+	"github.com/hivehelsinki/hive-arena/arena"
 
 	_ "embed"
 )
 
-var TerrainTiles map[common.Terrain]*ebiten.Image
+var TerrainTiles map[arena.Terrain]*ebiten.Image
 var EmptyFieldTile *ebiten.Image
 var FlowerImage *ebiten.Image
 
-var EntityTiles map[common.EntityType]*ebiten.Image
-var EntityOffset = map[common.EntityType]float64{
-	common.BEE:  8,
-	common.HIVE: 12,
-	common.WALL: 8,
+var EntityTiles map[arena.EntityType]*ebiten.Image
+var EntityOffset = map[arena.EntityType]float64{
+	arena.BEE:  8,
+	arena.HIVE: 12,
+	arena.WALL: 8,
 }
 
 //go:embed tile-empty.png
@@ -66,18 +66,18 @@ var Font *text.GoTextFace
 var LineHeight float64
 
 func LoadResources() {
-	TerrainTiles = make(map[common.Terrain]*ebiten.Image)
+	TerrainTiles = make(map[arena.Terrain]*ebiten.Image)
 
-	TerrainTiles[common.EMPTY] = loadImage(TileEmpty)
-	TerrainTiles[common.ROCK] = loadImage(TileRock)
-	TerrainTiles[common.FIELD] = loadImage(TileField)
+	TerrainTiles[arena.EMPTY] = loadImage(TileEmpty)
+	TerrainTiles[arena.ROCK] = loadImage(TileRock)
+	TerrainTiles[arena.FIELD] = loadImage(TileField)
 	EmptyFieldTile = loadImage(TileFieldEmpty)
 
-	EntityTiles = make(map[common.EntityType]*ebiten.Image)
+	EntityTiles = make(map[arena.EntityType]*ebiten.Image)
 
-	EntityTiles[common.BEE] = loadImage(SpriteBee)
-	EntityTiles[common.HIVE] = loadImage(SpriteHive)
-	EntityTiles[common.WALL] = loadImage(SpriteWall)
+	EntityTiles[arena.BEE] = loadImage(SpriteBee)
+	EntityTiles[arena.HIVE] = loadImage(SpriteHive)
+	EntityTiles[arena.WALL] = loadImage(SpriteWall)
 	FlowerImage = loadImage(SpriteFlower)
 
 	fontSource, err := text.NewGoTextFaceSource(bytes.NewReader(FontData))

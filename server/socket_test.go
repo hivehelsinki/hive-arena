@@ -9,7 +9,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/hivehelsinki/hive-arena/common"
+	"github.com/hivehelsinki/hive-arena/arena"
 )
 
 // dialSession opens a websocket registered to the given session
@@ -74,7 +74,7 @@ func TestSocketReceivesTurns(t *testing.T) {
 	}
 
 	for _, player := range players {
-		session.SetOrders(player.ID, 0, []*common.Order{})
+		session.SetOrders(player.ID, 0, []*arena.Order{})
 	}
 
 	if turn := readMessage(t, conn)["turn"]; turn != 1.0 {
@@ -95,7 +95,7 @@ func TestClosedSocketsAreRemoved(t *testing.T) {
 func TestCloseSockets(t *testing.T) {
 	DevMode = true
 
-	mapdata, err := common.LoadMap("../maps/tiny.txt")
+	mapdata, err := arena.LoadMap("../maps/tiny.txt")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hivehelsinki/hive-arena/common"
+	"github.com/hivehelsinki/hive-arena/arena"
 )
 
 func newTestSession(t *testing.T, players int) (*GameSession, []Player) {
@@ -17,7 +17,7 @@ func newTestSession(t *testing.T, players int) (*GameSession, []Player) {
 	DevMode = true
 	HistoryDir = t.TempDir()
 
-	mapdata, err := common.LoadMap("../maps/tiny.txt")
+	mapdata, err := arena.LoadMap("../maps/tiny.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestConcurrentReadsDuringTurns(t *testing.T) {
 
 	for turn := range uint(20) {
 		for _, player := range players {
-			if err := session.SetOrders(player.ID, turn, []*common.Order{}); err != nil {
+			if err := session.SetOrders(player.ID, turn, []*arena.Order{}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -73,20 +73,20 @@ func TestConcurrentReadsDuringTurns(t *testing.T) {
 func TestOrdersForAnotherTurnAreRejected(t *testing.T) {
 	session, players := newTestSession(t, 2)
 
-	if err := session.SetOrders(players[0].ID, 1, []*common.Order{}); err == nil {
+	if err := session.SetOrders(players[0].ID, 1, []*arena.Order{}); err == nil {
 		t.Error("orders for a future turn should be rejected")
 	}
 
 	for _, player := range players {
-		if err := session.SetOrders(player.ID, 0, []*common.Order{}); err != nil {
+		if err := session.SetOrders(player.ID, 0, []*arena.Order{}); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	if err := session.SetOrders(players[0].ID, 0, []*common.Order{}); err == nil {
+	if err := session.SetOrders(players[0].ID, 0, []*arena.Order{}); err == nil {
 		t.Error("orders for a past turn should be rejected")
 	}
-	if err := session.SetOrders(players[0].ID, 1, []*common.Order{}); err != nil {
+	if err := session.SetOrders(players[0].ID, 1, []*arena.Order{}); err != nil {
 		t.Errorf("orders for the current turn should be accepted: %s", err)
 	}
 }
@@ -94,7 +94,7 @@ func TestOrdersForAnotherTurnAreRejected(t *testing.T) {
 func TestOrdersBeforeStartAreRejected(t *testing.T) {
 	DevMode = true
 
-	mapdata, err := common.LoadMap("../maps/tiny.txt")
+	mapdata, err := arena.LoadMap("../maps/tiny.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestOrdersBeforeStartAreRejected(t *testing.T) {
 	session := NewGameSession("test", 2, "tiny", mapdata)
 	player := session.AddPlayer("team")
 
-	if err := session.SetOrders(player.ID, 0, []*common.Order{}); err == nil {
+	if err := session.SetOrders(player.ID, 0, []*arena.Order{}); err == nil {
 		t.Error("orders before the game starts should be rejected")
 	}
 }
@@ -130,7 +130,7 @@ func TestMinTurnDuration(t *testing.T) {
 
 	start := time.Now()
 	for _, player := range players {
-		if err := session.SetOrders(player.ID, 0, []*common.Order{}); err != nil {
+		if err := session.SetOrders(player.ID, 0, []*arena.Order{}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -163,7 +163,7 @@ func TestPersist(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var game common.PersistedGame
+	var game arena.PersistedGame
 	if err := json.Unmarshal(data, &game); err != nil {
 		t.Fatal(err)
 	}

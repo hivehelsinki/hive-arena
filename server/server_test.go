@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hivehelsinki/hive-arena/common"
+	"github.com/hivehelsinki/hive-arena/arena"
 )
 
 func newTestServer(t *testing.T) *httptest.Server {
@@ -17,13 +17,13 @@ func newTestServer(t *testing.T) *httptest.Server {
 	DevMode = true
 	HistoryDir = t.TempDir()
 
-	mapdata, err := common.LoadMap("../maps/tiny.txt")
+	mapdata, err := arena.LoadMap("../maps/tiny.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	server := &Server{
-		Maps:     map[string]common.MapData{"tiny": mapdata},
+		Maps:     map[string]arena.MapData{"tiny": mapdata},
 		Sessions: make(map[string]*GameSession),
 	}
 
@@ -97,7 +97,7 @@ func TestNewGame(t *testing.T) {
 		t.Errorf("unexpected response: %v", game)
 	}
 
-	var status common.StatusResponse
+	var status arena.StatusResponse
 	call(t, server, "GET", "/status", "", http.StatusOK, &status)
 	if len(status.Games) != 1 || status.Games[0].Id != game["id"] {
 		t.Errorf("expected the new game in the status, got %+v", status)
@@ -133,7 +133,7 @@ func TestGameViews(t *testing.T) {
 
 	call(t, server, "GET", "/game?id="+game.Id+"&token=nope", "", http.StatusForbidden, nil)
 
-	var full, view common.GameState
+	var full, view arena.GameState
 	call(t, server, "GET", "/game?id="+game.Id+"&token="+game.AdminToken, "", http.StatusOK, &full)
 	call(t, server, "GET", "/game?id="+game.Id+"&token="+game.Players[0].Token, "", http.StatusOK, &view)
 
@@ -159,7 +159,7 @@ func TestPostOrders(t *testing.T) {
 	call(t, server, "POST", route(0, "0"), `[{"type": "MOVE", "coords": "0,0", "direction": "E"}]`, http.StatusOK, nil)
 	call(t, server, "POST", route(1, "0"), "null", http.StatusOK, nil)
 
-	var state common.GameState
+	var state arena.GameState
 	call(t, server, "GET", "/game?id="+game.Id+"&token="+game.AdminToken, "", http.StatusOK, &state)
 	if state.Turn != 1 {
 		t.Errorf("expected the turn to be processed once all players posted, current turn is %d", state.Turn)
