@@ -7,7 +7,11 @@ import (
 )
 
 func GitRevision() string {
-	buildInfo, _ := debug.ReadBuildInfo()
+	buildInfo, ok := debug.ReadBuildInfo()
+	if !ok {
+		return ""
+	}
+
 	for _, info := range buildInfo.Settings {
 		if info.Key == "vcs.revision" {
 			return info.Value
