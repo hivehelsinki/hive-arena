@@ -4,7 +4,7 @@ local json = require "lunajson"
 local args = {...}
 
 if #args < 3 then
-	print("Usage: lua etc/create_game_with_viewer.lua <host> <numPlayers> <map>")
+	print("Usage: lua scripts/create_game_with_viewer.lua <host> <numPlayers> <map>")
 	return
 end
 
