@@ -63,7 +63,7 @@ local function printState(state)
 	end
 
 	print("Turn: ", state.turn)
-	print("Last influence change: ", state.lastInfluenceChange)
+	print("Last resource change: ", state.lastResourceChange)
 	print("Resources: ", table.concat(state.playerResources, ", "))
 	print("Resources left on map: ", totalResources)
 	print("Game over:", state.gameOver)
