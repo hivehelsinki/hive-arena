@@ -127,6 +127,9 @@ func (viewer *Viewer) applyLiveUpdates() {
 		select {
 		case update := <-viewer.Live:
 			viewer.Game.History = append(viewer.Game.History, Turn{Orders: nil, State: update.State})
+			if len(viewer.Game.History) == 1 {
+				viewer.CenterCamera()
+			}
 			if viewer.Turn == len(viewer.Game.History)-2 {
 				viewer.Turn++
 			}
@@ -244,10 +247,6 @@ func (viewer *Viewer) DrawInfo(screen *ebiten.Image, state *GameState) {
 
 func (viewer *Viewer) Draw(screen *ebiten.Image) {
 	if len(viewer.Game.History) > 0 {
-		if viewer.Cx == 0.0 && viewer.Cy == 0.0 {
-			cx, cy := CenterTile(viewer.Game.History[0].State)
-			viewer.Cx, viewer.Cy = float64(cx), float64(cy)
-		}
 		viewer.DrawState(screen)
 	} else {
 		txtOp := &text.DrawOptions{}
@@ -258,6 +257,11 @@ func (viewer *Viewer) Draw(screen *ebiten.Image) {
 
 func (viewer *Viewer) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
 	return outsideWidth, outsideHeight
+}
+
+func (viewer *Viewer) CenterCamera() {
+	cx, cy := CenterTile(viewer.Game.History[0].State)
+	viewer.Cx, viewer.Cy = float64(cx), float64(cy)
 }
 
 func CenterTile(state *GameState) (int, int) {
@@ -307,6 +311,9 @@ func main() {
 		Game:  game,
 		Scale: 1.0,
 		Live:  live,
+	}
+	if len(game.History) > 0 {
+		viewer.CenterCamera()
 	}
 	err := ebiten.RunGame(viewer)
 
