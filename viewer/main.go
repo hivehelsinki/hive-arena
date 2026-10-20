@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"image/color"
+	"math"
 	"slices"
 	"strings"
 
@@ -40,6 +41,10 @@ func (viewer *Viewer) playerName(player int) string {
 
 const AutoplaySpeed = 10 // ebiten runs 60 ticks per second, so 6 turns per second
 
+const ZoomFactor = 1.5
+const MinScale = 0.1
+const MaxScale = 20
+
 type Viewer struct {
 	Game *PersistedGame
 	Turn int
@@ -56,12 +61,15 @@ type Viewer struct {
 
 func (viewer *Viewer) Update() error {
 
+	// A mouse wheel notch zooms by ZoomFactor, trackpads send smaller steps
 	_, dy := ebiten.Wheel()
-	if dy > 0 || inpututil.IsKeyJustPressed(ebiten.KeyW) {
-		viewer.Scale *= 1.5
-	} else if dy < 0 || inpututil.IsKeyJustPressed(ebiten.KeyQ) {
-		viewer.Scale /= 1.5
+	zoom := max(-1, min(1, dy))
+	if inpututil.IsKeyJustPressed(ebiten.KeyW) {
+		zoom = 1
+	} else if inpututil.IsKeyJustPressed(ebiten.KeyQ) {
+		zoom = -1
 	}
+	viewer.Scale = max(MinScale, min(MaxScale, viewer.Scale*math.Pow(ZoomFactor, zoom)))
 
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 		x, y := ebiten.CursorPosition()
