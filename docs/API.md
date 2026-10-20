@@ -138,6 +138,8 @@ Expected payload: an array of objects. Each command is in the following format:
 
 The relative order of the commands in the array is significant (see [rules](rules.md)). The `direction` value is used only for certain orders and can be omitted for the others (see [rules](rules.md)).
 
+Commands with an unknown type, or a missing or unknown direction when the type needs one, fail with the status `INVALID_ORDER`, and do not count as the unit's action for the turn.
+
 If the token is correct, the JSON is valid, and the turn is the current one, the HTTP status code is always OK. This does not relate to whether the commands were successfully applied.
 
 If the turn is not the current one (for example, if the commands were sent after the turn timeout), the commands are rejected with error code Bad Request.

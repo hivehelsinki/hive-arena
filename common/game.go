@@ -60,6 +60,7 @@ type OrderStatus string
 
 const (
 	PENDING              OrderStatus = "PENDING"
+	INVALID_ORDER        OrderStatus = "INVALID_ORDER"
 	INVALID_UNIT         OrderStatus = "INVALID_UNIT"
 	BLOCKED              OrderStatus = "BLOCKED"
 	INVALID_TARGET       OrderStatus = "INVALID_TARGET"
@@ -75,6 +76,18 @@ func (o *Order) UnitType() EntityType {
 		return HIVE
 	}
 	return BEE
+}
+
+// IsValid reports whether the order has a known type, and a valid direction if its type needs one
+func (o *Order) IsValid() bool {
+	switch o.Type {
+	case MOVE, ATTACK, BUILD_WALL, SPAWN:
+		_, ok := DirectionToOffset[o.Direction]
+		return ok
+	case FORAGE, BUILD_HIVE:
+		return true
+	}
+	return false
 }
 
 func (o *Order) Target() Coords {
@@ -162,13 +175,14 @@ func (gs *GameState) ProcessOrders(orders [][]*Order) ([]*Order, error) {
 		return nil, fmt.Errorf("cannot process orders in a finished game")
 	}
 
-	// Drop null orders and fill in player ids
+	// Drop null orders, fill in player ids and reset statuses
 
 	orders = slices.Clone(orders)
 	for player, playerOrders := range orders {
 		playerOrders = slices.DeleteFunc(slices.Clone(playerOrders), func(o *Order) bool { return o == nil })
 		for _, order := range playerOrders {
 			order.Player = player
+			order.Status = PENDING
 		}
 		orders[player] = playerOrders
 	}
@@ -210,7 +224,9 @@ func (gs *GameState) ProcessOrders(orders [][]*Order) ([]*Order, error) {
 		for _, order := range roundOrders {
 			processed = append(processed, order)
 			unit := gs.EntityAt(order.Coords)
-			if unit == nil || unit.Type != order.UnitType() || unit.Player != order.Player {
+			if !order.IsValid() {
+				order.Status = INVALID_ORDER
+			} else if unit == nil || unit.Type != order.UnitType() || unit.Player != order.Player {
 				order.Status = INVALID_UNIT
 			} else if acted[unit] {
 				order.Status = UNIT_ALREADY_ACTED

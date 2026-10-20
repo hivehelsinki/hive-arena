@@ -192,6 +192,25 @@ func TestNullOrdersAreIgnored(t *testing.T) {
 	expectEntity(t, gs, 1, 3, BEE, 0)
 }
 
+func TestInvalidOrders(t *testing.T) {
+	gs := newState(t, 1, smallMap...)
+
+	unknownType := order("DANCE", 0, 2, E)
+	noDirection := order(ATTACK, 0, 2, "")
+	badDirection := order(MOVE, 0, 2, "UP")
+	fakeStatus := &Order{Type: "DANCE", Coords: Coords{0, 2}, Status: OK}
+	valid := order(MOVE, 0, 2, SE)
+	play(t, gs, unknownType, noDirection, badDirection, fakeStatus, valid)
+
+	expectStatus(t, unknownType, INVALID_ORDER)
+	expectStatus(t, noDirection, INVALID_ORDER)
+	expectStatus(t, badDirection, INVALID_ORDER)
+	expectStatus(t, fakeStatus, INVALID_ORDER)
+
+	// Invalid orders do not use up the unit's action
+	expectStatus(t, valid, OK)
+}
+
 func TestForageAndDrop(t *testing.T) {
 	gs := newState(t, 1, smallMap...)
 
