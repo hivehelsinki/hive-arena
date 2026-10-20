@@ -38,13 +38,13 @@ func GetURL(url string) *PersistedGame {
 	body, err := io.ReadAll(res.Body)
 	res.Body.Close()
 
-	if res.StatusCode > 299 {
-		fmt.Printf("Response failed with status code: %d and\nbody: %s\n", res.StatusCode, body)
+	if err != nil {
+		fmt.Println(err)
 		return nil
 	}
 
-	if err != nil {
-		fmt.Println(err)
+	if res.StatusCode > 299 {
+		fmt.Printf("Response failed with status code: %d and\nbody: %s\n", res.StatusCode, body)
 		return nil
 	}
 
@@ -69,7 +69,10 @@ func request(url string) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, _ := io.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
 	body := string(bodyBytes)
 
 	if resp.StatusCode != 200 {
@@ -90,7 +93,10 @@ func getState(host string, id string, token string) *GameState {
 	}
 
 	var response GameState
-	json.Unmarshal([]byte(body), &response)
+	if err := json.Unmarshal([]byte(body), &response); err != nil {
+		fmt.Println("Invalid game state:", err)
+		return nil
+	}
 
 	return &response
 }
@@ -105,7 +111,10 @@ func fillGameInfo(host string, id string, game *PersistedGame) {
 	}
 
 	var response StatusResponse
-	json.Unmarshal([]byte(body), &response)
+	if err := json.Unmarshal([]byte(body), &response); err != nil {
+		fmt.Println("Invalid status:", err)
+		return
+	}
 
 	for _, status := range response.Games {
 		if status.Id == id {
