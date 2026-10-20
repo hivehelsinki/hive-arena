@@ -76,12 +76,12 @@ local function runAgent(host, gameid, name, callback)
 	local token = joinInfo.token
 	local player = joinInfo.id
 
-	local currentTurn = 0
+	local lastPlayedTurn = -1
 	local socket = openWebSocket(host, gameid)
 
 	local function run()
 		local state = getState(host, gameid, token)
-		currentTurn = state.turn
+		lastPlayedTurn = state.turn
 
 		local orders = callback(state, player)
 		sendOrders(host, gameid, token, state.turn, orders)
@@ -92,7 +92,7 @@ local function runAgent(host, gameid, name, callback)
 		if message.gameOver then
 			print("Game over")
 			break
-		elseif message.turn > currentTurn then
+		elseif message.turn > lastPlayedTurn then
 			print("Turn " .. message.turn .. " starts")
 			run()
 		end

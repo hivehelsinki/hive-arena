@@ -105,11 +105,11 @@ func Run(host string, id string, name string, callback func(*GameState, int) []O
 
 	playerInfo := joinGame(host, id, name)
 	ws := startWebSocket(host, id)
-	currentTurn := uint(0)
+	lastPlayedTurn := -1
 
 	run := func() {
 		state := getState(host, id, playerInfo.Token)
-		currentTurn = state.Turn
+		lastPlayedTurn = int(state.Turn)
 
 		orders := callback(&state, playerInfo.Id)
 		sendOrders(host, id, playerInfo.Token, state.Turn, orders)
@@ -126,7 +126,7 @@ func Run(host string, id string, name string, callback func(*GameState, int) []O
 		if message.GameOver {
 			fmt.Println("Game is over")
 			break
-		} else if message.Turn > currentTurn {
+		} else if int(message.Turn) > lastPlayedTurn {
 			fmt.Printf("Starting turn %d\n", message.Turn)
 			run()
 		}
