@@ -67,7 +67,7 @@ The possible commands for bees are the following:
 If the bee is already carrying a flower, and is adjacent to a hive of the same player, the player's resources are immediately increased by one, and the bee is not longer carrying a flower. If the bee is not adjacent to a hive of the same player, the command fails.
 - `build wall`: create a wax wall in the given direction.
 - `build hive`: transform the bee into a hive in its current cell.
-- `attack`: attack the adjacent entity in the given direction. If it is a wax wall, it is destroyed with a 1 in 6 chance. If it is a bee, it is stunned with a 1 in 2 chance, and cannot act later during this round (nothing happens if it has already acted).
+- `attack`: attack the adjacent entity in the given direction. If it is a wax wall, it is destroyed with a 1 in 6 chance. If it is a bee, it is stunned with a 1 in 2 chance, and cannot act for the rest of the turn (nothing happens if it has already acted).
 
 The possible commands for hives are:
 
