@@ -3,9 +3,10 @@ package main
 import (
 	"bytes"
 	"image"
+	_ "image/png"
+	"log"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/examples/resources/fonts"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 
 	. "hive-arena/common"
@@ -48,8 +49,16 @@ var SpriteWall []byte
 //go:embed flower.png
 var SpriteFlower []byte
 
+// Press Start 2P, see pressstart2p-license.txt
+//
+//go:embed pressstart2p.ttf
+var FontData []byte
+
 func loadImage(data []byte) *ebiten.Image {
-	img, _, _ := image.Decode(bytes.NewReader(data))
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		log.Fatalf("Could not decode embedded image: %s", err)
+	}
 	return ebiten.NewImageFromImage(img)
 }
 
@@ -69,10 +78,12 @@ func LoadResources() {
 	EntityTiles[BEE] = loadImage(SpriteBee)
 	EntityTiles[HIVE] = loadImage(SpriteHive)
 	EntityTiles[WALL] = loadImage(SpriteWall)
-	EntityTiles[WALL] = loadImage(SpriteWall)
 	FlowerImage = loadImage(SpriteFlower)
 
-	fontSource, _ := text.NewGoTextFaceSource(bytes.NewReader(fonts.PressStart2P_ttf))
+	fontSource, err := text.NewGoTextFaceSource(bytes.NewReader(FontData))
+	if err != nil {
+		log.Fatalf("Could not load embedded font: %s", err)
+	}
 	Font = &text.GoTextFace{
 		Source: fontSource,
 		Size:   16,
