@@ -90,6 +90,41 @@ func TestLoadMap(t *testing.T) {
 	}
 }
 
+func TestLoadInvalidMap(t *testing.T) {
+	for _, content := range []string{"F   H", "F   Hx  .", "F   B6  ."} {
+		path := filepath.Join(t.TempDir(), "map.txt")
+		os.WriteFile(path, []byte(content), 0o644)
+
+		if _, err := LoadMap(path); err == nil {
+			t.Errorf("loading %q should fail", content)
+		}
+	}
+}
+
+func TestLoadAllMaps(t *testing.T) {
+	paths, _ := filepath.Glob("../maps/*.txt")
+	if len(paths) == 0 {
+		t.Fatal("no maps found")
+	}
+
+	for _, path := range paths {
+		mapdata, err := LoadMap(path)
+		if err != nil {
+			t.Errorf("%s: %s", path, err)
+			continue
+		}
+
+		for players := 1; players <= MaxPlayers; players++ {
+			gs := NewGameState(mapdata, players)
+			for player := range players {
+				if len(gs.PlayerView(player).Hexes) == 0 {
+					t.Errorf("%s with %d players: player %d has no units", path, players, player)
+				}
+			}
+		}
+	}
+}
+
 func TestPlayerMapping(t *testing.T) {
 	// With 2 players, the spawns of map players 0 and 3 are used
 	gs := newState(t, 2, "H0  H1  H2  H3  H4  H5  F")

@@ -40,14 +40,16 @@ func loadMaps() map[string]MapData {
 	}
 
 	for _, entry := range entries {
-		name := entry.Name()
-		path := MapDir + "/" + name
-		mapdata, err := LoadMap(path)
+		name, isMap := strings.CutSuffix(entry.Name(), ".txt")
+		if !isMap || entry.IsDir() {
+			continue
+		}
+
+		mapdata, err := LoadMap(MapDir + "/" + entry.Name())
 		if err != nil {
 			log.Fatalf("Could not load map %s: %s", name, err)
 		}
 
-		name = strings.ReplaceAll(name, ".txt", "")
 		data[name] = mapdata
 	}
 

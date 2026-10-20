@@ -117,8 +117,10 @@ var playerMappings = [][]int{
 	{0, 1, 2, 3, 4, 5},
 }
 
+const MaxPlayers = 6
+
 func IsValidNumPlayers(n int) bool {
-	return n >= 1 && n <= 6
+	return n >= 1 && n <= MaxPlayers
 }
 
 func NewGameState(mapData MapData, numPlayers int) *GameState {

@@ -1,6 +1,7 @@
 package common
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -110,8 +111,13 @@ func LoadMap(path string) (MapData, error) {
 			if terrain, ok := charToTerrain[char]; ok {
 				gameMap[coords] = terrain
 			} else if kind, ok := charToSpawn[char]; ok {
-				playerStr := string(line[col+1])
-				player, _ := strconv.Atoi(playerStr)
+				if col+1 >= len(line) {
+					return MapData{}, fmt.Errorf("line %d: missing player number after %c", row+1, char)
+				}
+				player, err := strconv.Atoi(line[col+1 : col+2])
+				if err != nil || player < 0 || player >= MaxPlayers {
+					return MapData{}, fmt.Errorf("line %d: invalid player number after %c: %c", row+1, char, line[col+1])
+				}
 
 				spawns = append(spawns, Spawn{
 					Kind:   kind,
