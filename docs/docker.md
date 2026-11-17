@@ -4,8 +4,9 @@ The ladder builds and runs every team's agent with Docker. Your repository must 
 
 ## What the ladder does
 
-- Registers your repository through the public registry (see the ladder page).
-- Before each run, takes the most recent tag on the `main` branch of your repository, and builds it with `docker build` from the repository root, using the `Dockerfile` at the root.
+- Registers your repository through the public registry (see the ladder page). The repository must be public, with an `https://` URL.
+- Takes the most recent tag on the `main` branch of your repository, and builds it with `docker build` from the repository root, using the `Dockerfile` at the root (another context and Dockerfile can be registered). New tags are built within about 15 minutes, and at the start of each run: the result and the build log are on your team's page.
+- Before a new version plays, it must pass a smoke test: a 1-player game on `tiny`, played until the end.
 - For each match, starts a fresh game server and one container per agent, on a private network.
 
 ## The contract
@@ -13,13 +14,14 @@ The ladder builds and runs every team's agent with Docker. Your repository must 
 - **One container plays one game, then exits.** The image is started with no command line arguments: it must use its default `ENTRYPOINT`/`CMD`.
 - **Configuration comes from environment variables:**
   - `ARENA_HOST`: host and port of the game server, e.g. `server:8080`
-  - `ARENA_GAME_ID`: the ID of the game to join
-  - `ARENA_NAME`: the name to join with
+  - `ARENA_GAME_ID`: the ID of the game to join, private to your agent: use it for every call (`/join`, `/game`, `/orders`, `/ws`)
+  - `ARENA_NAME`: the name to join with (your team's name: with your private game ID, you always play under it)
 - **Join, play until the game is over, exit.** Exit with status 0 once the game is over. A container that exits before the end of the game, or never joins, counts as a crash: it ranks last in that match.
 - **No network access** other than the game server. Everything your agent needs must be in the image: fetch dependencies during the build, not when the agent starts.
-- **Read-only filesystem**, except `/tmp`. The agent runs without root privileges.
+- **Read-only filesystem**, except `/tmp` (which counts in the memory limit). The agent runs as an unprivileged user (uid 65534, whatever `USER` the image sets): files it needs must be readable by everyone.
 - **Equal resources for everyone:** the CPU is split equally between the agents of a match (one match runs at a time), and each agent has 256 MB of memory and a limited number of processes. The standard turn timeout (2 seconds) applies.
-- **Building** happens with network access, under a time limit (10 minutes). Keep images reasonably small: use a multi-stage build when your language allows it.
+- **Output:** what your agent prints is kept (the last 256 kB per match) and shown on the match page, which helps you debug it. Docker keeps at most 1 MB per container: don't print every turn's whole state.
+- **Building** happens with network access, under a time limit (10 minutes), and the image must be under 2 GB. Keep images small: use a multi-stage build when your language allows it. Build cache mounts (`RUN --mount=type=cache`) are emptied before each build.
 
 ## Examples
 
@@ -45,7 +47,7 @@ docker run -d --rm --name server --network arenatest -p 8000:8080 arena-server
 # Create a 1-player game and run your agent in it, with the ladder's restrictions
 ID=$(curl -s "localhost:8000/newgame?map=tiny&players=1" | sed 's/.*"id":"\([^"]*\)".*/\1/')
 docker run --rm --network arenatest --read-only --tmpfs /tmp --cap-drop ALL \
-  --security-opt no-new-privileges --cpus 1 --memory 256m --pids-limit 64 \
+  --user 65534:65534 --security-opt no-new-privileges --cpus 1 --memory 256m --pids-limit 64 \
   -e ARENA_HOST=server:8080 -e ARENA_GAME_ID=$ID -e ARENA_NAME=me my-agent
 
 # Then look at the result

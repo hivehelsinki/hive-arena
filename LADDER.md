@@ -75,37 +75,41 @@ A team's repo must contain, at its root, a `Dockerfile` that builds an image whi
   - `ARENA_GAME_ID`: the game to join
   - `ARENA_NAME`: the name to announce (`/join?name=`)
 - The bot joins the game (`/join`), plays until `gameOver` (or until the connection is refused/closed), then exits with status 0.
-- No network access other than the match's server; the filesystem is read-only except `/tmp`; the process runs as a non-root user (the runner enforces it, but images should not require root).
+- No network access other than the match's server (not even the host: the service drops traffic from match networks to it); the filesystem is read-only except `/tmp`; the process runs as an unprivileged user (uid 65534, enforced by the runner whatever the image says).
+- `ARENA_GAME_ID` is private to each bot: it is the ID of the bot's own reserved seat (see "Server changes"), so a bot always plays under its team's name, and cannot take another bot's seat.
 - Builds must work offline-free of our help: the build is done on the ladder machine with network access (to fetch dependencies), but under a time limit.
 - Dockerfile templates for Go and Lua are added to `example-agent-go` and `example-agent-lua` (mapping the env variables to the programs' arguments), and a short "bot contract" section in the docs. These templates are the reference for other languages.
 
 ## Building
 
-- **At the start of each run** (see Scheduling), for every team, resolve the latest tag to a commit; if no image exists for that commit, clone it and `docker build` with a time limit (e.g. 10 minutes) and a size cap.
-- Images are tagged `ladder/<team>:<commit>`; old images are pruned (keep the last few per team).
+- **At the start of each run** (see Scheduling), and every 15 minutes between runs so that teams get feedback soon, for every team, resolve the latest tag to a commit; if no image exists for that commit, fetch it and `docker build` it with a time limit (10 minutes) and a size cap (2 GB). Build cache mounts are emptied before each build (they are shared between all builds), and the build cache is kept under a size limit.
+- Images are tagged `hive-ladder/<team>:<commit>`; old images are pruned (keep the last few per team). A good build whose image disappeared is built again.
+- Failures that are not the team's (an interrupted build, docker or the image registry failing, a smoke test that could not run) are not recorded: the build is tried again next time.
 - The build log is stored and shown on the team's page.
 - **A failed build never removes a team from the ladder**: the previous good image keeps playing, and the website shows the failure and its log.
-- **Smoke test before admission:** a new image must complete a 1-player match on `tiny` (join, play at least one legal turn) before it is used in the ladder. Failure is shown like a build failure. This is the CI/CD-style feedback teams get for free.
+- **Smoke test before admission:** a new image must complete a 1-player match on `tiny` (join, and play until the end of the game) before it is used in the ladder. Failure is shown like a build failure. This is the CI/CD-style feedback teams get for free.
 
 ## Running a match
 
 For each match the runner:
 
 1. Creates a private Docker network (`--internal`, so nothing in it can reach the outside).
-2. Starts a server container from the arena server image on that network, with `--dev` (no minimum turn duration, so games play as fast as the bots can answer; the standard 2-second turn timeout still applies to every agent), and a mount for its reports.
-3. Calls `/newgame?map=...&players=n` on it.
-4. Starts one container per bot with the contract's env variables, in a random order (random seats; see "Seats").
-5. Polls `/status` until the game is over (with an overall timeout).
-6. Retrieves the final report (`/report`) and stores it.
+2. Starts a server container from the arena server image on that network, with `--dev` (no minimum turn duration, so games play as fast as the bots can answer; the standard 2-second turn timeout still applies to every agent), accepting a single game and keeping no files, with memory and process limits.
+3. Calls `/newgame?map=...&players=n&names=...` on it, which reserves one seat per bot.
+4. Starts one container per bot with the contract's env variables (each with its own seat's game ID), in a random order.
+5. Polls `/status` until the game is over (within the match timeout, and never past the start of the next scheduled run), and takes the result from it.
+6. Streams the final report (`/report`) to a compressed file, and records it.
 7. Stops and removes all containers and the network, whatever happened.
 
-Container limits, the same for every bot: `--read-only`, `--tmpfs /tmp`, non-root user, `--cpus <cores / n>` (see below), `--memory 256m`, `--pids-limit 64`, `--network <match net>`, no extra capabilities (`--cap-drop ALL`, `--security-opt no-new-privileges`). The limits are tuned after testing on real example bots. Docker's daemon is the only privileged component, and the ladder machine is a dedicated VM.
+A match that fails (timeout, server failure) is recorded as **void**, with the error and the bots' output: it does not count, and is shown as failed on the website.
+
+Container limits, the same for every bot: `--read-only`, `--tmpfs /tmp`, `--user 65534:65534`, `--cpus <cores / n>` (see below), `--memory 256m`, `--pids-limit 64`, `--network <match net>`, no extra capabilities (`--cap-drop ALL`, `--security-opt no-new-privileges`), at most 1 MB of output kept by docker, `--pull=never`. The limits are tuned after testing on real example bots. Docker's daemon is the only privileged component, and the ladder machine is a dedicated VM.
 
 The target VM has only **2 virtual cores**, and with `--dev` matches are CPU-bound rather than paced by the clock. So **matches run one at a time**: nothing else competes for the CPU, and a bot's result does not depend on what else is running. Within a match, the CPU is split equally between the `n` bots: `--cpus = cores / n` (2 cores give 1.0 each in a 2-player match, 0.5 in a 4-player one, 0.33 in a 6-player one). The server container has no limit of its own: it only works between turns (validating and applying orders), when the bots are mostly waiting, so it should not take much from them. This is an assumption to verify: in step 2, measure match duration and the server's CPU use with the example bots, and adjust (e.g. reserve a fraction of a core for the server) if it turns out to matter. The per-bot CPU share differs between formats, but is identical for all bots in a match, which is what matters for fairness. If time per run turns out too tight, the answer is a larger VM or fewer matches per run, not unequal shares.
 
 A bot is counted as **crashed** if its container exits before the game is over, and as **no-join** if it does not join in time (or its container exits first). The match goes on: the runner joins a stand-in in place of a missing bot, which posts empty orders every turn so the game is not slowed down. Either way the bot is ranked last (see "Scoring").
 
-When a bot crashes mid-game, the runner forfeits its seat through the server's `/forfeit` route (admin token only): the server stops waiting for its orders, so the rest of the game is not slowed down by the turn timeout.
+When a bot crashes (mid-game, or after joining but before the game starts), the runner forfeits its seat through the server's `/forfeit` route (admin token only): the server stops waiting for its orders, so the rest of the game is not slowed down by the turn timeout.
 
 ## Games and lineups
 
@@ -172,8 +176,10 @@ If many more teams show up (when full round-robins become too large), the option
 
 Every match is stored:
 
-- **In SQLite**: match id, timestamp, map, `n`, seat/player index, team and commit per seat, flowers, rank, points, status per bot (finished, crashed, timeout), and whether the match is valid (e.g. server failure matches are marked void and not counted).
+- **In SQLite**: match id, timestamp, map, `n`, seat/player index, team and commit per seat, flowers, points, status per bot (finished, crashed, no-join), and whether the match is valid (failed matches are void, with their error, and not counted). Each run records the arena server image and the ladder revision that played it. The schema is versioned, with migrations (the database is copied before being migrated).
 - **As files**: the server's JSON report (the same format as `history/` today, so the existing viewer reads it unchanged), stored compressed, with container logs of each bot (truncated to a size limit) for debugging. Without accounts, logs are public like the rest of the site; teams should not print anything secret.
+
+Reports are large: the full state of every turn, so a long game (several thousand turns: the game has no turn limit) gives a report of 100-200 MB, 2-4 MB compressed. This is the main cost of storage and backups, and a reason for the game review to consider a turn limit or a more compact replay format.
 
 The store is the source of truth: leaderboards, head-to-head tables and windows are queries over it.
 
@@ -189,10 +195,10 @@ The store is the source of truth: leaderboards, head-to-head tables and windows 
 
 Read-only, served by the same binary. No accounts.
 
-- **Leaderboard** with scores, games, standard errors, per-map views, the build status per team, and the head-to-head table.
+- **Leaderboard** with scores, games, standard errors, scores per format (map and number of players), and the head-to-head table.
 - **Match list**, filterable by team and map, each entry linking to its replay and report.
-- **Team page**: recent results, current commit/tag, build log and status.
-- **Report download**: the game JSON (`/matches/<id>.json`, optionally gzipped), usable with the desktop viewer.
+- **Team page**: recent results, current commit, builds with their logs, and why the team does not play if it does not (no working build, left out for failing).
+- **Report download**: the game JSON (`/matches/<id>/report.json`), usable with the desktop viewer.
 - **Replay in the browser**: the Ebitengine viewer compiled to WebAssembly, loading a match's report by URL (`viewer?match=<id>`), with the same controls as the desktop version. A proof of concept exists. The page for a match embeds it. Because of staff-run and campus-only access, no further access control is needed.
 - A JSON API for the same data (`/api/leaderboard`, `/api/matches`, ...) is provided for display purposes only, so that for instance the big-screen view can be a simple page polling it.
 
@@ -208,15 +214,16 @@ The **big-screen page** (`/screen`) shows the leaderboard next to the replays of
 
 The server needs no change to work with the ladder, but a few small ones make the ladder and live events simpler and more robust. They are backward compatible (existing clients and agents are unaffected), and they come first in the implementation plan (step 0).
 
-1. **Configurable directories.** `--maps` and `--history` flags (today the maps directory is a constant, and both are relative to the working directory). The runner mounts a fresh report directory per match.
+1. **Configurable directories.** `--maps` and `--history` flags (today the maps directory is a constant, and both are relative to the working directory). `--history ""` keeps no files (the ladder uses `/report`).
 2. **Report route.** `GET /report?id=<game id>` returns the JSON report of a finished game (the same format as the files in `history/`), so the runner does not have to find a file whose name embeds a timestamp. The `/history/` file route stays for browsing.
 3. **Random seats.** A joining player gets a random free seat instead of the next one in join order, so seating does not depend on container start-up timing (ladder) or on who joins first (live events). The `players` list in the report is indexed by seat.
 4. **Results in the report.** A `result` block in the report and in the finished game's status, with the final flowers, rank and winners per player. The ladder and website then do not re-derive scores from the last state.
 5. **CORS and websocket origin.** CORS headers on the read routes and an origin check that accepts the configured origins, so the web viewer can talk to the arena server directly during live events. Not needed for the ladder itself, since the ladder site serves its own reports.
-7. **Forfeit route** (added during implementation). `GET /forfeit?id=&token=<admin token>&player=` stops waiting for a player's orders. The runner uses it when a bot's container exits mid-game: otherwise every remaining turn waits for the 2-second timeout, and a crashing bot would make its matches last minutes.
 6. **Lighter Docker image.** A multi-stage `Dockerfile` (build with the Go toolchain, run from a small image with the binary and `maps/`) and a `.dockerignore` excluding `history/`, so per-match server start-up is fast.
+7. **Forfeit route** (added during implementation). `GET /forfeit?id=&token=<admin token>&player=` stops waiting for a player's orders. The runner uses it when a bot's container exits mid-game: otherwise every remaining turn waits for the 2-second timeout, and a crashing bot would make its matches last minutes.
+8. **Reserved seats** (added during implementation). `/newgame?names=a,b,c` returns a private game ID per name; each joins once, under its name. The ladder gives each bot its own: a bot joining under another name crashed the ladder, and a malicious one could take another team's seat. Also `--max-games` (the ladder's servers accept a single game), limits on `/orders` (1 MB, 2 × units + 16 orders), and reports written one turn at a time (encoding a large report at once doubled the server's memory).
 
-Not changed: `--dev` stays a process flag (the ladder spawns a server per match, with `--dev`; the 2-second turn timeout stays), and `/newgame` stays unauthenticated (the ladder's servers are on private networks, the live server is campus-only).
+Not changed: `--dev` stays a process flag (the ladder spawns a server per match, with `--dev`; the 2-second turn timeout stays), and `/newgame` stays unauthenticated (the ladder's servers accept a single game, the live server is campus-only).
 
 ## Deployment
 
@@ -233,7 +240,7 @@ If load grows, the one-VM design can be split later (runner vs web), as everythi
 
 All the steps of the plan are implemented, on the `server-ladder-support` branch, one commit per step:
 
-0. **Server changes**: items 1-4, 6 and 7 above. Item 5 (CORS) is not done: the ladder serves the viewer and reports itself, so it is only needed if the web viewer should talk to a live arena server.
+0. **Server changes**: items 1-4 and 6-8 above. Item 5 (CORS) is not done: the ladder serves the viewer and reports itself, so it is only needed if the web viewer should talk to a live arena server.
 1. **Bot contract and templates**: [docs/docker.md](docs/docker.md); Dockerfiles for both example agents, which read `ARENA_HOST`, `ARENA_GAME_ID` and `ARENA_NAME`.
 2. **Match runner** (`ladder/runner.go`): with the example bots, a match takes 1-2 seconds; a full test run of 25 matches took under a minute. Real bots will be slower: measure with the first real teams and set `repeats` accordingly.
 3. **Store and scoring** (`ladder/store.go`, `ladder/scoring.go`).
@@ -243,6 +250,7 @@ All the steps of the plan are implemented, on the `server-ladder-support` branch
 7. **Web viewer**: `viewer/build-web.sh`, served at `/viewer/`.
 8. **Tournament mode and big-screen page**: round-robin tournaments only (no elimination brackets, which matter little with a handful of teams).
 9. **Deployment**: `ladder/deploy/setup.sh` sets up or updates everything and restarts the service, then checks that it runs the pulled commit (see [ladder/deploy/setup.md](ladder/deploy/setup.md)). To do on the VM: dry run with the example bots and a few volunteer bots, then open registration.
+10. **Hardening**, after a review of security, reliability and maintainability: reserved seats, bounded logs, void matches, retried infrastructure failures, registry fallbacks, scheduler fixes, schema migrations, isolation of bots from the host, builds between runs. See the commit history for details.
 
 The game review happens after this work.
 
@@ -251,7 +259,7 @@ The game review happens after this work.
 - **Game review.** A pass over rules and balance, so this year's game is similar in accessibility but not identical, is separate and comes after the ladder. Maps, viewer and example agents may change with it, so the ladder treats them as data (maps are read from `maps/`, reports are in the standard format).
 - **Pacing.** Ladder servers run with `--dev`, with the standard turn timeout for all agents.
 - **Tags.** The latest tag on the `main` branch of a team's repo.
-- **Retention.** Reports, logs and results are kept forever (the store is small; compress reports, and truncate container logs per match, not per age).
+- **Retention.** Reports, logs and results are kept forever (reports are compressed, and container logs truncated per match). Reports dominate the size: see "Recording".
 - **Hosting.** A campus VM with 2 virtual cores; see Running a match: matches run one at a time.
 
 ## Open questions

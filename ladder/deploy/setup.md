@@ -1,6 +1,6 @@
 # Deploying the ladder
 
-On a dedicated Linux VM (Debian or Ubuntu for the automatic installation of the tools; the plan assumes 2 cores).
+On a dedicated Linux VM (Debian or Ubuntu for the automatic installation of the tools; the plan assumes 2 cores). Memory: the bots of a match take up to 256 MB each (1.5 GB for 6 players), and the match server up to `runner.serverMemory` (2 GB): 4 GB or more.
 
 ## Setup and updates
 
@@ -18,12 +18,15 @@ The first time, the script creates `ladder.json` (from [ladder.example.json](../
 
 To update the ladder later, run the same script again. Every time, it:
 
-1. installs the missing tools (git, Go, Docker, curl, gzip) with apt, and creates the `ladder` user that runs the service, in the `docker` group;
-2. pulls the latest commit of the current branch (it refuses if the repository has local changes);
-3. builds the ladder, the browser viewer, and the arena server image used by every match;
-4. creates the data directory (`dataDir`, by default `data/` in the repository) and gives it to the `ladder` user;
-5. installs the systemd service `hive-ladder` and restarts it. If a ladder run is in progress, it asks first (or use `--force`): the run would be marked incomplete, keeping its recorded matches;
-6. checks that the running ladder reports the commit that was just pulled, and shows its health.
+1. installs the missing tools (git, Go, Docker, curl, gzip, iptables) with apt, and creates the `ladder` user that runs the service, in the `docker` group;
+2. if a ladder run is in progress (or being prepared), stops there, before changing anything: it asks on a terminal, and fails otherwise (`--force` updates and restarts anyway; the run is then marked incomplete, keeping its recorded matches);
+3. pulls the latest commit of the current branch (it refuses if the repository has local changes);
+4. builds the ladder, the browser viewer, and the arena server image used by every match;
+5. creates the data directory (`dataDir`, by default `data/` in the repository) and gives it to the `ladder` user;
+6. installs the systemd service `hive-ladder` and restarts it;
+7. checks that the running ladder reports the commit that was just pulled, and shows its health.
+
+The repository must be readable by the `ladder` user (clone it in `/opt`, not in a private home directory). When a new version changes the database schema, the ladder copies the database (`ladder-v<version>-<time>.db` in the data directory) before migrating it.
 
 The version is also shown at the bottom of every page of the website, and by `ladder/ladder version`.
 
@@ -35,18 +38,18 @@ Being in the `docker` group is equivalent to root access on the machine: the VM 
 - Start a run now: `systemctl kill -s USR1 hive-ladder`
 - A team's build failed for a transient reason (e.g. network): `sudo -u ladder ladder/ladder rebuild -config ladder.json <team>` (safe while the service runs)
 
-The other commands (`ladder/ladder help`) are for debugging and testing. Except `leaderboard`, `web`, `check`, `version` and `rebuild`, stop the service before using them (`systemctl stop hive-ladder`): they play matches or build images, and would disturb the ladder's matches. Run them as the `ladder` user (`sudo -u ladder ...`), so that the files they write in the data directory belong to it.
+The other commands (`ladder/ladder help`) are for debugging and testing. `run`, `tournament` and `build` play matches or build images: they refuse to start while the service runs (stop it first: `systemctl stop hive-ladder`). Run them as the `ladder` user (`sudo -u ladder ...`), so that the files they write in the data directory belong to it.
 
 ## Network access
 
 The website has no write routes and no accounts. Restrict access to the campus network (firewall or reverse proxy), as for the arena server.
 
-Match servers and bots run on private Docker networks; bots have no network access other than their match server. Docker images and repository mirrors grow over time: old team images are pruned automatically (`build.keepImages`), but `docker system prune` from time to time does no harm while no run is in progress.
+Match servers and bots run on private Docker networks; bots have no network access other than their match server. The service adds a firewall rule at start (`iptables -I INPUT -i hl-+ -j DROP`): match networks have interfaces named `hl-*`, and without it bots could reach services listening on the host (the website, sshd) through their network's gateway. Docker images and repository mirrors grow over time: old team images are pruned automatically (`build.keepImages`), and the build cache is kept under `build.cacheLimit`. A missing team image is simply built again, so `docker system prune -a` does no harm while no run is in progress.
 
 ## Monitoring
 
-- `/health` answers `ok` (200), or lists the problems (503): low disk space, Docker unavailable, last run failed, no run for more than 25 hours. Point the campus monitoring at it.
-- `/api/status` gives the details as JSON: disk space, Docker, database size and counts, current, last and next run, teams whose latest version is not playing.
+- `/health` answers `ok` (200), or lists the problems (503): low disk space, Docker unavailable, last run failed or could not be played, no run for more than 25 hours. Point the campus monitoring at it.
+- `/api/status` gives the details as JSON: disk space, Docker, database size and counts, what the ladder is doing, current, last and next run, teams whose latest version is not playing or that are left out, problems of the registry.
 - Low disk space is also logged at start-up and before each run (`minFreeDiskGB`, default 5).
 
 ## Backups
@@ -59,10 +62,10 @@ Set `web.backupToken` to a long random string (e.g. `openssl rand -hex 24`), the
 curl -fsS -OJ "https://<ladder>/backup?token=$TOKEN"
 ```
 
-This downloads `ladder-backup-<UTC time>.tar`: a consistent snapshot of the database, taken while the ladder keeps running, and all the reports and logs. Each archive is complete on its own. `curl -f` fails on an error status; if the server fails midway, the archive is truncated, which `tar tf` detects.
+This downloads `ladder-backup-<UTC time>.tar`: a consistent snapshot of the database, taken while the ladder keeps running, and all the reports and logs. Each archive is complete on its own. Reports of long games are large (a few MB each, compressed): with many matches a day, keep only the last few archives on the backup machine, or fetch less often. `curl -f` fails on an error status; if the server fails midway, the archive is truncated, which `tar tf` detects.
 
 What is backed up: the database (`ladder.db`), match reports and bot logs, build logs, the last team states. Not backed up, because they can be rebuilt: repository mirrors and Docker images.
 
 **Restoring**: stop the service, extract the latest archive into an empty `dataDir`, and start the service.
 
-**Before upgrading the ladder**, take a backup: a new version may change the database.
+**Before upgrading the ladder**, take a backup: a new version may change the database (it also copies the database itself before migrating it).
