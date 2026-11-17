@@ -12,17 +12,20 @@
 #   - installs and (re)starts the systemd service, and checks that it runs
 #     the commit that was just pulled
 #
-# --force: restart even if a ladder run is in progress (it is then marked
-# incomplete, and its recorded matches are kept).
+# --force: update and restart even if a ladder run is in progress (it is then
+# marked incomplete, and its recorded matches are kept).
 
 set -eu
 
 SERVICE=hive-ladder
 SERVICE_USER=ladder
+# Prefix of the network interfaces of matches (BridgePrefix in ladder/runner.go)
+BRIDGE_PREFIX=hl-
 FORCE=0
 [ "${1:-}" = "--force" ] && FORCE=1
 
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
+SCRIPT=$REPO/ladder/deploy/setup.sh
 CONFIG=$REPO/ladder.json
 LADDER=$REPO/ladder/ladder
 
@@ -56,7 +59,8 @@ version_at_least() {
 	[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n1)" = "$2" ]
 }
 
-# Installs the official Go release required by go.mod in /usr/local/go
+# Installs the official Go release required by go.mod in /usr/local/go,
+# after checking its checksum
 install_go() {
 	arch=$(dpkg --print-architecture 2>/dev/null || uname -m)
 	case $arch in
@@ -64,16 +68,47 @@ install_go() {
 		arm64 | aarch64) arch=arm64 ;;
 	esac
 	echo "Installing Go $GO_REQUIRED in /usr/local/go"
-	curl -fsSL "https://go.dev/dl/go$GO_REQUIRED.linux-$arch.tar.gz" -o /tmp/go.tar.gz
+	archive="go$GO_REQUIRED.linux-$arch.tar.gz"
+	tmp=$(mktemp -d)
+	curl -fsSL "https://dl.google.com/go/$archive" -o "$tmp/$archive"
+	curl -fsSL "https://dl.google.com/go/$archive.sha256" -o "$tmp/sha256"
+	echo "$(cat "$tmp/sha256")  $tmp/$archive" | sha256sum -c --quiet || fail "invalid checksum for $archive"
 	rm -rf /usr/local/go
-	tar -C /usr/local -xzf /tmp/go.tar.gz
-	rm /tmp/go.tar.gz
+	tar -C /usr/local -xzf "$tmp/$archive"
+	rm -rf "$tmp"
 	export PATH="/usr/local/go/bin:$PATH"
+}
+
+# Address of the ladder's website, as seen from this machine
+status_base() {
+	listen=$(echo "$1" | sed -n 's/^listen //p')
+	host=${listen%:*}
+	case $host in "" | 0.0.0.0 | "[::]") host=127.0.0.1 ;; esac
+	echo "http://$host:${listen##*:}"
+}
+
+# Fails (or asks, on a terminal) if the running ladder is playing a run, or
+# preparing one: restarting would interrupt it
+check_not_busy() {
+	[ "$FORCE" = 1 ] && return
+	systemctl is-active --quiet "$SERVICE" || return 0
+	[ -x "$LADDER" ] && [ -f "$CONFIG" ] || return 0
+	base=$(status_base "$("$LADDER" check -config "$CONFIG" 2>/dev/null)")
+	status=$(curl -fsS "$base/api/status" 2>/dev/null) || return 0
+	if echo "$status" | grep -q -e '"currentRun"' -e '"activity":"building the pool"'; then
+		if [ -t 0 ]; then
+			printf "A ladder run is in progress. Update and restart anyway (it will be marked incomplete)? [y/N] "
+			read -r answer
+			[ "$answer" = y ] || [ "$answer" = Y ] || fail "nothing done: run this script again after the run, or with --force"
+		else
+			fail "a ladder run is in progress: run this script again after it, or with --force"
+		fi
+	fi
 }
 
 step "Tools"
 missing=""
-for tool in git docker curl gzip; do
+for tool in git docker curl gzip iptables; do
 	command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
 done
 if [ -n "$missing" ]; then
@@ -105,6 +140,9 @@ docker info >/dev/null 2>&1 || fail "docker is installed but not running"
 echo "git, go ($(go env GOVERSION)), docker ($(docker version --format '{{.Server.Version}}'), buildx): ok"
 
 if [ -z "${SETUP_UPDATED:-}" ]; then
+	# Before changing anything: the pull and the builds would affect a run
+	check_not_busy
+
 	step "Update"
 	if [ -n "$(as_owner git status --porcelain --untracked-files=no)" ]; then
 		as_owner git status --short --untracked-files=no
@@ -117,7 +155,7 @@ if [ -z "${SETUP_UPDATED:-}" ]; then
 	# This script may have changed: run the new version
 	if ! as_owner git diff --quiet "$before" "$after" -- ladder/deploy/setup.sh; then
 		echo "The setup script was updated, running the new version"
-		SETUP_UPDATED=1 exec "$0" "$@"
+		SETUP_UPDATED=1 exec "$SCRIPT" "$@"
 	fi
 fi
 COMMIT=$(as_owner git rev-parse HEAD)
@@ -150,14 +188,16 @@ if [ ! -f "$CONFIG" ]; then
 	exit 1
 fi
 checked=$("$LADDER" check -config "$CONFIG") || fail "invalid configuration in $CONFIG"
-LISTEN=$(echo "$checked" | sed -n 's/^listen //p')
+BASE=$(status_base "$checked")
 DATA=$(echo "$checked" | sed -n 's/^dataDir //p')
-PORT=${LISTEN##*:}
 mkdir -p "$DATA"
-chown -R "$SERVICE_USER:$SERVICE_USER" "$DATA"
+# Only what is not already the service user's (the data grows for years)
+find "$DATA" \( ! -user "$SERVICE_USER" -o ! -group "$SERVICE_USER" \) -exec chown "$SERVICE_USER:$SERVICE_USER" {} +
 chown "root:$SERVICE_USER" "$CONFIG"
 chmod 640 "$CONFIG"
-echo "Website on port $PORT, data in $DATA: ok"
+runuser -u "$SERVICE_USER" -- test -r "$REPO/maps/tiny.txt" -a -x "$LADDER" -a -r "$CONFIG" ||
+	fail "the $SERVICE_USER user cannot read $REPO: clone it in a directory readable by all (e.g. /opt)"
+echo "Website on $BASE, data in $DATA: ok"
 
 step "Service"
 cat > "/etc/systemd/system/$SERVICE.service" <<EOF
@@ -165,15 +205,20 @@ cat > "/etc/systemd/system/$SERVICE.service" <<EOF
 [Unit]
 Description=Hive Arena ladder
 After=docker.service network-online.target
-Requires=docker.service
+# Not Requires: the ladder keeps running (and its website, which reports
+# the problem) while docker is stopped
+Wants=docker.service
 
 [Service]
 User=$SERVICE_USER
 Group=$SERVICE_USER
 SupplementaryGroups=docker
 WorkingDirectory=$REPO
+# As root (+): bots cannot reach the host from the networks of matches,
+# whose interfaces are named $BRIDGE_PREFIX*
+ExecStartPre=+/bin/sh -c 'iptables -C INPUT -i $BRIDGE_PREFIX+ -j DROP 2>/dev/null || iptables -I INPUT -i $BRIDGE_PREFIX+ -j DROP'
 ExecStart=$LADDER -config $CONFIG
-Restart=on-failure
+Restart=always
 RestartSec=10
 # Lets the current match clean up its containers
 KillSignal=SIGINT
@@ -187,30 +232,18 @@ EOF
 systemctl daemon-reload
 systemctl enable "$SERVICE" >/dev/null 2>&1
 
-status_url="http://127.0.0.1:$PORT/api/status"
-if systemctl is-active --quiet "$SERVICE" && [ "$FORCE" = 0 ]; then
-	if curl -fsS "$status_url" 2>/dev/null | grep -q '"currentRun"'; then
-		if [ -t 0 ]; then
-			printf "A ladder run is in progress. Restart anyway (it will be marked incomplete)? [y/N] "
-			read -r answer
-			[ "$answer" = y ] || [ "$answer" = Y ] || fail "not restarted: run this script again after the run, or with --force"
-		else
-			fail "a ladder run is in progress: run this script again after it, or with --force"
-		fi
-	fi
-fi
 systemctl restart "$SERVICE"
 
 step "Check"
 revision=""
 for _ in $(seq 30); do
-	revision=$(curl -fsS "$status_url" 2>/dev/null | sed -n 's/.*"revision":"\([^"]*\)".*/\1/p') || true
+	revision=$(curl -fsS "$BASE/api/status" 2>/dev/null | sed -n 's/.*"revision":"\([^"]*\)".*/\1/p') || true
 	[ -n "$revision" ] && break
 	sleep 1
 done
-[ -n "$revision" ] || fail "the ladder does not answer on $status_url: see journalctl -u $SERVICE"
+[ -n "$revision" ] || fail "the ladder does not answer on $BASE: see journalctl -u $SERVICE"
 
-health=$(curl -sS "http://127.0.0.1:$PORT/health" 2>/dev/null || true)
+health=$(curl -sS "$BASE/health" 2>/dev/null || true)
 echo "Repository:     $COMMIT"
 echo "Ladder running: $revision"
 echo "Health:         $health"
