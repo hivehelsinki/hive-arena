@@ -107,12 +107,16 @@ func TestStoreRunsAndLeaderboard(t *testing.T) {
 		t.Errorf("unexpected log: %s, %v", log, err)
 	}
 
-	// Void matches are not counted
+	// Void matches are not counted, and a run without counted matches
+	// leaves its place in the window to the previous one
 	store.SetVoid(m1, true, "test")
-	board, _, _ = store.Leaderboard(2)
+	board, runs, _ = store.Leaderboard(2)
+	if len(runs) != 2 || runs[0].ID != run2 || runs[1].ID != old {
+		t.Errorf("unexpected runs in the window: %+v", runs)
+	}
 	for _, s := range board.Standings {
-		if s.Score.Games != 1 {
-			t.Errorf("void match counted: %+v", s)
+		if s.Score.Games != 2 {
+			t.Errorf("expected the matches of runs %d and %d: %+v", run2, old, s)
 		}
 	}
 

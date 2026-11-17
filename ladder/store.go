@@ -447,7 +447,10 @@ func (s *Store) Results(runIDs []int64) ([]BotResult, error) {
 // Leaderboard computes the leaderboard over the last `window` finished
 // ladder runs, and returns it with these runs
 func (s *Store) Leaderboard(window int) (Leaderboard, []Run, error) {
-	runs, err := s.scanRuns(`WHERE kind = 'ladder' AND status IN (?, ?) ORDER BY id DESC LIMIT ?`,
+	// Runs without any counted match do not take a place in the window
+	runs, err := s.scanRuns(`WHERE kind = 'ladder' AND status IN (?, ?)
+		AND EXISTS (SELECT 1 FROM matches m WHERE m.run_id = runs.id AND m.void = 0)
+		ORDER BY id DESC LIMIT ?`,
 		RunComplete, RunIncomplete, window)
 	if err != nil {
 		return Leaderboard{}, nil, err

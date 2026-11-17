@@ -6,9 +6,24 @@ import (
 	"log"
 	"math/rand"
 	"runtime/debug"
+	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 )
+
+// What the ladder is doing, for the status (empty: waiting)
+var activity atomic.Value
+
+func SetActivity(what string) { activity.Store(what) }
+
+func Activity() string {
+	what, _ := activity.Load().(string)
+	return what
+}
+
+// Why the last run could not be played, if it could not
+var lastRunError atomic.Value
 
 // Lineups returns every combination of n bots from the pool, in a stable order
 func Lineups(pool []Bot, n int) [][]Bot {
@@ -33,6 +48,10 @@ func Lineups(pool []Bot, n int) [][]Bot {
 	return lineups
 }
 
+// Above this number of lineups for a format, a run plays a random sample of
+// them (with many teams, there are far more lineups than can be played)
+const maxLineups = 5000
+
 // PlanRun lists the matches of a run: for each format, every lineup of the
 // pool, played `repeats` times. The order is shuffled, one repeat after the
 // other, so that a run stopped at its deadline is still balanced: every
@@ -40,7 +59,14 @@ func Lineups(pool []Bot, n int) [][]Bot {
 func PlanRun(pool []Bot, formats []Format, repeats int, rng *rand.Rand) []Match {
 	var round []Match
 	for _, format := range formats {
-		for _, lineup := range Lineups(pool, format.Players) {
+		var lineups [][]Bot
+		if binomial(len(pool), format.Players) > maxLineups {
+			lineups = sampleLineups(pool, format.Players, maxLineups, rng)
+			log.Printf("%s: too many lineups for %d bots, playing a random sample of %d", format, len(pool), maxLineups)
+		} else {
+			lineups = Lineups(pool, format.Players)
+		}
+		for _, lineup := range lineups {
 			round = append(round, Match{Map: format.Map, Bots: lineup})
 		}
 	}
@@ -52,6 +78,42 @@ func PlanRun(pool []Bot, formats []Format, repeats int, rng *rand.Rand) []Match 
 		matches = append(matches, shuffled...)
 	}
 	return matches
+}
+
+// binomial returns n choose k, capped at a large value instead of overflowing
+func binomial(n, k int) int {
+	if k < 0 || k > n {
+		return 0
+	}
+	result := 1
+	for i := 1; i <= k; i++ {
+		result = result * (n - k + i) / i
+		if result > 1<<40 {
+			return 1 << 40
+		}
+	}
+	return result
+}
+
+// sampleLineups returns `count` distinct random lineups of n bots
+func sampleLineups(pool []Bot, n int, count int, rng *rand.Rand) [][]Bot {
+	seen := make(map[string]bool)
+	var lineups [][]Bot
+	for len(lineups) < count {
+		indexes := rng.Perm(len(pool))[:n]
+		slices.Sort(indexes)
+		key := fmt.Sprint(indexes)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		lineup := make([]Bot, n)
+		for i, index := range indexes {
+			lineup[i] = pool[index]
+		}
+		lineups = append(lineups, lineup)
+	}
+	return lineups
 }
 
 // Plays matches; implemented by Runner, and replaced in tests
@@ -74,7 +136,17 @@ const maxRunnerErrors = 3
 // RunOnce plays a complete ladder run, until its deadline
 func (l *Ladder) RunOnce(ctx context.Context, deadline time.Time) (int64, error) {
 	LogDiskWarning(l.Config)
+	if time.Now().After(deadline) {
+		return 0, fmt.Errorf("too close to the next scheduled run")
+	}
 
+	// Containers and networks left by failed cleanups
+	if err := RemoveLeftovers(ctx); err != nil {
+		log.Printf("Could not remove leftover containers: %s", err)
+	}
+
+	SetActivity("building the pool")
+	defer SetActivity("")
 	pool, err := l.Pool(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("getting the pool: %w", err)
@@ -86,16 +158,25 @@ func (l *Ladder) RunOnce(ctx context.Context, deadline time.Time) (int64, error)
 // Play records and plays a run: every lineup of the pool for each format,
 // `repeats` times, until the deadline. `config` is recorded with the run.
 func (l *Ladder) Play(ctx context.Context, kind string, config any, pool []Bot, formats []Format, repeats int, deadline time.Time) (int64, error) {
+	matches := PlanRun(pool, formats, repeats, l.Rand)
+	if len(matches) == 0 {
+		return 0, fmt.Errorf("no matches to play with %d bots", len(pool))
+	}
+
 	runID, err := l.Store.CreateRun(kind, config, pool)
 	if err != nil {
 		return 0, err
 	}
-
-	matches := PlanRun(pool, formats, repeats, l.Rand)
 	log.Printf("Run %d (%s): %d bots, %d matches, deadline %s", runID, kind, len(pool), len(matches), deadline.Format(time.DateTime))
+	defer SetActivity("")
+
+	// No match may go past the margin after the deadline (the start of the
+	// next scheduled run)
+	matchCtx, cancel := context.WithDeadline(ctx, deadline.Add(l.Config.DeadlineMargin.Duration))
+	defer cancel()
 
 	status := RunComplete
-	errors := 0
+	errors, recorded := 0, 0
 	for i, match := range matches {
 		if ctx.Err() != nil || time.Now().After(deadline) {
 			log.Printf("Run %d: stopped after %d of %d matches", runID, i, len(matches))
@@ -103,8 +184,9 @@ func (l *Ladder) Play(ctx context.Context, kind string, config any, pool []Bot, 
 			break
 		}
 
+		SetActivity(fmt.Sprintf("run %d (%s): match %d of %d", runID, kind, i+1, len(matches)))
 		log.Printf("Run %d: match %d/%d: %s, %s", runID, i+1, len(matches), match.Map, botNames(match.Bots))
-		result, err := l.playMatch(ctx, match)
+		result, err := l.playMatch(matchCtx, match)
 		if err != nil {
 			log.Printf("Run %d: match %d failed: %s", runID, i+1, err)
 			// Recorded as void, with the bots' output, unless the ladder is stopping
@@ -117,7 +199,12 @@ func (l *Ladder) Play(ctx context.Context, kind string, config any, pool []Bot, 
 			}
 			errors++
 			if errors >= maxRunnerErrors {
+				// The matches already played still count
 				status = RunFailed
+				if recorded > 0 {
+					status = RunIncomplete
+				}
+				log.Printf("Run %d: stopped after %d failed matches in a row", runID, errors)
 				break
 			}
 			continue
@@ -130,6 +217,7 @@ func (l *Ladder) Play(ctx context.Context, kind string, config any, pool []Bot, 
 			l.Store.FinishRun(runID, RunFailed)
 			return runID, fmt.Errorf("recording a match: %w", err)
 		}
+		recorded++
 		log.Printf("Run %d: match %d/%d recorded as #%d (%s)", runID, i+1, len(matches), id, result.Ended.Sub(result.Started).Round(time.Second))
 	}
 
@@ -160,7 +248,8 @@ func botNames(bots []Bot) string {
 }
 
 // Serve runs the ladder at the scheduled times, and when `trigger` receives
-// a value, until the context is cancelled
+// a value, until the context is cancelled. A scheduled time that passes
+// during a run is not skipped: its run starts right after.
 func (l *Ladder) Serve(ctx context.Context, trigger <-chan struct{}) error {
 	loc, err := l.Config.Location()
 	if err != nil {
@@ -170,22 +259,37 @@ func (l *Ladder) Serve(ctx context.Context, trigger <-chan struct{}) error {
 		return err
 	}
 
+	schedule := &l.Config.Schedule
+	next := schedule.NextRunTime(time.Now(), loc)
 	for {
-		next := l.Config.Schedule.NextRunTime(time.Now(), loc)
-		log.Printf("Next run at %s", next.Format(time.DateTime))
+		// Scheduled times missed during the previous run: only the last one is played
+		if time.Now().After(next) {
+			next = schedule.LastDue(next, time.Now(), loc)
+			log.Printf("The run of %s was due during the previous run: starting it now", next.Format(time.DateTime))
+		} else {
+			log.Printf("Next run at %s", next.Format(time.DateTime))
+		}
 
+		scheduled := false
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-time.After(time.Until(next)):
+			scheduled = true
 		case <-trigger:
 			log.Print("Run triggered manually")
 		}
 
-		// The run must end before the one after it
-		deadline := l.Config.Schedule.NextRunTime(time.Now(), loc).Add(-l.Config.DeadlineMargin.Duration)
+		// The run must end before the next one
+		deadline := schedule.NextRunTime(time.Now(), loc).Add(-l.Config.DeadlineMargin.Duration)
 		if _, err := l.RunOnce(ctx, deadline); err != nil {
 			log.Printf("Run failed: %s", err)
+			lastRunError.Store(err.Error())
+		} else {
+			lastRunError.Store("")
+		}
+		if scheduled {
+			next = schedule.NextRunTime(next, loc)
 		}
 	}
 }

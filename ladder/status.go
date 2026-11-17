@@ -100,6 +100,11 @@ type Status struct {
 		Builds  int   `json:"builds"`
 	} `json:"database"`
 
+	// What the ladder is doing (empty when waiting for the next run), and
+	// why the last run could not be played, if it could not
+	Activity     string `json:"activity"`
+	LastRunError string `json:"lastRunError,omitempty"`
+
 	CurrentRun *Run      `json:"currentRun,omitempty"`
 	LastRun    *Run      `json:"lastRun,omitempty"`
 	NextRun    time.Time `json:"nextRun"`
@@ -161,6 +166,11 @@ func (web *Web) status() Status {
 				status.LastRun = &run
 			}
 		}
+	}
+	status.Activity = Activity()
+	if err, _ := lastRunError.Load().(string); err != "" {
+		status.LastRunError = err
+		warn("the last run could not be played: %s", err)
 	}
 	if status.LastRun != nil && status.LastRun.Status == RunFailed {
 		warn("the last run (#%d) failed", status.LastRun.ID)

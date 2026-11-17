@@ -202,6 +202,18 @@ func (c *Config) RunnerConfig() RunnerConfig {
 	return config
 }
 
+// LastDue returns the last scheduled run time that is not after now,
+// starting from a scheduled time that is
+func (s *Schedule) LastDue(scheduled time.Time, now time.Time, loc *time.Location) time.Time {
+	for {
+		next := s.NextRunTime(scheduled, loc)
+		if next.After(now) {
+			return scheduled
+		}
+		scheduled = next
+	}
+}
+
 // NextRunTime returns the first scheduled run time strictly after `after`
 func (s *Schedule) NextRunTime(after time.Time, loc *time.Location) time.Time {
 	local := after.In(loc)
