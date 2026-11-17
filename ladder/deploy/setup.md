@@ -1,74 +1,43 @@
 # Deploying the ladder
 
-On a Linux VM (the plan assumes 2 cores), as root unless noted.
+On a dedicated Linux VM (Debian or Ubuntu for the automatic installation of the tools; the plan assumes 2 cores).
 
-## 1. Install
-
-- Docker Engine, git, and Go (the version in `go.mod` or newer).
-- A user for the service, allowed to use Docker:
-
-  ```sh
-  useradd --system --create-home --groups docker ladder
-  ```
-
-  Being in the `docker` group is equivalent to root access on the machine: the VM should be dedicated to the ladder.
-
-- The repository, owned by that user:
-
-  ```sh
-  git clone https://github.com/hivehelsinki/hive-arena /opt/hive-arena
-  chown -R ladder: /opt/hive-arena
-  ```
-
-## 2. Build (as `ladder`, in /opt/hive-arena)
+## Setup and updates
 
 ```sh
-go build -o ladder/ladder ./ladder
-viewer/build-web.sh
-
-docker build -t hive-arena-server .
-docker build -t example-agent-go -f example-agent-go/Dockerfile .
-docker build -t example-agent-lua example-agent-lua
+git clone https://github.com/hivehelsinki/hive-arena /opt/hive-arena
+cd /opt/hive-arena
+sudo ladder/deploy/setup.sh
 ```
 
-Repeat these after each update of the repository (`git pull`), then restart the service. Rebuild `hive-arena-server` whenever the game or server changes: every match uses it.
-
-## 3. Configure
-
-```sh
-cp ladder/ladder.example.json ladder.json
-```
-
-Set at least:
+The first time, the script creates `ladder.json` (from [ladder.example.json](../ladder.example.json), with a random backup token) and stops: edit it, then run the script again. Set at least:
 
 - `registry.url`: the public repository where teams register with pull requests (holding `teams.json`, initially `[]`)
-- `dataDir`: e.g. `/opt/hive-arena/data` (database, reports, logs, repository mirrors)
 - `schedule`: run times, formats, repeats, window. They are shown publicly on the website.
-- `web.listen`: e.g. `:80` (needs `AmbientCapabilities=CAP_NET_BIND_SERVICE` in the unit), or a high port behind a reverse proxy
+- `web.listen`: e.g. `:80`, or a high port behind a reverse proxy
 
-Check the setup before enabling the service (these commands must not run while the service does):
+To update the ladder later, run the same script again. Every time, it:
 
-```sh
-ladder/ladder build -config ladder.json        # fetches and builds the registered teams
-ladder/ladder run -config ladder.json          # plays a complete run now
-ladder/ladder leaderboard -config ladder.json
-```
+1. installs the missing tools (git, Go, Docker, curl, gzip) with apt, and creates the `ladder` user that runs the service, in the `docker` group;
+2. pulls the latest commit of the current branch (it refuses if the repository has local changes);
+3. builds the ladder, the browser viewer, and the arena server image used by every match;
+4. creates the data directory (`dataDir`, by default `data/` in the repository) and gives it to the `ladder` user;
+5. installs the systemd service `hive-ladder` and restarts it. If a ladder run is in progress, it asks first (or use `--force`): the run would be marked incomplete, keeping its recorded matches;
+6. checks that the running ladder reports the commit that was just pulled, and shows its health.
 
-## 4. Run
+The version is also shown at the bottom of every page of the website, and by `ladder/ladder version`.
 
-```sh
-cp ladder/deploy/hive-ladder.service /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable --now hive-ladder
-journalctl -u hive-ladder -f
-```
+Being in the `docker` group is equivalent to root access on the machine: the VM should be dedicated to the ladder.
 
+## Day to day
+
+- Logs: `journalctl -u hive-ladder -f`
 - Start a run now: `systemctl kill -s USR1 hive-ladder`
-- A team's build failed for a transient reason (e.g. network): `ladder/ladder rebuild -config ladder.json <team>` (safe while the service runs)
+- A team's build failed for a transient reason (e.g. network): `sudo -u ladder ladder/ladder rebuild -config ladder.json <team>` (safe while the service runs)
 
-The other commands (`ladder help`) are for debugging and testing. Except `leaderboard`, `web` and `rebuild`, stop the service before using them (`systemctl stop hive-ladder`): they play matches or build images, and would disturb the ladder's matches.
+The other commands (`ladder/ladder help`) are for debugging and testing. Except `leaderboard`, `web`, `check`, `version` and `rebuild`, stop the service before using them (`systemctl stop hive-ladder`): they play matches or build images, and would disturb the ladder's matches. Run them as the `ladder` user (`sudo -u ladder ...`), so that the files they write in the data directory belong to it.
 
-## 5. Network access
+## Network access
 
 The website has no write routes and no accounts. Restrict access to the campus network (firewall or reverse proxy), as for the arena server.
 

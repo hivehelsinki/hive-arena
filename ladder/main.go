@@ -27,6 +27,11 @@ func usage() {
 Other commands, for debugging and testing. Except leaderboard and web,
 they play matches or build images: do not use them while the ladder runs.
 
+  ladder version
+      Print the git commit the ladder was built from
+  ladder check [-config ladder.json]
+      Check the configuration, and print the address of the website and the
+      data directory
   ladder web [-config ladder.json]
       Run the website only
   ladder leaderboard [-config ladder.json]
@@ -58,6 +63,10 @@ func main() {
 	}
 
 	switch os.Args[1] {
+	case "version":
+		fmt.Println(gitRevision())
+	case "check":
+		cmdCheck(os.Args[2:])
 	case "web":
 		cmdWeb(ctx, os.Args[2:])
 	case "leaderboard":
@@ -137,6 +146,8 @@ func openLadder(name string, args []string) (*Ladder, *flag.FlagSet) {
 func openLadderWithFlags(flags *flag.FlagSet, args []string) (*Ladder, *flag.FlagSet) {
 	path := flags.String("config", "ladder.json", "configuration file")
 	flags.Parse(args)
+
+	log.Printf("Hive Arena ladder, git revision %s", gitRevision())
 
 	config, err := LoadConfig(*path)
 	if err != nil {
@@ -363,4 +374,20 @@ func cmdTournament(ctx context.Context, args []string) {
 	for i, s := range NewLeaderboard(results).Standings {
 		fmt.Printf("%-4d %-24s %8.1f %8.1f %6d\n", i+1, s.Team, s.Score.Mean, s.Score.StdErr, s.Score.Games)
 	}
+}
+
+func cmdCheck(args []string) {
+	flags := flag.NewFlagSet("check", flag.ExitOnError)
+	path := flags.String("config", "ladder.json", "configuration file")
+	flags.Parse(args)
+
+	config, err := LoadConfig(*path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	dataDir, err := filepath.Abs(config.DataDir)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("listen %s\ndataDir %s\n", config.Web.Listen, dataDir)
 }

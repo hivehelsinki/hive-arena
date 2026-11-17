@@ -29,6 +29,16 @@ type Web struct {
 
 func NewWeb(config *Config, store *Store) (*Web, error) {
 	funcs := template.FuncMap{
+		"revision": func(revision string) string {
+			base, dirty := strings.CutSuffix(revision, "-dirty")
+			if len(base) > 8 {
+				base = base[:8]
+			}
+			if dirty {
+				base += " (modified)"
+			}
+			return base
+		},
 		"short": func(commit string) string {
 			if len(commit) > 8 {
 				return commit[:8]
@@ -164,6 +174,7 @@ func viewerHandler(dir string) http.Handler {
 
 func (web *Web) render(w http.ResponseWriter, page string, data map[string]any) {
 	data["Schedule"] = web.Config.Schedule
+	data["Revision"] = gitRevision()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := web.templates[page].ExecuteTemplate(w, "layout", data); err != nil {
 		log.Printf("Rendering %s: %s", page, err)

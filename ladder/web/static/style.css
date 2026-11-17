@@ -41,3 +41,4 @@ th { font-weight: 600; font-size: 0.9em; }
 .void { opacity: 0.5; }
 .button { display: inline-block; padding: 0.3em 0.8em; border: 1px solid var(--accent); border-radius: 4px; text-decoration: none; margin-right: 0.5em; }
 .filter input { padding: 0.2em 0.4em; }
+footer { max-width: 1100px; margin: 0 auto; padding: 1em 1.5em 2em; color: var(--dim); font-size: 0.85em; border-top: 1px solid var(--line); }

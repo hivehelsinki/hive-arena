@@ -15,17 +15,30 @@ import (
 
 var processStart = time.Now()
 
+// gitRevision returns the git commit the ladder was built from (with
+// "-dirty" if the working tree had uncommitted changes), or "unknown" when
+// not built with `go build` in a git repository (e.g. with `go run`)
 func gitRevision() string {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		return ""
+		return "unknown"
 	}
+	revision, dirty := "", false
 	for _, setting := range info.Settings {
-		if setting.Key == "vcs.revision" {
-			return setting.Value
+		switch setting.Key {
+		case "vcs.revision":
+			revision = setting.Value
+		case "vcs.modified":
+			dirty = setting.Value == "true"
 		}
 	}
-	return ""
+	if revision == "" {
+		return "unknown"
+	}
+	if dirty {
+		revision += "-dirty"
+	}
+	return revision
 }
 
 const gigabyte = 1 << 30

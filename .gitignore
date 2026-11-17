@@ -13,3 +13,5 @@
 .DS_Store
 arena_cli
 arena_server
+data/
+ladder.json

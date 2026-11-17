@@ -242,7 +242,7 @@ All the steps of the plan are implemented, on the `server-ladder-support` branch
 6. **Website** (`ladder/web.go`, `ladder/web/`).
 7. **Web viewer**: `viewer/build-web.sh`, served at `/viewer/`.
 8. **Tournament mode and big-screen page**: round-robin tournaments only (no elimination brackets, which matter little with a handful of teams).
-9. **Deployment**: [ladder/deploy/setup.md](ladder/deploy/setup.md) and a systemd unit. To do on the VM: dry run with the example bots and a few volunteer bots, then open registration.
+9. **Deployment**: `ladder/deploy/setup.sh` sets up or updates everything and restarts the service, then checks that it runs the pulled commit (see [ladder/deploy/setup.md](ladder/deploy/setup.md)). To do on the VM: dry run with the example bots and a few volunteer bots, then open registration.
 
 The game review happens after this work.
 
