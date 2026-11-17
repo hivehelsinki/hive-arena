@@ -200,8 +200,11 @@ func (s *Store) Run(id int64) (*Run, error) {
 	return &runs[0], nil
 }
 
-// Runs returns the most recent runs of a kind, most recent first
+// Runs returns the most recent runs of a kind (or of all kinds if empty), most recent first
 func (s *Store) Runs(kind string, limit int) ([]Run, error) {
+	if kind == "" {
+		return s.scanRuns(`ORDER BY id DESC LIMIT ?`, limit)
+	}
 	return s.scanRuns(`WHERE kind = ? ORDER BY id DESC LIMIT ?`, kind, limit)
 }
 

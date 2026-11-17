@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hive Arena ladder</title>
+<style>
+	html, body { margin: 0; height: 100%; background: #111; color: #eee; font: 18px system-ui, sans-serif; overflow: hidden; }
+	#layout { display: flex; height: 100%; }
+	#board { width: 30%; min-width: 320px; padding: 1.2em; box-sizing: border-box; border-right: 3px solid #d9a400; overflow: hidden; }
+	#board h1 { margin: 0 0 0.6em; font-size: 1.6em; color: #d9a400; }
+	#replay { flex: 1; display: flex; flex-direction: column; }
+	#caption { padding: 0.5em 1em; font-size: 1.1em; }
+	#caption .dim, .dim { color: #999; }
+	iframe { flex: 1; border: 0; width: 100%; }
+	table { width: 100%; border-collapse: collapse; }
+	td { padding: 0.35em 0.3em; border-bottom: 1px solid #333; }
+	td.num { text-align: right; font-variant-numeric: tabular-nums; }
+	td.score { font-weight: bold; font-size: 1.2em; }
+	tr.house td { color: #888; }
+</style>
+</head>
+<body>
+<div id="layout">
+	<div id="board">
+		<h1>Hive Arena ladder</h1>
+		<table id="standings"></table>
+		<p class="dim" id="next"></p>
+	</div>
+	<div id="replay">
+		<div id="caption"></div>
+		<iframe id="viewer"></iframe>
+	</div>
+</div>
+<script>
+// Replays play at 6 turns per second (see the viewer), then stay a few seconds on the last turn
+const TURNS_PER_SECOND = 6;
+const PAUSE = 8;
+
+function escape(s) {
+	return String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+}
+
+async function updateBoard() {
+	try {
+		const data = await (await fetch("/api/leaderboard")).json();
+		const rows = (data.leaderboard.standings || []).map((s, i) =>
+			`<tr><td>${i + 1}</td><td>${escape(s.team)}</td><td class="num score">${s.score.mean.toFixed(1)}</td>` +
+			`<td class="num dim">${s.score.games > 1 ? "± " + s.score.stdErr.toFixed(1) : ""}</td></tr>`);
+		document.getElementById("standings").innerHTML = rows.join("") || "<tr><td class='dim'>No results yet.</td></tr>";
+	} catch (e) {
+		console.log(e);
+	}
+}
+
+let lastShown = 0;
+
+async function nextReplay() {
+	let delay = 10;
+	try {
+		const matches = await (await fetch("/api/matches?limit=20")).json();
+		if (matches && matches.length > 0) {
+			// The most recent match not shown yet, or else a random recent one
+			let match = matches.find(m => m.id > lastShown) || matches[Math.floor(Math.random() * matches.length)];
+			lastShown = Math.max(lastShown, match.id);
+
+			const bots = match.bots.slice().sort((a, b) => b.points - a.points);
+			document.getElementById("caption").innerHTML =
+				`Match #${match.id} <span class="dim">on ${escape(match.map)}</span> &nbsp; ` +
+				bots.map(b => `${escape(b.team)} <span class="dim">${b.flowers}</span>`).join(" &nbsp; ");
+			document.getElementById("viewer").src = `/viewer/?match=${match.id}&autoplay=1`;
+			delay = match.turns / TURNS_PER_SECOND + PAUSE + 5;
+		}
+	} catch (e) {
+		console.log(e);
+	}
+	setTimeout(nextReplay, delay * 1000);
+}
+
+updateBoard();
+setInterval(updateBoard, 60 * 1000);
+nextReplay();
+</script>
+</body>
+</html>

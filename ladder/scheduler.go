@@ -89,13 +89,19 @@ func (l *Ladder) RunOnce(ctx context.Context, deadline time.Time) (int64, error)
 		pool = append(pool, bot)
 	}
 
-	runID, err := l.Store.CreateRun("ladder", l.Config.Schedule, pool)
+	return l.Play(ctx, "ladder", l.Config.Schedule, pool, l.Config.Schedule.Formats, l.Config.Schedule.Repeats, deadline)
+}
+
+// Play records and plays a run: every lineup of the pool for each format,
+// `repeats` times, until the deadline. `config` is recorded with the run.
+func (l *Ladder) Play(ctx context.Context, kind string, config any, pool []Bot, formats []Format, repeats int, deadline time.Time) (int64, error) {
+	runID, err := l.Store.CreateRun(kind, config, pool)
 	if err != nil {
 		return 0, err
 	}
 
-	matches := PlanRun(pool, l.Config.Schedule.Formats, l.Config.Schedule.Repeats, l.Rand)
-	log.Printf("Run %d: %d bots, %d matches, deadline %s", runID, len(pool), len(matches), deadline.Format(time.DateTime))
+	matches := PlanRun(pool, formats, repeats, l.Rand)
+	log.Printf("Run %d (%s): %d bots, %d matches, deadline %s", runID, kind, len(pool), len(matches), deadline.Format(time.DateTime))
 
 	status := RunComplete
 	errors := 0

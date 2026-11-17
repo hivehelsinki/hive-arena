@@ -72,4 +72,13 @@ func TestWebPages(t *testing.T) {
 	get("/api/runs", 200, `"status":"complete"`)
 	get("/api/teams", 200, `"name":"alpha"`)
 	get("/static/style.css", 200, "body")
+	get("/screen", 200, "/api/leaderboard")
+
+	// Tournaments are listed with the runs, but not counted in the leaderboard
+	tournament, _ := store.CreateRun("tournament", TournamentConfig{Name: "Lunch cup"}, []Bot{a, c})
+	store.RecordMatch(tournament, fakeResult("m", []Bot{a, c}, []uint{0, 9}, []BotStatus{Finished, Finished}))
+	store.FinishRun(tournament, RunComplete)
+	get("/runs", 200, "Lunch cup", "tournament")
+	get("/runs/"+id(tournament), 200, "Lunch cup", "not counted")
+	get("/", 200, "100%")
 }

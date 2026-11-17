@@ -85,6 +85,14 @@ func NewWeb(config *Config, store *Store) (*Web, error) {
 			return slices.ContainsFunc(config.HouseBots, func(b Bot) bool { return b.Name == name })
 		},
 		"add": func(a, b int) int { return a + b },
+		"runName": func(run Run) string {
+			var config struct{ Name string }
+			json.Unmarshal(run.Config, &config)
+			if run.Kind == "tournament" && config.Name != "" {
+				return config.Name
+			}
+			return fmt.Sprintf("Run #%d", run.ID)
+		},
 	}
 
 	pages, err := fs.Glob(webFiles, "web/*.html")
@@ -122,6 +130,7 @@ func (web *Web) Handler() http.Handler {
 	mux.HandleFunc("GET /matches/{id}/report.json", web.handleReport)
 	mux.HandleFunc("GET /matches/{id}/logs/{team}", web.handleMatchLog)
 	mux.HandleFunc("GET /teams/{name}", web.handleTeam)
+	mux.HandleFunc("GET /screen", web.handleScreen)
 	mux.HandleFunc("GET /builds/{id}/log", web.handleBuildLog)
 
 	mux.HandleFunc("GET /api/leaderboard", web.apiLeaderboard)
@@ -207,7 +216,7 @@ func (web *Web) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (web *Web) handleRuns(w http.ResponseWriter, r *http.Request) {
-	runs, err := web.Store.Runs("ladder", 100)
+	runs, err := web.Store.Runs("", 100)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -244,7 +253,11 @@ func matchFilter(r *http.Request) MatchFilter {
 	q := r.URL.Query()
 	before, _ := strconv.ParseInt(q.Get("before"), 10, 64)
 	run, _ := strconv.ParseInt(q.Get("run"), 10, 64)
-	return MatchFilter{Team: q.Get("team"), Map: q.Get("map"), RunID: run, Before: before, Limit: 50}
+	limit, err := strconv.Atoi(q.Get("limit"))
+	if err != nil || limit < 1 || limit > 200 {
+		limit = 50
+	}
+	return MatchFilter{Team: q.Get("team"), Map: q.Get("map"), RunID: run, Before: before, Limit: limit}
 }
 
 func (web *Web) handleMatches(w http.ResponseWriter, r *http.Request) {
@@ -417,4 +430,16 @@ func (web *Web) apiTeams(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, states)
+}
+
+// handleScreen is a full-screen page for a big screen: the leaderboard, and
+// replays of the latest matches, one after the other
+func (web *Web) handleScreen(w http.ResponseWriter, r *http.Request) {
+	data, err := webFiles.ReadFile("web/screen.html")
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(data)
 }

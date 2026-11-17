@@ -12,15 +12,17 @@ import (
 type Args struct {
 	URL, File           string
 	Host, GameID, Token string
+	Autoplay            bool
 }
 
 // readArgs reads the options from the query string of the page:
-// ?url=<report URL>, or ?match=<id> for a match of the ladder website
+// ?url=<report URL>, or ?match=<id> for a match of the ladder website, and
+// optionally autoplay=1
 func readArgs() Args {
 	search := js.Global().Get("location").Get("search").String()
 	query, _ := url.ParseQuery(strings.TrimPrefix(search, "?"))
 
-	args := Args{URL: query.Get("url")}
+	args := Args{URL: query.Get("url"), Autoplay: query.Get("autoplay") != ""}
 	if match := query.Get("match"); match != "" {
 		args.URL = "/matches/" + url.PathEscape(match) + "/report.json"
 	}

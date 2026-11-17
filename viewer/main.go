@@ -314,9 +314,10 @@ func main() {
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 
 	viewer := &Viewer{
-		Game:  game,
-		Scale: 1.0,
-		Live:  live,
+		Game:    game,
+		Scale:   1.0,
+		Live:    live,
+		Playing: args.Autoplay,
 	}
 	if len(game.History) > 0 {
 		viewer.CenterCamera()

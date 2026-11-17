@@ -12,6 +12,7 @@ Copy [ladder.example.json](ladder.example.json) to `ladder.json` and adjust it, 
 - `go run ./ladder web`: runs the website only
 - `go run ./ladder run`: plays one run now and exits
 - `go run ./ladder leaderboard`: prints the leaderboard
+- `go run ./ladder tournament -formats balanced:4,tiny:2 [-repeats N] [-teams a,b,c] [-name "Lunch cup"]`: plays a one-off round-robin now, with its own formats, among the current bots (all of them, or the given teams). It appears with the runs on the website, and does not count for the leaderboard.
 - `go run ./ladder build`: fetches the registered teams, builds and smoke-tests their new versions (also done at the start of each run)
 - `go run ./ladder rebuild <team>`: forgets the failed build of a team's current version, so that it is built again (for instance after a network failure during the build)
 
@@ -74,5 +75,7 @@ Containers and networks are always removed at the end. All of them have the `hiv
 ## Website
 
 Read-only, no accounts: leaderboard (with per-map scores and the head-to-head table) over the window of recent runs, runs, matches (filterable by team and map), team pages with builds and their logs, match pages with bot outputs and report downloads. The same data is available as JSON under `/api/` (`leaderboard`, `runs`, `matches`, `teams`).
+
+`/screen` is meant for a big screen: the leaderboard, and the replays of the latest matches, one after the other.
 
 Replays open in the browser version of the viewer, served at `/viewer/` from `web.viewerDir` (default `viewer/web`, relative to the working directory). Build it first with `viewer/build-web.sh`.

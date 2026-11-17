@@ -7,6 +7,7 @@ import "flag"
 type Args struct {
 	URL, File           string
 	Host, GameID, Token string
+	Autoplay            bool
 }
 
 // readArgs reads the command line options
@@ -17,6 +18,7 @@ func readArgs() Args {
 	flag.StringVar(&args.Host, "host", "", "host for the live game to watch")
 	flag.StringVar(&args.GameID, "id", "", "ID of the live game to watch")
 	flag.StringVar(&args.Token, "token", "", "access token for the live game to watch")
+	flag.BoolVar(&args.Autoplay, "autoplay", false, "start playing the game right away")
 	flag.Parse()
 	return args
 }

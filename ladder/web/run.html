@@ -1,8 +1,8 @@
 {{define "content"}}
-<h1>Run #{{.Run.ID}}</h1>
-<p>Started {{time .Run.StartedAt}}{{with .Run.EndedAt}}, ended {{timeptr .}}{{end}}. Status: <span class="status-{{.Run.Status}}">{{.Run.Status}}</span>.</p>
+<h1>{{runName .Run}}</h1>
+<p>{{if eq .Run.Kind "tournament"}}Tournament (not counted in the ladder). {{end}}Started {{time .Run.StartedAt}}{{with .Run.EndedAt}}, ended {{timeptr .}}{{end}}. Status: <span class="status-{{.Run.Status}}">{{.Run.Status}}</span>.</p>
 
-<h2>Standings of this run</h2>
+<h2>Standings</h2>
 {{template "standings" .}}
 
 <h2>Head to head</h2>

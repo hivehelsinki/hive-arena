@@ -11,6 +11,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -27,6 +29,10 @@ func usage() {
       Play one ladder run now, and exit
   ladder leaderboard [-config ladder.json]
       Print the current leaderboard
+  ladder tournament [-config ladder.json] -formats <map:players,...> [-repeats N] [-teams a,b,...] [-name NAME]
+      Play a one-off round-robin now with its own formats, among the
+      current bots (all of them, or the given teams). It is shown with the
+      runs on the website, and does not count for the leaderboard.
   ladder build [-config ladder.json]
       Fetch the registered teams, build and smoke-test their new versions
   ladder rebuild [-config ladder.json] <team>
@@ -53,6 +59,8 @@ func main() {
 		cmdRun(ctx, os.Args[2:])
 	case "leaderboard":
 		cmdLeaderboard(os.Args[2:])
+	case "tournament":
+		cmdTournament(ctx, os.Args[2:])
 	case "build":
 		cmdBuild(ctx, os.Args[2:])
 	case "rebuild":
@@ -116,7 +124,10 @@ func cmdMatch(ctx context.Context, args []string) {
 
 // openLadder parses the common flags, loads the configuration and opens the store
 func openLadder(name string, args []string) (*Ladder, *flag.FlagSet) {
-	flags := flag.NewFlagSet(name, flag.ExitOnError)
+	return openLadderWithFlags(flag.NewFlagSet(name, flag.ExitOnError), args)
+}
+
+func openLadderWithFlags(flags *flag.FlagSet, args []string) (*Ladder, *flag.FlagSet) {
 	path := flags.String("config", "ladder.json", "configuration file")
 	flags.Parse(args)
 
@@ -273,4 +284,75 @@ func cmdRebuild(args []string) {
 		log.Fatal(err)
 	}
 	fmt.Printf("Forgot build %d (%s, %s): it will be built again at the next run\n", builds[0].ID, builds[0].Tag, builds[0].Status)
+}
+
+// Tournament configuration, recorded with the run
+type TournamentConfig struct {
+	Name    string   `json:"name"`
+	Formats []Format `json:"formats"`
+	Repeats int      `json:"repeats"`
+}
+
+func parseFormats(s string) ([]Format, error) {
+	var formats []Format
+	for _, part := range strings.Split(s, ",") {
+		name, players, ok := strings.Cut(strings.TrimSpace(part), ":")
+		n, err := strconv.Atoi(players)
+		if !ok || err != nil || name == "" || n < 2 || n > 6 {
+			return nil, fmt.Errorf("invalid format %q (expected map:players)", part)
+		}
+		formats = append(formats, Format{Map: name, Players: n})
+	}
+	return formats, nil
+}
+
+func cmdTournament(ctx context.Context, args []string) {
+	flags := flag.NewFlagSet("tournament", flag.ExitOnError)
+	formatsFlag := flags.String("formats", "", "formats, as map:players separated by commas")
+	repeats := flags.Int("repeats", 1, "times each lineup is played")
+	teamsFlag := flags.String("teams", "", "teams taking part, separated by commas (default: all current bots, house bots included)")
+	name := flags.String("name", "Tournament", "name of the tournament")
+
+	ladder, _ := openLadderWithFlags(flags, args)
+	defer ladder.Store.Close()
+
+	formats, err := parseFormats(*formatsFlag)
+	if err != nil || *repeats < 1 {
+		log.Fatalf("invalid formats or repeats: %v", err)
+	}
+	if err := RemoveLeftovers(ctx); err != nil {
+		log.Fatal(err)
+	}
+
+	bots, err := ladder.Pool(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	pool := append(append([]Bot{}, ladder.Config.HouseBots...), bots...)
+	if *teamsFlag != "" {
+		var selected []Bot
+		for _, team := range strings.Split(*teamsFlag, ",") {
+			i := slices.IndexFunc(pool, func(b Bot) bool { return b.Name == strings.TrimSpace(team) })
+			if i < 0 {
+				log.Fatalf("no current bot for team %q", team)
+			}
+			selected = append(selected, pool[i])
+		}
+		pool = selected
+	}
+
+	config := TournamentConfig{Name: *name, Formats: formats, Repeats: *repeats}
+	runID, err := ladder.Play(ctx, "tournament", config, pool, formats, *repeats, time.Now().Add(24*time.Hour))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	results, err := ladder.Store.Results([]int64{runID})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("%s (run %d)\n\n", *name, runID)
+	for i, s := range NewLeaderboard(results).Standings {
+		fmt.Printf("%-4d %-24s %8.1f %8.1f %6d\n", i+1, s.Team, s.Score.Mean, s.Score.StdErr, s.Score.Games)
+	}
 }
