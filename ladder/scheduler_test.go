@@ -119,7 +119,6 @@ func newTestLadder(t *testing.T, teams []Bot, player MatchPlayer) *Ladder {
 			Window:      2,
 			MaxFailures: 2,
 		},
-		HouseBots: []Bot{{Name: "house", Image: "house", Commit: "h"}},
 	}
 	return &Ladder{
 		Config: config,
@@ -139,16 +138,16 @@ func TestRunOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 4 bots with the house bot: 6 pairs, twice
-	if player.played != 12 {
-		t.Errorf("expected 12 matches, got %d", player.played)
+	// 3 bots: 3 pairs, twice
+	if player.played != 6 {
+		t.Errorf("expected 6 matches, got %d", player.played)
 	}
 	run, _ := ladder.Store.Run(runID)
-	if run.Status != RunComplete || len(run.Bots) != 4 {
+	if run.Status != RunComplete || len(run.Bots) != 3 {
 		t.Errorf("unexpected run: %+v", run)
 	}
 	board, _, _ := ladder.Store.Leaderboard(2)
-	if len(board.Standings) != 4 || board.Standings[0].Score.Games != 6 {
+	if len(board.Standings) != 3 || board.Standings[0].Score.Games != 4 {
 		t.Errorf("unexpected leaderboard: %+v", board.Standings)
 	}
 }
@@ -162,7 +161,7 @@ func TestRunOnceDeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 	run, _ := ladder.Store.Run(runID)
-	if run.Status != RunIncomplete || player.played >= 12 || player.played == 0 {
+	if run.Status != RunIncomplete || player.played >= 6 || player.played == 0 {
 		t.Errorf("expected an incomplete run, got %s after %d matches", run.Status, player.played)
 	}
 }

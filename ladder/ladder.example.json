@@ -35,10 +35,5 @@
 	"web": {
 		"listen": ":8080",
 		"viewerDir": "viewer/web"
-	},
-	"houseBots": [
-		{"name": "house-go", "image": "example-agent-go", "commit": "house"},
-		{"name": "house-lua", "image": "example-agent-lua", "commit": "house"}
-	],
-	"bots": []
+	}
 }

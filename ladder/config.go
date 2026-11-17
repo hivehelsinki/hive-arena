@@ -76,11 +76,6 @@ type Config struct {
 		// Directory of the browser build of the viewer (see viewer/build-web.sh), served at /viewer/
 		ViewerDir string `json:"viewerDir"`
 	} `json:"web"`
-
-	// Bots that always take part (e.g. the example agents), as references
-	HouseBots []Bot `json:"houseBots"`
-	// Additional bots given directly as images, outside of the registry
-	Bots []Bot `json:"bots"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -140,13 +135,6 @@ func (c *Config) validate() error {
 	}
 	if c.Schedule.Repeats < 1 || c.Schedule.Window < 1 {
 		return fmt.Errorf("repeats and window must be at least 1")
-	}
-	names := make(map[string]bool)
-	for _, bot := range append(append([]Bot{}, c.HouseBots...), c.Bots...) {
-		if bot.Name == "" || bot.Image == "" || names[bot.Name] {
-			return fmt.Errorf("bots need a unique name and an image: %+v", bot)
-		}
-		names[bot.Name] = true
 	}
 	return nil
 }

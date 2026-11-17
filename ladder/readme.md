@@ -30,8 +30,6 @@ Configuration (`ladder.json`):
 - `registry`: where teams are registered: a git repository (`url`, `branch`, `file`), or a local file (`path`)
 - `build`: build timeout, number of successful images kept per team, map of the smoke test
 - `web.listen`: address of the website
-- `houseBots`: bots that always take part (reference bots), given as images
-- `bots`: other bots given directly as images, outside of the registry
 
 ## Teams and builds
 

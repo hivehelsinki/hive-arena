@@ -26,7 +26,6 @@ th { font-weight: 600; font-size: 0.9em; }
 .big { font-size: 2em; font-weight: bold; }
 .dim { color: var(--dim); }
 .mono, code { font-family: ui-monospace, monospace; font-size: 0.9em; }
-.house td { color: var(--dim); }
 .tag { font-size: 0.75em; border: 1px solid var(--dim); border-radius: 3px; padding: 0 0.3em; color: var(--dim); }
 .error, .status-crashed, .status-no-join, .status-build-failed, .status-smoke-failed, .status-failed { color: var(--bad); }
 .status-incomplete { color: var(--accent); }

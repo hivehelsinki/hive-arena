@@ -81,9 +81,6 @@ func NewWeb(config *Config, store *Store) (*Web, error) {
 			}
 			return ""
 		},
-		"isHouse": func(name string) bool {
-			return slices.ContainsFunc(config.HouseBots, func(b Bot) bool { return b.Name == name })
-		},
 		"add": func(a, b int) int { return a + b },
 		"runName": func(run Run) string {
 			var config struct{ Name string }

@@ -15,10 +15,9 @@ func TestWebPages(t *testing.T) {
 		Times: []string{"08:00"}, Timezone: "Europe/Helsinki",
 		Formats: []Format{{"m", 3}}, Repeats: 1, Window: 2, MaxFailures: 3,
 	}}
-	config.HouseBots = []Bot{{Name: "house"}}
 
 	a := Bot{Name: "alpha", Image: "img", Commit: "0123456789abcdef"}
-	b := Bot{Name: "house", Image: "img", Commit: "h"}
+	b := Bot{Name: "beta", Image: "img", Commit: "b"}
 	c := Bot{Name: "gamma", Image: "img", Commit: "c"}
 	run, _ := store.CreateRun("ladder", config.Schedule, []Bot{a, b, c})
 	match, _ := store.RecordMatch(run, fakeResult("m", []Bot{a, b, c}, []uint{5, 3, 0}, []BotStatus{Finished, Finished, Crashed}))
@@ -53,7 +52,7 @@ func TestWebPages(t *testing.T) {
 
 	id := func(i int64) string { return strconv.FormatInt(i, 10) }
 
-	get("/", 200, "alpha", "60.0", "reference", "01234567", "Head to head", "100%")
+	get("/", 200, "alpha", "60.0", "01234567", "Head to head", "100%")
 	get("/runs", 200, "complete")
 	get("/runs/"+id(run), 200, "alpha", "gamma")
 	get("/runs/999", 404)

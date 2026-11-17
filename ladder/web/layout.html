@@ -26,9 +26,9 @@
 </tr></thead>
 <tbody>
 {{range $i, $s := .Board.Standings}}
-<tr{{if isHouse $s.Team}} class="house"{{end}}>
+<tr>
 	<td>{{add $i 1}}</td>
-	<td><a href="/teams/{{$s.Team}}">{{$s.Team}}</a>{{if isHouse $s.Team}} <span class="tag">reference</span>{{end}}</td>
+	<td><a href="/teams/{{$s.Team}}">{{$s.Team}}</a></td>
 	<td class="num strong">{{score $s.Score}}</td>
 	<td class="num dim">{{stderr $s.Score}}</td>
 	<td class="num">{{$s.Score.Games}}</td>

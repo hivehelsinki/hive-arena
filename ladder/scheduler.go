@@ -61,7 +61,7 @@ type Ladder struct {
 	Config *Config
 	Store  *Store
 	Player MatchPlayer
-	// Returns the current pool of team bots (house bots are added to it)
+	// Returns the current bot of each registered team
 	Pool func(ctx context.Context) ([]Bot, error)
 	Rand *rand.Rand
 }
@@ -76,7 +76,7 @@ func (l *Ladder) RunOnce(ctx context.Context, deadline time.Time) (int64, error)
 		return 0, fmt.Errorf("getting the pool: %w", err)
 	}
 
-	pool := append([]Bot{}, l.Config.HouseBots...)
+	var pool []Bot
 	for _, bot := range teams {
 		failures, err := l.Store.ConsecutiveFailures(bot.Name, bot.Commit)
 		if err != nil {

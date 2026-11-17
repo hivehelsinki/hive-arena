@@ -166,7 +166,7 @@ func openLadderWithFlags(flags *flag.FlagSet, args []string) (*Ladder, *flag.Fla
 		if err := store.SaveTeamStates(states); err != nil {
 			return nil, err
 		}
-		return append(bots, config.Bots...), nil
+		return bots, nil
 	}
 	return ladder, flags
 }
@@ -310,7 +310,7 @@ func cmdTournament(ctx context.Context, args []string) {
 	flags := flag.NewFlagSet("tournament", flag.ExitOnError)
 	formatsFlag := flags.String("formats", "", "formats, as map:players separated by commas")
 	repeats := flags.Int("repeats", 1, "times each lineup is played")
-	teamsFlag := flags.String("teams", "", "teams taking part, separated by commas (default: all current bots, house bots included)")
+	teamsFlag := flags.String("teams", "", "teams taking part, separated by commas (default: all current bots)")
 	name := flags.String("name", "Tournament", "name of the tournament")
 
 	ladder, _ := openLadderWithFlags(flags, args)
@@ -328,7 +328,7 @@ func cmdTournament(ctx context.Context, args []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	pool := append(append([]Bot{}, ladder.Config.HouseBots...), bots...)
+	pool := bots
 	if *teamsFlag != "" {
 		var selected []Bot
 		for _, team := range strings.Split(*teamsFlag, ",") {
