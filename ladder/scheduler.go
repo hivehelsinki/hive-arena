@@ -276,6 +276,7 @@ func (l *Ladder) Serve(ctx context.Context, trigger <-chan struct{}) error {
 
 	schedule := &l.Config.Schedule
 	next := schedule.NextRunTime(time.Now(), loc)
+	interval := l.Config.Build.Interval.Duration
 	for {
 		// Scheduled times missed during the previous run: only the last one is played
 		if time.Now().After(next) {
@@ -285,14 +286,29 @@ func (l *Ladder) Serve(ctx context.Context, trigger <-chan struct{}) error {
 			log.Printf("Next run at %s", next.Format(time.DateTime))
 		}
 
-		scheduled := false
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-time.After(time.Until(next)):
-			scheduled = true
-		case <-trigger:
-			log.Print("Run triggered manually")
+		scheduled, triggered := false, false
+		for !scheduled && !triggered {
+			// Between runs, new versions are built regularly, unless the next
+			// run is close (it builds them anyway)
+			var refresh <-chan time.Time
+			if interval > 0 && time.Until(next) > interval {
+				refresh = time.After(interval)
+			}
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(time.Until(next)):
+				scheduled = true
+			case <-trigger:
+				log.Print("Run triggered manually")
+				triggered = true
+			case <-refresh:
+				SetActivity("building new versions")
+				if _, err := l.Pool(ctx); err != nil {
+					log.Printf("Building new versions: %s", err)
+				}
+				SetActivity("")
+			}
 		}
 
 		// The run must end before the next one

@@ -34,7 +34,8 @@
 		"keepImages": 3,
 		"smokeMap": "tiny",
 		"maxImageMB": 2048,
-		"cacheLimit": "10GB"
+		"cacheLimit": "10GB",
+		"interval": "15m"
 	},
 	"web": {
 		"listen": ":8080",

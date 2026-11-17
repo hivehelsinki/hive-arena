@@ -83,6 +83,9 @@ type Config struct {
 		SmokeMap   string   `json:"smokeMap"`   // map of the 1-player smoke test
 		MaxImageMB int64    `json:"maxImageMB"` // larger images fail their build (0: no limit)
 		CacheLimit string   `json:"cacheLimit"` // size the docker build cache is kept under, e.g. "10GB" (empty: no limit)
+		// Between runs, new versions are built this often, so that teams
+		// soon know whether their new tag builds (0: only at the start of runs)
+		Interval Duration `json:"interval"`
 	} `json:"build"`
 
 	Web struct {
@@ -121,6 +124,7 @@ func LoadConfig(path string) (*Config, error) {
 	config.Build.SmokeMap = "tiny"
 	config.Build.MaxImageMB = 2048
 	config.Build.CacheLimit = "10GB"
+	config.Build.Interval = Duration{15 * time.Minute}
 	config.Runner.ServerImage = defaults.ServerImage
 	config.Runner.Cores = defaults.Cores
 	config.Runner.Memory = defaults.Memory
@@ -174,7 +178,7 @@ func (c *Config) validate() error {
 	if r.ServerImage == "" || r.Memory == "" || r.ServerMemory == "" || r.Cores <= 0 || r.Pids <= 0 || r.JoinTimeout.Duration <= 0 || r.MatchTimeout.Duration <= 0 {
 		return fmt.Errorf("runner: serverImage and memory must be set, and cores, pids, joinTimeout and matchTimeout positive")
 	}
-	if c.Build.Timeout.Duration <= 0 || c.Build.KeepImages < 1 || c.Build.MaxImageMB < 0 {
+	if c.Build.Timeout.Duration <= 0 || c.Build.KeepImages < 1 || c.Build.MaxImageMB < 0 || c.Build.Interval.Duration < 0 {
 		return fmt.Errorf("build: timeout must be positive, and keepImages at least 1")
 	}
 	if c.DeadlineMargin.Duration < 0 {

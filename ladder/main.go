@@ -147,6 +147,13 @@ func cmdMatch(ctx context.Context, args []string) {
 	}
 }
 
+// mustLock takes the lock of the data directory, or exits
+func mustLock(ladder *Ladder) {
+	if err := lockDataDir(ladder.Config.DataDir); err != nil {
+		log.Fatal(err)
+	}
+}
+
 // openLadder parses the common flags, loads the configuration and opens the store
 func openLadder(name string, args []string) (*Ladder, *flag.FlagSet) {
 	return openLadderWithFlags(flag.NewFlagSet(name, flag.ExitOnError), args)
@@ -205,6 +212,7 @@ func openLadderWithFlags(flags *flag.FlagSet, args []string) (*Ladder, *flag.Fla
 func cmdServe(ctx context.Context, args []string) {
 	ladder, _ := openLadder("ladder", args)
 	defer ladder.Store.Close()
+	mustLock(ladder)
 
 	if err := RemoveLeftovers(ctx); err != nil {
 		log.Fatal(err)
@@ -256,6 +264,7 @@ func cmdWeb(ctx context.Context, args []string) {
 func cmdRun(ctx context.Context, args []string) {
 	ladder, _ := openLadder("run", args)
 	defer ladder.Store.Close()
+	mustLock(ladder)
 
 	if err := RemoveLeftovers(ctx); err != nil {
 		log.Fatal(err)
@@ -295,6 +304,7 @@ func printLeaderboard(ladder *Ladder) {
 func cmdBuild(ctx context.Context, args []string) {
 	ladder, _ := openLadder("build", args)
 	defer ladder.Store.Close()
+	mustLock(ladder)
 
 	bots, err := ladder.Pool(ctx)
 	if err != nil {
@@ -353,6 +363,7 @@ func cmdTournament(ctx context.Context, args []string) {
 	name := flags.String("name", "Tournament", "name of the tournament")
 
 	ladder, _ := openLadderWithFlags(flags, args)
+	mustLock(ladder)
 	defer ladder.Store.Close()
 
 	formats, err := parseFormats(*formatsFlag)

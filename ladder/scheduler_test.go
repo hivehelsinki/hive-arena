@@ -278,3 +278,26 @@ func TestLastDue(t *testing.T) {
 		t.Errorf("expected the day before at 16:00, got %s", got)
 	}
 }
+
+func TestServeBuildsBetweenRuns(t *testing.T) {
+	ladder := newTestLadder(t, testBots(2), &fakePlayer{})
+	ladder.Config.Schedule.Times = []string{time.Now().UTC().Add(12 * time.Hour).Format("15:04")}
+	ladder.Config.Build.Interval = Duration{20 * time.Millisecond}
+	resolutions := 0
+	ladder.Pool = func(ctx context.Context) ([]Bot, error) {
+		resolutions++
+		return testBots(2), nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	if err := ladder.Serve(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	if resolutions < 3 {
+		t.Errorf("expected new versions to be built regularly, got %d resolutions", resolutions)
+	}
+	if runs, _ := ladder.Store.Runs("", 10); len(runs) != 0 {
+		t.Errorf("building between runs should not play: %+v", runs)
+	}
+}
