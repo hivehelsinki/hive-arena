@@ -48,7 +48,10 @@ type Schedule struct {
 }
 
 type Config struct {
-	DataDir  string   `json:"dataDir"`
+	DataDir string `json:"dataDir"`
+	// A warning is logged, and /health reports a problem, below this free space
+	MinFreeDiskGB float64 `json:"minFreeDiskGB"`
+
 	Schedule Schedule `json:"schedule"`
 	// Margin between the deadline of a run and the start of the next one
 	DeadlineMargin Duration `json:"deadlineMargin"`
@@ -98,6 +101,7 @@ func LoadConfig(path string) (*Config, error) {
 			MaxFailures: 5,
 		},
 	}
+	config.MinFreeDiskGB = 5
 	config.Web.Listen = ":8080"
 	config.Web.ViewerDir = "viewer/web"
 	config.Build.Timeout = Duration{10 * time.Minute}

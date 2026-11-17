@@ -1,5 +1,6 @@
 {
 	"dataDir": "data",
+	"minFreeDiskGB": 5,
 	"schedule": {
 		"times": ["08:00", "16:00"],
 		"timezone": "Europe/Helsinki",

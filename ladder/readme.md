@@ -29,7 +29,9 @@ Configuration (`ladder.json`):
 - `runner`: server image, CPU cores split between the bots of a match, per-bot memory and process limits, timeouts
 - `registry`: where teams are registered: a git repository (`url`, `branch`, `file`), or a local file (`path`)
 - `build`: build timeout, number of successful images kept per team, map of the smoke test
+- `minFreeDiskGB`: below this free space in `dataDir`, a warning is logged and `/health` reports a problem
 - `web.listen`: address of the website
+- `web.backupToken`: enables the backup routes (`/backup/...?token=`), see [deploy/setup.md](deploy/setup.md)
 
 ## Teams and builds
 
@@ -77,3 +79,9 @@ Read-only, no accounts: leaderboard (with per-map scores and the head-to-head ta
 `/screen` is meant for a big screen: the leaderboard, and the replays of the latest matches, one after the other.
 
 Replays open in the browser version of the viewer, served at `/viewer/` from `web.viewerDir` (default `viewer/web`, relative to the working directory). Build it first with `viewer/build-web.sh`.
+
+## Status and backups
+
+- `/health`: `ok`, or the list of problems with status 503 (for monitoring)
+- `/api/status`: disk space, Docker, database, current, last and next run, teams with problems
+- `/backup/archive.tar?token=&since=`: a consistent snapshot of the database and the reports and logs (all, or written since a time), to be fetched by a backup system elsewhere. See [deploy/setup.md](deploy/setup.md).

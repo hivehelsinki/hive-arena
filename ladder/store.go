@@ -653,3 +653,11 @@ func (s *Store) TeamStates() ([]TeamState, error) {
 	var states []TeamState
 	return states, json.Unmarshal(data, &states)
 }
+
+// Counts returns the number of runs, matches and builds
+func (s *Store) Counts() ([3]int, error) {
+	var counts [3]int
+	err := s.db.QueryRow(`SELECT (SELECT COUNT(*) FROM runs), (SELECT COUNT(*) FROM matches), (SELECT COUNT(*) FROM builds)`).
+		Scan(&counts[0], &counts[1], &counts[2])
+	return counts, err
+}

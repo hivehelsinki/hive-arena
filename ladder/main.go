@@ -139,6 +139,7 @@ func openLadderWithFlags(flags *flag.FlagSet, args []string) (*Ladder, *flag.Fla
 	if err != nil {
 		log.Fatal(err)
 	}
+	LogDiskWarning(config)
 
 	smoke := config.RunnerConfig()
 	smoke.MatchTimeout = 5 * time.Minute

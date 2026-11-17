@@ -24,6 +24,7 @@ type Web struct {
 	Config    *Config
 	Store     *Store
 	templates map[string]*template.Template
+	docker    dockerCheck
 }
 
 func NewWeb(config *Config, store *Store) (*Web, error) {
@@ -135,6 +136,8 @@ func (web *Web) Handler() http.Handler {
 	mux.HandleFunc("GET /backup/database", web.handleBackupDatabase)
 	mux.HandleFunc("GET /backup/archive.tar", web.handleBackupArchive)
 
+	mux.HandleFunc("GET /health", web.handleHealth)
+	mux.HandleFunc("GET /api/status", web.handleStatus)
 	mux.HandleFunc("GET /api/leaderboard", web.apiLeaderboard)
 	mux.HandleFunc("GET /api/runs", web.apiRuns)
 	mux.HandleFunc("GET /api/matches", web.apiMatches)

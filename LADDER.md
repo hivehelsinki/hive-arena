@@ -177,6 +177,14 @@ Every match is stored:
 
 The store is the source of truth: leaderboards, head-to-head tables and windows are queries over it.
 
+**Durability.** Past data must never be lost:
+
+- The data lives on the VM's disk, outside any container: match servers and bots are disposable, restarting them or Docker touches nothing.
+- Each match is recorded as soon as it ends, in one transaction. Its files are written and synced to disk (written under a temporary name, synced, renamed) before the transaction that refers to them is committed. SQLite runs in WAL mode with full synchronization. A crash, a restart or a power loss loses at most the match being played.
+- The ladder never deletes results. On restart, leftover containers are removed and an interrupted run is marked incomplete, keeping its matches.
+- Low disk space is logged at start-up and before each run, and reported by `/health` (with Docker problems, failed runs, and a scheduler that stopped running), for the campus monitoring.
+- Against the loss of the VM: a token-protected backup route serves a consistent database snapshot and the files, in full or incrementally, to a backup system elsewhere.
+
 ## Public website
 
 Read-only, served by the same binary. No accounts.

@@ -71,6 +71,8 @@ const maxRunnerErrors = 3
 
 // RunOnce plays a complete ladder run, until its deadline
 func (l *Ladder) RunOnce(ctx context.Context, deadline time.Time) (int64, error) {
+	LogDiskWarning(l.Config)
+
 	teams, err := l.Pool(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("getting the pool: %w", err)
