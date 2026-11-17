@@ -23,8 +23,10 @@ func usage() {
       Play one ladder run now, and exit
   ladder leaderboard [-config ladder.json]
       Print the current leaderboard
-  ladder match [options] <map> <name>=<image> <name>=<image>...
-      Play one match in containers, and print its result as JSON`)
+  ladder build [-config ladder.json]
+      Fetch the registered teams, build and smoke-test their new versions
+  ladder rebuild [-config ladder.json] <team>
+      Forget the failed build of a team's current version, so it is built again`)
 	os.Exit(2)
 }
 
@@ -45,6 +47,10 @@ func main() {
 		cmdRun(ctx, os.Args[2:])
 	case "leaderboard":
 		cmdLeaderboard(os.Args[2:])
+	case "build":
+		cmdBuild(ctx, os.Args[2:])
+	case "rebuild":
+		cmdRebuild(os.Args[2:])
 	default:
 		usage()
 	}
@@ -103,7 +109,7 @@ func cmdMatch(ctx context.Context, args []string) {
 }
 
 // openLadder parses the common flags, loads the configuration and opens the store
-func openLadder(name string, args []string) *Ladder {
+func openLadder(name string, args []string) (*Ladder, *flag.FlagSet) {
 	flags := flag.NewFlagSet(name, flag.ExitOnError)
 	path := flags.String("config", "ladder.json", "configuration file")
 	flags.Parse(args)
@@ -117,19 +123,39 @@ func openLadder(name string, args []string) *Ladder {
 		log.Fatal(err)
 	}
 
-	return &Ladder{
+	smoke := config.RunnerConfig()
+	smoke.MatchTimeout = 5 * time.Minute
+	builder := &Builder{
+		Store:        store,
+		DataDir:      config.DataDir,
+		Smoke:        &Runner{Config: smoke},
+		SmokeMap:     config.Build.SmokeMap,
+		BuildTimeout: config.Build.Timeout.Duration,
+		KeepImages:   config.Build.KeepImages,
+	}
+
+	ladder := &Ladder{
 		Config: config,
 		Store:  store,
 		Player: &Runner{Config: config.RunnerConfig()},
-		Pool: func(ctx context.Context) ([]Bot, error) {
-			return config.Bots, nil
-		},
-		Rand: rand.New(rand.NewSource(time.Now().UnixNano())),
+		Rand:   rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
+	ladder.Pool = func(ctx context.Context) ([]Bot, error) {
+		teams, err := LoadTeams(ctx, config.Registry, config.DataDir)
+		if err != nil {
+			return nil, err
+		}
+		bots, states := builder.Pool(ctx, teams)
+		if err := store.SaveTeamStates(states); err != nil {
+			return nil, err
+		}
+		return append(bots, config.Bots...), nil
+	}
+	return ladder, flags
 }
 
 func cmdServe(ctx context.Context, args []string) {
-	ladder := openLadder("serve", args)
+	ladder, _ := openLadder("serve", args)
 	defer ladder.Store.Close()
 
 	if err := RemoveLeftovers(ctx); err != nil {
@@ -154,7 +180,7 @@ func cmdServe(ctx context.Context, args []string) {
 }
 
 func cmdRun(ctx context.Context, args []string) {
-	ladder := openLadder("run", args)
+	ladder, _ := openLadder("run", args)
 	defer ladder.Store.Close()
 
 	if err := RemoveLeftovers(ctx); err != nil {
@@ -170,7 +196,7 @@ func cmdRun(ctx context.Context, args []string) {
 }
 
 func cmdLeaderboard(args []string) {
-	ladder := openLadder("leaderboard", args)
+	ladder, _ := openLadder("leaderboard", args)
 	defer ladder.Store.Close()
 	printLeaderboard(ladder)
 }
@@ -190,4 +216,37 @@ func printLeaderboard(ladder *Ladder) {
 	for i, s := range board.Standings {
 		fmt.Printf("%-4d %-24s %8.1f %8.1f %6d  %s\n", i+1, s.Team, s.Score.Mean, s.Score.StdErr, s.Score.Games, s.Commit)
 	}
+}
+
+func cmdBuild(ctx context.Context, args []string) {
+	ladder, _ := openLadder("build", args)
+	defer ladder.Store.Close()
+
+	bots, err := ladder.Pool(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, bot := range bots {
+		fmt.Printf("%-24s %s\n", bot.Name, bot.Image)
+	}
+}
+
+func cmdRebuild(args []string) {
+	ladder, flags := openLadder("rebuild", args)
+	defer ladder.Store.Close()
+	if flags.NArg() != 1 {
+		usage()
+	}
+
+	builds, err := ladder.Store.Builds(flags.Arg(0), 1)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if len(builds) == 0 || builds[0].Status == BuildOK {
+		log.Fatalf("no failed build to forget for %s", flags.Arg(0))
+	}
+	if err := ladder.Store.DeleteBuild(builds[0].ID); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Forgot build %d (%s, %s): it will be built again at the next run\n", builds[0].ID, builds[0].Tag, builds[0].Status)
 }

@@ -11,6 +11,8 @@ Copy [ladder.example.json](ladder.example.json) to `ladder.json` and adjust it, 
 - `go run ./ladder serve`: runs the ladder at the scheduled times (send `SIGUSR1` to the process to start a run right away)
 - `go run ./ladder run`: plays one run now and exits
 - `go run ./ladder leaderboard`: prints the leaderboard
+- `go run ./ladder build`: fetches the registered teams, builds and smoke-tests their new versions (also done at the start of each run)
+- `go run ./ladder rebuild <team>`: forgets the failed build of a team's current version, so that it is built again (for instance after a network failure during the build)
 
 Configuration (`ladder.json`):
 
@@ -23,8 +25,24 @@ Configuration (`ladder.json`):
   - `maxFailures`: a bot that fails (crashes or doesn't join) this many matches in a row with the same commit is left out of the next runs, until its commit changes
 - `deadlineMargin`: a run stops this long before the next scheduled run, even if not all matches were played (it is then marked incomplete)
 - `runner`: server image, CPU cores split between the bots of a match, per-bot memory and process limits, timeouts
-- `houseBots`: bots that always take part (reference bots)
-- `bots`: the team bots (temporary, until the registry is implemented)
+- `registry`: where teams are registered: a git repository (`url`, `branch`, `file`), or a local file (`path`)
+- `build`: build timeout, number of successful images kept per team, map of the smoke test
+- `houseBots`: bots that always take part (reference bots), given as images
+- `bots`: other bots given directly as images, outside of the registry
+
+## Teams and builds
+
+The registry file lists the teams:
+
+```json
+[
+  { "name": "SuperTeam", "repo": "https://github.com/someone/superteam-bot", "members": ["alice", "bob"] }
+]
+```
+
+Optional fields: `ref` (a tag, branch or commit to use instead of the latest tag on `main`), `dockerfile` and `context` (paths in the repository, defaults `Dockerfile` and the root).
+
+At the start of each run, for each team, the ladder updates a mirror of its repository, takes the most recent tag on `main`, and builds it if it is new (`git archive | docker build -`, no checkout). A new image must pass a smoke test: a 1-player game, played to the end. Builds and their logs are recorded; a failed build is not retried (see `rebuild`), and the team's last good image keeps playing.
 
 Matches are played one at a time. A crashed bot's seat is forfeited (the server stops waiting for its orders), so it does not slow the game down.
 

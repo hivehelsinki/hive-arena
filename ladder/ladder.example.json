@@ -22,6 +22,16 @@
 		"joinTimeout": "1m",
 		"matchTimeout": "30m"
 	},
+	"registry": {
+		"url": "https://github.com/hivehelsinki/hive-arena-teams.git",
+		"branch": "main",
+		"file": "teams.json"
+	},
+	"build": {
+		"timeout": "10m",
+		"keepImages": 3,
+		"smokeMap": "tiny"
+	},
 	"houseBots": [
 		{"name": "house-go", "image": "example-agent-go", "commit": "house"},
 		{"name": "house-lua", "image": "example-agent-lua", "commit": "house"}

@@ -62,9 +62,18 @@ type Config struct {
 		MatchTimeout Duration `json:"matchTimeout"`
 	} `json:"runner"`
 
+	// Where teams are registered
+	Registry RegistryConfig `json:"registry"`
+
+	Build struct {
+		Timeout    Duration `json:"timeout"`
+		KeepImages int      `json:"keepImages"` // successful images kept per team
+		SmokeMap   string   `json:"smokeMap"`   // map of the 1-player smoke test
+	} `json:"build"`
+
 	// Bots that always take part (e.g. the example agents), as references
 	HouseBots []Bot `json:"houseBots"`
-	// Static list of team bots, until the registry is used
+	// Additional bots given directly as images, outside of the registry
 	Bots []Bot `json:"bots"`
 }
 
@@ -86,6 +95,9 @@ func LoadConfig(path string) (*Config, error) {
 			MaxFailures: 5,
 		},
 	}
+	config.Build.Timeout = Duration{10 * time.Minute}
+	config.Build.KeepImages = 3
+	config.Build.SmokeMap = "tiny"
 	config.Runner.ServerImage = defaults.ServerImage
 	config.Runner.Cores = defaults.Cores
 	config.Runner.Memory = defaults.Memory

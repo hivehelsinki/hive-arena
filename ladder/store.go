@@ -69,7 +69,7 @@ CREATE INDEX IF NOT EXISTS match_bots_team ON match_bots(team);
 `
 
 func OpenStore(dir string) (*Store, error) {
-	for _, sub := range []string{"reports", "logs"} {
+	for _, sub := range []string{"reports", "logs", "builds"} {
 		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
 			return nil, err
 		}
@@ -79,7 +79,7 @@ func OpenStore(dir string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := db.Exec(schema); err != nil {
+	if _, err := db.Exec(schema + buildsSchema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("creating the schema: %w", err)
 	}
@@ -495,4 +495,109 @@ func (s *Store) ConsecutiveFailures(team string, commit string) (int, error) {
 		count++
 	}
 	return count, rows.Err()
+}
+
+const buildsSchema = `
+CREATE TABLE IF NOT EXISTS builds (
+	id INTEGER PRIMARY KEY,
+	team TEXT NOT NULL,
+	tag TEXT NOT NULL,
+	commit_id TEXT NOT NULL,
+	image TEXT NOT NULL,
+	status TEXT NOT NULL, -- ok, build-failed, smoke-failed
+	started_at TIMESTAMP NOT NULL,
+	ended_at TIMESTAMP NOT NULL,
+	error TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS builds_team ON builds(team, commit_id);
+`
+
+func (s *Store) BuildLogPath(id int64) string {
+	return filepath.Join(s.dir, "builds", fmt.Sprintf("%d.log.gz", id))
+}
+
+// RecordBuild stores a build and its log
+func (s *Store) RecordBuild(build *Build, output string) (int64, error) {
+	res, err := s.db.Exec(`INSERT INTO builds (team, tag, commit_id, image, status, started_at, ended_at, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		build.Team, build.Tag, build.Commit, build.Image, build.Status, build.StartedAt, build.EndedAt, build.Error)
+	if err != nil {
+		return 0, err
+	}
+	id, _ := res.LastInsertId()
+	return id, writeGzip(s.BuildLogPath(id), []byte(output))
+}
+
+func (s *Store) scanBuilds(query string, args ...any) ([]Build, error) {
+	rows, err := s.db.Query(`SELECT id, team, tag, commit_id, image, status, started_at, ended_at, error FROM builds `+query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var builds []Build
+	for rows.Next() {
+		var b Build
+		if err := rows.Scan(&b.ID, &b.Team, &b.Tag, &b.Commit, &b.Image, &b.Status, &b.StartedAt, &b.EndedAt, &b.Error); err != nil {
+			return nil, err
+		}
+		builds = append(builds, b)
+	}
+	return builds, rows.Err()
+}
+
+func firstBuild(builds []Build, err error) (*Build, error) {
+	if err != nil || len(builds) == 0 {
+		return nil, err
+	}
+	return &builds[0], nil
+}
+
+// BuildFor returns the latest build of a team's commit, or nil
+func (s *Store) BuildFor(team string, commit string) (*Build, error) {
+	return firstBuild(s.scanBuilds(`WHERE team = ? AND commit_id = ? ORDER BY id DESC LIMIT 1`, team, commit))
+}
+
+func (s *Store) LastGoodBuild(team string) (*Build, error) {
+	return firstBuild(s.scanBuilds(`WHERE team = ? AND status = ? ORDER BY id DESC LIMIT 1`, team, BuildOK))
+}
+
+// GoodBuilds returns a team's successful builds, most recent first
+func (s *Store) GoodBuilds(team string) ([]Build, error) {
+	return s.scanBuilds(`WHERE team = ? AND status = ? ORDER BY id DESC`, team, BuildOK)
+}
+
+// Builds returns a team's builds, most recent first
+func (s *Store) Builds(team string, limit int) ([]Build, error) {
+	return s.scanBuilds(`WHERE team = ? ORDER BY id DESC LIMIT ?`, team, limit)
+}
+
+// DeleteBuild forgets a build, so that its commit is built again at the next run
+func (s *Store) DeleteBuild(id int64) error {
+	_, err := s.db.Exec(`DELETE FROM builds WHERE id = ?`, id)
+	return err
+}
+
+// SaveTeamStates keeps the state of each team's bot at the last pool resolution, for the website
+func (s *Store) SaveTeamStates(states []TeamState) error {
+	data, err := json.MarshalIndent(states, "", "\t")
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(s.dir, "teams.json")
+	if err := os.WriteFile(path+".tmp", data, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(path+".tmp", path)
+}
+
+func (s *Store) TeamStates() ([]TeamState, error) {
+	data, err := os.ReadFile(filepath.Join(s.dir, "teams.json"))
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var states []TeamState
+	return states, json.Unmarshal(data, &states)
 }
