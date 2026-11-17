@@ -130,6 +130,11 @@ func (web *Web) Handler() http.Handler {
 	mux.HandleFunc("GET /screen", web.handleScreen)
 	mux.HandleFunc("GET /builds/{id}/log", web.handleBuildLog)
 
+	mux.HandleFunc("GET /backup/manifest", web.handleBackupManifest)
+	mux.HandleFunc("GET /backup/files/{path...}", web.handleBackupFile)
+	mux.HandleFunc("GET /backup/database", web.handleBackupDatabase)
+	mux.HandleFunc("GET /backup/archive.tar", web.handleBackupArchive)
+
 	mux.HandleFunc("GET /api/leaderboard", web.apiLeaderboard)
 	mux.HandleFunc("GET /api/runs", web.apiRuns)
 	mux.HandleFunc("GET /api/matches", web.apiMatches)

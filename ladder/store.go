@@ -76,6 +76,13 @@ func OpenStore(dir string) (*Store, error) {
 		}
 	}
 
+	// Database snapshots left by an interrupted backup
+	if leftovers, _ := filepath.Glob(filepath.Join(dir, "snapshot-*.db")); leftovers != nil {
+		for _, path := range leftovers {
+			os.Remove(path)
+		}
+	}
+
 	db, err := sql.Open("sqlite", filepath.Join(dir, "ladder.db")+"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, err
