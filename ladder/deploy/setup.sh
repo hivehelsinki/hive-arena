@@ -26,6 +26,8 @@ REPO=$(cd "$(dirname "$0")/../.." && pwd)
 CONFIG=$REPO/ladder.json
 LADDER=$REPO/ladder/ladder
 
+export DEBIAN_FRONTEND=noninteractive
+
 # sudo resets PATH: add the usual locations of Go
 export PATH="$PATH:/usr/local/go/bin:/usr/lib/go/bin:/snap/bin"
 
