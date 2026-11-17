@@ -7,6 +7,8 @@ type PlayerResult struct {
 	// Rank is 1 + the number of players with strictly more flowers, so that
 	// tied players share the same rank (e.g. 1, 2, 2, 4)
 	Rank int `json:"rank"`
+	// Whether the server stopped waiting for the player's orders (see the /forfeit route)
+	Forfeited bool `json:"forfeited,omitempty"`
 }
 
 type GameResult struct {

@@ -267,3 +267,26 @@ func TestReport(t *testing.T) {
 	call(t, server, "GET", "/report?id="+game.Id, "", http.StatusOK, &report)
 	check(report)
 }
+
+func TestForfeitRoute(t *testing.T) {
+	server := newTestServer(t)
+	game := startTestGame(t, server, 2)
+
+	route := func(token string, player string) string {
+		return fmt.Sprintf("/forfeit?id=%s&token=%s&player=%s", game.Id, token, player)
+	}
+
+	call(t, server, "GET", "/forfeit?id=nope&token=x&player=0", "", http.StatusBadRequest, nil)
+	call(t, server, "GET", route(game.Players[0].Token, "1"), "", http.StatusForbidden, nil)
+	call(t, server, "GET", route(game.AdminToken, "x"), "", http.StatusBadRequest, nil)
+	call(t, server, "GET", route(game.AdminToken, "2"), "", http.StatusBadRequest, nil)
+
+	call(t, server, "GET", route(game.AdminToken, fmt.Sprint(game.Players[1].Id)), "", http.StatusOK, nil)
+	call(t, server, "POST", fmt.Sprintf("/orders?id=%s&token=%s&turn=0", game.Id, game.Players[0].Token), "[]", http.StatusOK, nil)
+
+	var state arena.GameState
+	call(t, server, "GET", "/game?id="+game.Id+"&token="+game.AdminToken, "", http.StatusOK, &state)
+	if state.Turn != 1 {
+		t.Errorf("the turn should not wait for the forfeited player, current turn is %d", state.Turn)
+	}
+}

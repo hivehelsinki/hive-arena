@@ -265,6 +265,34 @@ func (server *Server) handleOrders(w http.ResponseWriter, r *http.Request) {
 	writeJson(w, "OK", http.StatusOK)
 }
 
+func (server *Server) handleForfeit(w http.ResponseWriter, r *http.Request) {
+	logRoute(r)
+
+	id := r.URL.Query().Get("id")
+	game := server.getGameSync(id)
+	if game == nil {
+		writeJson(w, "Invalid game id: "+id, http.StatusBadRequest)
+		return
+	}
+
+	if r.URL.Query().Get("token") != game.AdminToken {
+		writeJson(w, "Invalid token", http.StatusForbidden)
+		return
+	}
+
+	player, err := strconv.Atoi(r.URL.Query().Get("player"))
+	if err != nil {
+		writeJson(w, "Invalid player: "+r.URL.Query().Get("player"), http.StatusBadRequest)
+		return
+	}
+
+	if err := game.Forfeit(player); err != nil {
+		writeJson(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJson(w, "OK", http.StatusOK)
+}
+
 func (server *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	logRoute(r)
 
@@ -340,6 +368,7 @@ func (server *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /orders", server.handleOrders)
 	mux.HandleFunc("GET /ws", server.handleWebSocket)
 	mux.HandleFunc("GET /report", server.handleReport)
+	mux.HandleFunc("GET /forfeit", server.handleForfeit)
 
 	fs := http.FileServer(http.Dir(HistoryDir))
 	mux.Handle("GET /history/", http.StripPrefix("/history/", fs))

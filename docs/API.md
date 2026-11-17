@@ -168,6 +168,18 @@ If a websocket is opened after the game has already begun, an initial message si
 
 After sending a message with `gameOver` set to `true`, the server closes the websocket.
 
+## GET /forfeit
+
+Stops waiting for a player's orders for the rest of the game, for instance because its agent crashed: turns are then processed as soon as the other players have posted their orders. The player stays in the game, its units simply get no orders. Meant for organizers and automated runners: it requires the admin token of the game.
+
+Query string parameters:
+
+- `id`: the ID of the game
+- `token`: the admin token of the game (returned by `/newgame`)
+- `player`: the ID of the player
+
+The game must have started and not be over.
+
 ## GET /report
 
 Returns the full report of a finished game. This is the same content as the files saved in the server's history directory, which the viewer can read.
@@ -199,7 +211,8 @@ The result is given in the following format:
 		{
 			"name": (string) the name of the player,
 			"flowers": (int) the final number of flowers in reserve,
-			"rank": (int) 1 + the number of players with strictly more flowers (tied players share the same rank)
+			"rank": (int) 1 + the number of players with strictly more flowers (tied players share the same rank),
+			"forfeited": (bool, omitted when false) whether the player was forfeited (see '/forfeit')
 		}
 }
 ```

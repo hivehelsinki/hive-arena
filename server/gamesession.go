@@ -40,6 +40,7 @@ type GameSession struct {
 
 	PendingOrders [][]*arena.Order
 	Posted        []bool
+	Forfeited     []bool // players the server no longer waits for
 	TurnStart     time.Time
 	History       []arena.Turn
 
@@ -68,6 +69,7 @@ func NewGameSession(id string, players int, mapname string, mapdata arena.MapDat
 		AdminToken:   tokens[0],
 		PlayerTokens: tokens[1:],
 		Seats:        make([]*Player, players),
+		Forfeited:    make([]bool, players),
 		State:        state,
 		History:      []arena.Turn{{Orders: nil, State: state.Clone()}},
 	}
@@ -172,7 +174,35 @@ func (session *GameSession) BeginTurn() {
 	session.Posted = make([]bool, session.State.NumPlayers)
 	session.TurnStart = time.Now()
 
+	if session.allPlayed() {
+		// Everyone has forfeited: no orders will come
+		session.processTurnAfter(session.remainingMinDuration())
+		return
+	}
 	session.processTurnAfter(TurnTimeout)
+}
+
+// remainingMinDuration is the time left before the current turn has lasted
+// its minimum duration (always 0 in dev mode)
+func (session *GameSession) remainingMinDuration() time.Duration {
+	if DevMode {
+		return 0
+	}
+	return max(0, MinTurnDuration-time.Since(session.TurnStart))
+}
+
+// processIfAllPlayed processes the turn once all players have posted their
+// orders (or forfeited), but not before the minimum turn duration, so that
+// games can be followed live
+func (session *GameSession) processIfAllPlayed() {
+	if !session.allPlayed() {
+		return
+	}
+	if delay := session.remainingMinDuration(); delay > 0 {
+		session.processTurnAfter(delay)
+	} else {
+		session.processTurn()
+	}
 }
 
 // processTurnAfter processes the current turn after a delay, unless it has been processed in the meantime
@@ -207,21 +237,41 @@ func (session *GameSession) SetOrders(playerid int, turn uint, orders []*arena.O
 
 	log.Printf("Player %s posted orders in game %s", session.Seats[playerid].Name, session.ID)
 
-	if session.allPlayed() {
-		// Turns last at least MinTurnDuration, so that games can be followed live
-		delay := MinTurnDuration - time.Since(session.TurnStart)
-		if DevMode || delay <= 0 {
-			session.processTurn()
-		} else {
-			session.processTurnAfter(delay)
-		}
+	session.processIfAllPlayed()
+	return nil
+}
+
+// Forfeit stops waiting for a player's orders for the rest of the game, for
+// instance because its agent crashed. The player stays in the game, its units
+// just get no orders.
+func (session *GameSession) Forfeit(playerid int) error {
+	session.mutex.Lock()
+	defer session.mutex.Unlock()
+
+	if !session.isFull() {
+		return fmt.Errorf("Game has not started")
+	}
+	if session.State.GameOver {
+		return fmt.Errorf("Game is over")
+	}
+	if playerid < 0 || playerid >= session.State.NumPlayers {
+		return fmt.Errorf("Invalid player: %d", playerid)
 	}
 
+	session.Forfeited[playerid] = true
+	log.Printf("Player %s forfeited in game %s", session.Seats[playerid].Name, session.ID)
+
+	session.processIfAllPlayed()
 	return nil
 }
 
 func (session *GameSession) allPlayed() bool {
-	return !slices.Contains(session.Posted, false)
+	for player, posted := range session.Posted {
+		if !posted && !session.Forfeited[player] {
+			return false
+		}
+	}
+	return true
 }
 
 func (session *GameSession) processTurn() {
@@ -317,7 +367,11 @@ func (session *GameSession) result() *arena.GameResult {
 	if !session.State.GameOver {
 		return nil
 	}
-	return arena.NewGameResult(session.State, session.playerNames())
+	result := arena.NewGameResult(session.State, session.playerNames())
+	for player, forfeited := range session.Forfeited {
+		result.Players[player].Forfeited = forfeited
+	}
+	return result
 }
 
 func (session *GameSession) report() *arena.PersistedGame {

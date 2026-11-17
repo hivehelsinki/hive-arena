@@ -177,3 +177,57 @@ func TestPersist(t *testing.T) {
 		t.Error("expected an error when the history directory cannot be created")
 	}
 }
+
+func TestForfeit(t *testing.T) {
+	session, players := newTestSession(t, 3)
+
+	if err := session.Forfeit(5); err == nil {
+		t.Error("forfeiting an invalid player should fail")
+	}
+
+	// Once a player forfeits, turns no longer wait for it
+	if err := session.Forfeit(players[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, player := range players[1:] {
+		session.SetOrders(player.ID, 0, []*arena.Order{})
+	}
+	if turn := session.FullState().Turn; turn != 1 {
+		t.Errorf("turn should be processed without the forfeited player, current turn is %d", turn)
+	}
+
+	// Forfeiting the last player who has not posted processes the turn
+	session.SetOrders(players[1].ID, 1, []*arena.Order{})
+	session.Forfeit(players[2].ID)
+	if turn := session.FullState().Turn; turn != 2 {
+		t.Errorf("turn should be processed when the last player forfeits, current turn is %d", turn)
+	}
+
+	// With everyone forfeited, the game plays out by itself
+	session.Forfeit(players[1].ID)
+	deadline := time.Now().Add(5 * time.Second)
+	for !session.IsOver() && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !session.IsOver() {
+		t.Fatal("the game should end by itself once everyone has forfeited")
+	}
+
+	result := session.Report().Result
+	for _, player := range result.Players {
+		if !player.Forfeited {
+			t.Errorf("expected all players to be marked as forfeited: %+v", result.Players)
+		}
+	}
+}
+
+func TestForfeitBeforeStart(t *testing.T) {
+	DevMode = true
+	mapdata, _ := arena.LoadMap("../maps/tiny.txt")
+	session := NewGameSession("test", 2, "tiny", mapdata)
+	player := session.AddPlayer("team")
+
+	if err := session.Forfeit(player.ID); err == nil {
+		t.Error("forfeiting before the game starts should fail")
+	}
+}

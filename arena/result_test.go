@@ -21,10 +21,10 @@ func TestNewGameResult(t *testing.T) {
 	}
 
 	expected := []PlayerResult{
-		{"a", 3, 2},
-		{"b", 7, 1},
-		{"c", 3, 2},
-		{"d", 0, 4},
+		{Name: "a", Flowers: 3, Rank: 2},
+		{Name: "b", Flowers: 7, Rank: 1},
+		{Name: "c", Flowers: 3, Rank: 2},
+		{Name: "d", Flowers: 0, Rank: 4},
 	}
 	if !slices.Equal(result.Players, expected) {
 		t.Errorf("expected %+v, got %+v", expected, result.Players)
