@@ -71,6 +71,10 @@ type Config struct {
 		SmokeMap   string   `json:"smokeMap"`   // map of the 1-player smoke test
 	} `json:"build"`
 
+	Web struct {
+		Listen string `json:"listen"` // address of the public website, e.g. ":8080"
+	} `json:"web"`
+
 	// Bots that always take part (e.g. the example agents), as references
 	HouseBots []Bot `json:"houseBots"`
 	// Additional bots given directly as images, outside of the registry
@@ -95,6 +99,7 @@ func LoadConfig(path string) (*Config, error) {
 			MaxFailures: 5,
 		},
 	}
+	config.Web.Listen = ":8080"
 	config.Build.Timeout = Duration{10 * time.Minute}
 	config.Build.KeepImages = 3
 	config.Build.SmokeMap = "tiny"

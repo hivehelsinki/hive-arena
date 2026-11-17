@@ -1,0 +1,81 @@
+{{define "layout"}}<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hive Arena ladder</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+	<a class="title" href="/">Hive Arena ladder</a>
+	<nav><a href="/">Leaderboard</a> <a href="/runs">Runs</a> <a href="/matches">Matches</a></nav>
+</header>
+<main>
+{{template "content" .}}
+</main>
+</body>
+</html>{{end}}
+
+{{define "standings"}}
+<table class="standings">
+<thead><tr>
+	<th>#</th><th>Team</th><th class="num">Score</th><th class="num"></th><th class="num">Games</th>
+	{{range .Maps}}<th class="num">{{.}}</th>{{end}}
+	<th>Version</th>
+</tr></thead>
+<tbody>
+{{range $i, $s := .Board.Standings}}
+<tr{{if isHouse $s.Team}} class="house"{{end}}>
+	<td>{{add $i 1}}</td>
+	<td><a href="/teams/{{$s.Team}}">{{$s.Team}}</a>{{if isHouse $s.Team}} <span class="tag">reference</span>{{end}}</td>
+	<td class="num strong">{{score $s.Score}}</td>
+	<td class="num dim">{{stderr $s.Score}}</td>
+	<td class="num">{{$s.Score.Games}}</td>
+	{{range $.Maps}}<td class="num">{{score (index $s.PerMap .)}}</td>{{end}}
+	<td class="mono">{{short $s.Commit}}</td>
+</tr>
+{{else}}
+<tr><td colspan="99" class="dim">No results yet.</td></tr>
+{{end}}
+</tbody>
+</table>
+{{end}}
+
+{{define "h2h"}}
+{{if .Teams}}
+<table class="h2h">
+<thead><tr><th></th>{{range .Teams}}<th class="vertical"><span>{{.}}</span></th>{{end}}</tr></thead>
+<tbody>
+{{range $a := .Teams}}
+<tr>
+	<th><a href="/teams/{{$a}}">{{$a}}</a></th>
+	{{range $b := $.Teams}}
+	{{if eq $a $b}}<td class="self"></td>{{else}}{{with index (index $.Board.HeadToHead $a) $b}}<td class="{{h2hclass .}}" title="{{.Wins}} / {{.Games}}">{{h2h .}}</td>{{else}}<td></td>{{end}}{{end}}
+	{{end}}
+</tr>
+{{end}}
+</tbody>
+</table>
+<p class="dim">How often the team of the row finished ahead of the team of the column, in matches they played together (ties count half).</p>
+{{end}}
+{{end}}
+
+{{define "matchrows"}}
+<table class="matches">
+<thead><tr><th>#</th><th>Date</th><th>Map</th><th>Results</th><th class="num">Turns</th></tr></thead>
+<tbody>
+{{range .}}
+<tr{{if .Void}} class="void"{{end}}>
+	<td><a href="/matches/{{.ID}}">{{.ID}}</a></td>
+	<td>{{time .StartedAt}}</td>
+	<td>{{.Map}}</td>
+	<td>{{range .Bots}}<span class="result p{{.Points}} {{.Status}}" title="{{.Status}}, {{.Flowers}} flowers">{{.Team}} {{.Points}}</span> {{end}}</td>
+	<td class="num">{{.Turns}}</td>
+</tr>
+{{else}}
+<tr><td colspan="5" class="dim">No matches.</td></tr>
+{{end}}
+</tbody>
+</table>
+{{end}}

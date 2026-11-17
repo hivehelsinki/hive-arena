@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -18,7 +19,10 @@ import (
 func usage() {
 	fmt.Fprintln(os.Stderr, `Usage:
   ladder serve [-config ladder.json]
-      Run the ladder at the scheduled times. Send SIGUSR1 to start a run now.
+      Run the ladder at the scheduled times, and the website. Send SIGUSR1
+      to start a run now.
+  ladder web [-config ladder.json]
+      Run the website only
   ladder run [-config ladder.json]
       Play one ladder run now, and exit
   ladder leaderboard [-config ladder.json]
@@ -43,6 +47,8 @@ func main() {
 		cmdMatch(ctx, os.Args[2:])
 	case "serve":
 		cmdServe(ctx, os.Args[2:])
+	case "web":
+		cmdWeb(ctx, os.Args[2:])
 	case "run":
 		cmdRun(ctx, os.Args[2:])
 	case "leaderboard":
@@ -174,9 +180,27 @@ func cmdServe(ctx context.Context, args []string) {
 		}
 	}()
 
+	go serveWeb(ladder)
+
 	if err := ladder.Serve(ctx, trigger); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func serveWeb(ladder *Ladder) {
+	web, err := NewWeb(ladder.Config, ladder.Store)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("Website on %s", ladder.Config.Web.Listen)
+	log.Fatal(http.ListenAndServe(ladder.Config.Web.Listen, web.Handler()))
+}
+
+func cmdWeb(ctx context.Context, args []string) {
+	ladder, _ := openLadder("web", args)
+	defer ladder.Store.Close()
+	go serveWeb(ladder)
+	<-ctx.Done()
 }
 
 func cmdRun(ctx context.Context, args []string) {

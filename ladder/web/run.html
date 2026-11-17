@@ -1,0 +1,19 @@
+{{define "content"}}
+<h1>Run #{{.Run.ID}}</h1>
+<p>Started {{time .Run.StartedAt}}{{with .Run.EndedAt}}, ended {{timeptr .}}{{end}}. Status: <span class="status-{{.Run.Status}}">{{.Run.Status}}</span>.</p>
+
+<h2>Standings of this run</h2>
+{{template "standings" .}}
+
+<h2>Head to head</h2>
+{{template "h2h" .}}
+
+<h2>Bots</h2>
+<table>
+<thead><tr><th>Team</th><th>Version</th></tr></thead>
+<tbody>{{range .Run.Bots}}<tr><td><a href="/teams/{{.Name}}">{{.Name}}</a></td><td class="mono">{{short .Commit}}</td></tr>{{end}}</tbody>
+</table>
+
+<h2>Matches</h2>
+{{template "matchrows" .Matches}}
+{{end}}

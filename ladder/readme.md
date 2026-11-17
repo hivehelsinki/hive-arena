@@ -8,7 +8,8 @@ Work in progress. Currently available:
 
 Copy [ladder.example.json](ladder.example.json) to `ladder.json` and adjust it, then:
 
-- `go run ./ladder serve`: runs the ladder at the scheduled times (send `SIGUSR1` to the process to start a run right away)
+- `go run ./ladder serve`: runs the ladder at the scheduled times, and the website (send `SIGUSR1` to the process to start a run right away)
+- `go run ./ladder web`: runs the website only
 - `go run ./ladder run`: plays one run now and exits
 - `go run ./ladder leaderboard`: prints the leaderboard
 - `go run ./ladder build`: fetches the registered teams, builds and smoke-tests their new versions (also done at the start of each run)
@@ -27,6 +28,7 @@ Configuration (`ladder.json`):
 - `runner`: server image, CPU cores split between the bots of a match, per-bot memory and process limits, timeouts
 - `registry`: where teams are registered: a git repository (`url`, `branch`, `file`), or a local file (`path`)
 - `build`: build timeout, number of successful images kept per team, map of the smoke test
+- `web.listen`: address of the website
 - `houseBots`: bots that always take part (reference bots), given as images
 - `bots`: other bots given directly as images, outside of the registry
 
@@ -68,3 +70,7 @@ Containers and networks are always removed at the end. All of them have the `hiv
 ## Tests
 
 `go test ./ladder` runs the runner tests with Docker (skipped with `-short` or when Docker is unavailable). 
+
+## Website
+
+Read-only, no accounts: leaderboard (with per-map scores and the head-to-head table) over the window of recent runs, runs, matches (filterable by team and map), team pages with builds and their logs, match pages with bot outputs and report downloads. The same data is available as JSON under `/api/` (`leaderboard`, `runs`, `matches`, `teams`).

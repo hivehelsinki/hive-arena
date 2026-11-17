@@ -1,0 +1,45 @@
+{{define "content"}}
+<h1>{{.Name}}{{if isHouse .Name}} <span class="tag">reference bot</span>{{end}}</h1>
+
+{{with .State}}
+<p>
+	Repository: <a href="{{.Team.Repo}}">{{.Team.Repo}}</a>{{with .Team.Members}}. Members: {{range $i, $m := .}}{{if $i}}, {{end}}{{$m}}{{end}}{{end}}.
+	{{with .Team.Ref}}Pinned to <code>{{.}}</code>.{{end}}
+</p>
+{{if .Bot}}<p>Playing: <span class="mono">{{short .Bot.Commit}}</span>.</p>{{else}}<p class="error">No working version yet: this team does not play.</p>{{end}}
+{{with .Error}}<p class="error">The latest version is not playing: {{.}}</p>{{end}}
+{{end}}
+
+{{with .Standing}}
+<h2>Current score</h2>
+<p><span class="big">{{score .Score}}</span> <span class="dim">{{stderr .Score}}</span> over {{.Score.Games}} games.</p>
+<table>
+<thead><tr>{{range $.Maps}}<th class="num">{{.}}</th>{{end}}</tr></thead>
+<tbody><tr>{{range $.Maps}}<td class="num">{{score (index $.Standing.PerMap .)}}</td>{{end}}</tr></tbody>
+</table>
+{{end}}
+
+{{with .H2H}}
+<h2>Against the other teams</h2>
+<table>
+<thead><tr><th>Opponent</th><th class="num">Finished ahead</th><th class="num">Matches together</th></tr></thead>
+<tbody>{{range $team, $h := .}}<tr><td><a href="/teams/{{$team}}">{{$team}}</a></td><td class="num {{h2hclass $h}}">{{h2h $h}}</td><td class="num">{{$h.Games}}</td></tr>{{end}}</tbody>
+</table>
+{{end}}
+
+{{with .Builds}}
+<h2>Builds</h2>
+<table>
+<thead><tr><th>Date</th><th>Tag</th><th>Commit</th><th>Result</th><th>Log</th></tr></thead>
+<tbody>
+{{range .}}
+<tr><td>{{time .StartedAt}}</td><td>{{.Tag}}</td><td class="mono">{{short .Commit}}</td><td class="status-{{.Status}}">{{.Status}}{{with .Error}}: {{.}}{{end}}</td><td><a href="/builds/{{.ID}}/log">log</a></td></tr>
+{{end}}
+</tbody>
+</table>
+{{end}}
+
+<h2>Recent matches</h2>
+{{template "matchrows" .Matches}}
+<p><a href="/matches?team={{.Name}}">All matches</a></p>
+{{end}}

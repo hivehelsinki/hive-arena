@@ -1,0 +1,30 @@
+{{define "content"}}
+{{with .Match}}
+<h1>Match #{{.ID}}</h1>
+<p>
+	{{.Map}}, {{len .Bots}} players, {{.Turns}} turns. Played {{time .StartedAt}} in {{duration .StartedAt .EndedAt}}{{if .RunID}}, in <a href="/runs/{{.RunID}}">run #{{.RunID}}</a>{{end}}.
+	{{if .Void}}<strong>Void: not counted.</strong>{{end}}
+</p>
+<p>
+	<a class="button" href="/viewer/?match={{.ID}}">Watch the replay</a>
+	<a class="button" href="/matches/{{.ID}}/report.json?download">Download the report</a>
+	<span class="dim">(readable with the desktop viewer: <code>go run ./viewer --file match-{{.ID}}.json</code>)</span>
+</p>
+<table>
+<thead><tr><th>Seat</th><th>Team</th><th>Version</th><th class="num">Flowers</th><th class="num">Points</th><th>Status</th><th>Log</th></tr></thead>
+<tbody>
+{{range .Bots}}
+<tr>
+	<td>{{.Seat}}</td>
+	<td><a href="/teams/{{.Team}}">{{.Team}}</a></td>
+	<td class="mono">{{short .Commit}}</td>
+	<td class="num">{{.Flowers}}</td>
+	<td class="num strong">{{.Points}}</td>
+	<td class="status-{{.Status}}">{{.Status}}{{if ne .Status "finished"}} (exit code {{.ExitCode}}){{end}}</td>
+	<td>{{if index $.Logs .Team}}<a href="/matches/{{$.Match.ID}}/logs/{{.Team}}">output</a>{{end}}</td>
+</tr>
+{{end}}
+</tbody>
+</table>
+{{end}}
+{{end}}

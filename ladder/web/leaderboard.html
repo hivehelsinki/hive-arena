@@ -1,0 +1,20 @@
+{{define "content"}}
+<h1>Leaderboard</h1>
+<p class="dim">
+	Average points per match over the last {{.Schedule.Window}} runs{{with .Runs}} ({{range $i, $r := .}}{{if $i}}, {{end}}<a href="/runs/{{$r.ID}}">#{{$r.ID}}</a>{{end}}){{end}}.
+	60 points for first place, 0 for last. The ± column is the standard error: teams closer than that are statistically tied.
+	Next run: {{time .NextRun}}.
+</p>
+{{template "standings" .}}
+
+<h2>Head to head</h2>
+{{template "h2h" .}}
+
+<h2>Format</h2>
+<ul>
+	<li>Runs start every day at {{range $i, $t := .Schedule.Times}}{{if $i}} and {{end}}{{$t}}{{end}} ({{.Schedule.Timezone}}), with the latest tag on the <code>main</code> branch of each team's repository.</li>
+	<li>Each run plays every possible lineup of bots, {{.Schedule.Repeats}} time(s) each, in these formats: {{range $i, $f := .Schedule.Formats}}{{if $i}}, {{end}}{{$f.Map}} ({{$f.Players}} players){{end}}.</li>
+	<li>Seats are random. In each match, points go from 60 (first) to 0 (last), equal flowers share the points of the places they span. A bot that crashes or doesn't join is last.</li>
+	<li>Bots that fail {{.Schedule.MaxFailures}} matches in a row are left out until their next version.</li>
+</ul>
+{{end}}

@@ -1,0 +1,13 @@
+{{define "content"}}
+<h1>Runs</h1>
+<table>
+<thead><tr><th>#</th><th>Started</th><th>Ended</th><th>Status</th><th class="num">Bots</th></tr></thead>
+<tbody>
+{{range .Runs}}
+<tr><td><a href="/runs/{{.ID}}">{{.ID}}</a></td><td>{{time .StartedAt}}</td><td>{{timeptr .EndedAt}}</td><td class="status-{{.Status}}">{{.Status}}</td><td class="num">{{len .Bots}}</td></tr>
+{{else}}
+<tr><td colspan="5" class="dim">No runs yet.</td></tr>
+{{end}}
+</tbody>
+</table>
+{{end}}

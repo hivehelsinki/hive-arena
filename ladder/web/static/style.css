@@ -1,0 +1,44 @@
+:root {
+	--bg: #fffdf7;
+	--fg: #222;
+	--dim: #777;
+	--accent: #d9a400;
+	--line: #e8e1cc;
+	--good: #2e7d32;
+	--bad: #c62828;
+	color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+	:root { --bg: #1b1a17; --fg: #eee; --dim: #999; --line: #3a372f; --good: #81c784; --bad: #ef9a9a; }
+}
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
+header { display: flex; align-items: baseline; gap: 2em; padding: 0.8em 1.5em; border-bottom: 3px solid var(--accent); }
+header .title { font-weight: bold; font-size: 1.2em; }
+header nav a { margin-right: 1em; }
+main { max-width: 1100px; margin: 0 auto; padding: 1em 1.5em 3em; }
+a { color: inherit; text-decoration-color: var(--accent); }
+h1, h2 { font-weight: 600; }
+table { border-collapse: collapse; margin: 0.5em 0 1em; }
+th, td { padding: 0.3em 0.7em; border-bottom: 1px solid var(--line); text-align: left; }
+th { font-weight: 600; font-size: 0.9em; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.strong { font-weight: bold; }
+.big { font-size: 2em; font-weight: bold; }
+.dim { color: var(--dim); }
+.mono, code { font-family: ui-monospace, monospace; font-size: 0.9em; }
+.house td { color: var(--dim); }
+.tag { font-size: 0.75em; border: 1px solid var(--dim); border-radius: 3px; padding: 0 0.3em; color: var(--dim); }
+.error, .status-crashed, .status-no-join, .status-build-failed, .status-smoke-failed, .status-failed { color: var(--bad); }
+.status-incomplete { color: var(--accent); }
+.good { color: var(--good); font-weight: bold; }
+.bad { color: var(--bad); }
+.h2h td { text-align: center; min-width: 3em; }
+.h2h td.self { background: var(--line); }
+.h2h th.vertical { height: 8em; vertical-align: bottom; }
+.h2h th.vertical span { writing-mode: vertical-rl; transform: rotate(180deg); }
+.result { display: inline-block; margin-right: 0.4em; padding: 0 0.3em; border-radius: 3px; }
+.result.p60 { background: var(--accent); color: #000; }
+.result.crashed, .result.no-join { text-decoration: line-through; }
+.void { opacity: 0.5; }
+.button { display: inline-block; padding: 0.3em 0.8em; border: 1px solid var(--accent); border-radius: 4px; text-decoration: none; margin-right: 0.5em; }
+.filter input { padding: 0.2em 0.4em; }

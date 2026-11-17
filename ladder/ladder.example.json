@@ -32,6 +32,9 @@
 		"keepImages": 3,
 		"smokeMap": "tiny"
 	},
+	"web": {
+		"listen": ":8080"
+	},
 	"houseBots": [
 		{"name": "house-go", "image": "example-agent-go", "commit": "house"},
 		{"name": "house-lua", "image": "example-agent-lua", "commit": "house"}

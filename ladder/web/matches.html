@@ -1,0 +1,10 @@
+{{define "content"}}
+<h1>Matches{{with .Filter.Team}} of {{.}}{{end}}{{with .Filter.Map}} on {{.}}{{end}}</h1>
+<form class="filter" method="get">
+	<input name="team" placeholder="Team" value="{{.Filter.Team}}">
+	<input name="map" placeholder="Map" value="{{.Filter.Map}}">
+	<button>Filter</button>
+</form>
+{{template "matchrows" .Matches}}
+{{with .Next}}<p><a href="{{.}}">Older matches</a></p>{{end}}
+{{end}}
