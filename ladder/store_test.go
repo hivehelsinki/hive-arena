@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"testing"
 	"time"
 
@@ -134,5 +135,26 @@ func TestStoreMatchWithoutRun(t *testing.T) {
 	match, _ := store.Match(id)
 	if match == nil || match.RunID != 0 || match.Bots[1].Points != 60 {
 		t.Errorf("unexpected match: %+v", match)
+	}
+}
+
+func TestWriteGzipIsAtomic(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/sub/file.gz"
+	if err := writeGzip(path, []byte("content")); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := readGzip(path); err != nil || string(data) != "content" {
+		t.Errorf("unexpected content: %q, %v", data, err)
+	}
+	// Overwriting keeps a complete file, and no temporary file is left
+	if err := writeGzip(path, []byte("new")); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := readGzip(path); string(data) != "new" {
+		t.Errorf("unexpected content: %q", data)
+	}
+	if _, err := os.Stat(path + ".tmp"); !os.IsNotExist(err) {
+		t.Error("temporary file left behind")
 	}
 }

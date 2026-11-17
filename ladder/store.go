@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"compress/gzip"
 	"database/sql"
 	"encoding/json"
@@ -240,7 +241,7 @@ func (s *Store) RecordMatch(runID int64, result *MatchResult) (int64, error) {
 		}
 	}
 
-	// Files first: a match in the database always has its report
+	// Files first, durably: a match in the database always has its report
 	if err := writeGzip(s.ReportPath(id), result.Report); err != nil {
 		return 0, err
 	}
@@ -280,24 +281,58 @@ func safeFileName(name string) string {
 	}, name)
 }
 
+// writeGzip writes a compressed file durably: once it returns, the complete
+// file is on disk, even if the machine crashes or loses power right after.
+// The file is written under a temporary name, synced, then renamed, so a
+// partial file never appears under the final name.
 func writeGzip(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	file, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	zip := gzip.NewWriter(file)
+	var buffer bytes.Buffer
+	zip := gzip.NewWriter(&buffer)
 	if _, err := zip.Write(data); err != nil {
-		file.Close()
 		return err
 	}
 	if err := zip.Close(); err != nil {
+		return err
+	}
+	return writeFileDurably(path, buffer.Bytes())
+}
+
+func writeFileDurably(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+
+	tmp := path + ".tmp"
+	file, err := os.Create(tmp)
+	if err != nil {
+		return err
+	}
+	if _, err := file.Write(data); err != nil {
 		file.Close()
 		return err
 	}
-	return file.Close()
+	if err := file.Sync(); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return err
+	}
+	return syncDir(dir)
+}
+
+// syncDir makes the creation or renaming of files in a directory durable
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	return d.Sync()
 }
 
 func readGzip(path string) ([]byte, error) {
@@ -521,13 +556,24 @@ func (s *Store) BuildLogPath(id int64) string {
 
 // RecordBuild stores a build and its log
 func (s *Store) RecordBuild(build *Build, output string) (int64, error) {
-	res, err := s.db.Exec(`INSERT INTO builds (team, tag, commit_id, image, status, started_at, ended_at, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.Exec(`INSERT INTO builds (team, tag, commit_id, image, status, started_at, ended_at, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		build.Team, build.Tag, build.Commit, build.Image, build.Status, build.StartedAt, build.EndedAt, build.Error)
 	if err != nil {
 		return 0, err
 	}
 	id, _ := res.LastInsertId()
-	return id, writeGzip(s.BuildLogPath(id), []byte(output))
+
+	// The log is on disk before the build is committed
+	if err := writeGzip(s.BuildLogPath(id), []byte(output)); err != nil {
+		return 0, err
+	}
+	return id, tx.Commit()
 }
 
 func (s *Store) scanBuilds(query string, args ...any) ([]Build, error) {
@@ -586,11 +632,7 @@ func (s *Store) SaveTeamStates(states []TeamState) error {
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(s.dir, "teams.json")
-	if err := os.WriteFile(path+".tmp", data, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(path+".tmp", path)
+	return writeFileDurably(filepath.Join(s.dir, "teams.json"), data)
 }
 
 func (s *Store) TeamStates() ([]TeamState, error) {
