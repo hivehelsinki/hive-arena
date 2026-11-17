@@ -168,6 +168,9 @@ func (l *Ladder) Play(ctx context.Context, kind string, config any, pool []Bot, 
 		return 0, err
 	}
 	log.Printf("Run %d (%s): %d bots, %d matches, deadline %s", runID, kind, len(pool), len(matches), deadline.Format(time.DateTime))
+	if err := l.Store.SetRunVersions(runID, l.serverImageID(ctx), gitRevision()); err != nil {
+		log.Printf("Run %d: could not record the versions: %s", runID, err)
+	}
 	defer SetActivity("")
 
 	// No match may go past the margin after the deadline (the start of the
@@ -226,6 +229,18 @@ func (l *Ladder) Play(ctx context.Context, kind string, config any, pool []Bot, 
 	}
 	log.Printf("Run %d: %s", runID, status)
 	return runID, nil
+}
+
+// serverImageID returns the ID of the arena server image the matches use
+func (l *Ladder) serverImageID(ctx context.Context) string {
+	if l.Config.Runner.ServerImage == "" {
+		return ""
+	}
+	id, err := docker(ctx, "image", "inspect", "--format", "{{.Id}}", l.Config.Runner.ServerImage)
+	if err != nil {
+		return ""
+	}
+	return id
 }
 
 // playMatch plays a match. A panic (a bug) fails the match, not the ladder.

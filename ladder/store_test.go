@@ -2,7 +2,9 @@ package main
 
 import (
 	"compress/gzip"
+	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -218,5 +220,45 @@ func TestRecordMatchRejectsUnseatedBots(t *testing.T) {
 	result.Bots[1].Seat = -1
 	if _, err := store.RecordMatch(0, result); err == nil {
 		t.Error("a bot without a seat should be an error, not a crash")
+	}
+}
+
+func TestMigrations(t *testing.T) {
+	dir := t.TempDir()
+
+	// A database of the first version, with data
+	store, err := OpenStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`DROP INDEX matches_map; CREATE TABLE runs_old AS SELECT id, kind, started_at, ended_at, status, config FROM runs; DROP TABLE run_bots; DROP TABLE runs;
+		ALTER TABLE runs_old RENAME TO runs; PRAGMA user_version = 1`); err != nil {
+		t.Fatal(err)
+	}
+	store.db.Exec(`INSERT INTO runs (kind, started_at, status, config) VALUES ('ladder', ?, 'complete', '{}')`, time.Now())
+	store.Close()
+
+	store, err = OpenStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	var version int
+	store.db.QueryRow(`PRAGMA user_version`).Scan(&version)
+	if version != len(migrations) {
+		t.Errorf("expected version %d, got %d", len(migrations), version)
+	}
+	if err := store.SetRunVersions(1, "sha256:x", "abc"); err != nil {
+		t.Error(err)
+	}
+	if backups, _ := filepath.Glob(filepath.Join(dir, "ladder-v1-*.db")); len(backups) != 1 {
+		t.Errorf("expected a copy of the database before the migration, got %v", backups)
+	}
+
+	// A database from a newer ladder is refused
+	store.db.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, len(migrations)+1))
+	if other, err := OpenStore(dir); err == nil {
+		other.Close()
+		t.Error("a database from a newer version should be refused")
 	}
 }

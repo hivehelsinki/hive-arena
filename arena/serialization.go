@@ -1,7 +1,10 @@
 package arena
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -42,10 +45,45 @@ type PersistedGame struct {
 	Map         string    `json:"map"`
 	CreatedDate time.Time `json:"createdDate"`
 	Players     []string  `json:"players"`
-	History     []Turn    `json:"history"`
+	History     []Turn    `json:"history"` // see WriteJSON before moving it
 
 	// Result is set once the game is over. Older reports do not have it.
 	Result *GameResult `json:"result,omitempty"`
+}
+
+// WriteJSON writes the game as JSON, one turn at a time: the reports of long
+// games are hundreds of MB, and encoding them at once would double the memory
+// they take
+func (g *PersistedGame) WriteJSON(w io.Writer) error {
+	out := bufio.NewWriterSize(w, 1<<16)
+
+	// Everything but the history, which goes last
+	head := *g
+	head.History = nil
+	data, err := json.Marshal(&head)
+	if err != nil {
+		return err
+	}
+	data = data[:len(data)-1] // without the closing brace
+	data = append(data, []byte(`,"history":[`)...)
+	if _, err := out.Write(data); err != nil {
+		return err
+	}
+
+	for i := range g.History {
+		if i > 0 {
+			out.WriteByte(',')
+		}
+		data, err := json.Marshal(&g.History[i])
+		if err != nil {
+			return err
+		}
+		if _, err := out.Write(data); err != nil {
+			return err
+		}
+	}
+	out.WriteString("]}\n")
+	return out.Flush()
 }
 
 type Turn struct {

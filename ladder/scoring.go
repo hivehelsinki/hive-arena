@@ -104,10 +104,11 @@ type HeadToHead struct {
 }
 
 type Standing struct {
-	Team   string           `json:"team"`
-	Commit string           `json:"commit"` // of its most recent match
-	Score  Score            `json:"score"`
-	PerMap map[string]Score `json:"perMap"`
+	Team   string `json:"team"`
+	Commit string `json:"commit"` // of its most recent match
+	Score  Score  `json:"score"`
+	// Per format (see Format.Key), e.g. "balanced:4"
+	PerFormat map[string]Score `json:"perFormat"`
 }
 
 type Leaderboard struct {
@@ -120,7 +121,7 @@ type Leaderboard struct {
 // results. Results must be ordered by match.
 func NewLeaderboard(results []BotResult) Leaderboard {
 	points := make(map[string][]int)
-	perMap := make(map[string]map[string][]int)
+	perFormat := make(map[string]map[string][]int)
 	commits := make(map[string]string)
 	h2h := make(map[string]map[string]HeadToHead)
 
@@ -148,10 +149,11 @@ func NewLeaderboard(results []BotResult) Leaderboard {
 
 		for _, r := range match {
 			points[r.Team] = append(points[r.Team], r.Points)
-			if perMap[r.Team] == nil {
-				perMap[r.Team] = make(map[string][]int)
+			if perFormat[r.Team] == nil {
+				perFormat[r.Team] = make(map[string][]int)
 			}
-			perMap[r.Team][r.Map] = append(perMap[r.Team][r.Map], r.Points)
+			key := Format{r.Map, r.Players}.Key()
+			perFormat[r.Team][key] = append(perFormat[r.Team][key], r.Points)
 			commits[r.Team] = r.Commit
 
 			for _, other := range match {
@@ -166,9 +168,9 @@ func NewLeaderboard(results []BotResult) Leaderboard {
 	var board Leaderboard
 	board.HeadToHead = h2h
 	for team, p := range points {
-		standing := Standing{Team: team, Commit: commits[team], Score: NewScore(p), PerMap: make(map[string]Score)}
-		for m, mp := range perMap[team] {
-			standing.PerMap[m] = NewScore(mp)
+		standing := Standing{Team: team, Commit: commits[team], Score: NewScore(p), PerFormat: make(map[string]Score)}
+		for f, fp := range perFormat[team] {
+			standing.PerFormat[f] = NewScore(fp)
 		}
 		board.Standings = append(board.Standings, standing)
 	}

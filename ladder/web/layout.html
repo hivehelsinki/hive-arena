@@ -22,7 +22,7 @@
 <table class="standings">
 <thead><tr>
 	<th>#</th><th>Team</th><th class="num">Score</th><th class="num"></th><th class="num">Games</th>
-	{{range .Maps}}<th class="num">{{.}}</th>{{end}}
+	{{range .Formats}}<th class="num" title="{{.}}">{{.Map}} <span class="dim">{{.Players}}p</span></th>{{end}}
 	<th>Version</th>
 </tr></thead>
 <tbody>
@@ -33,7 +33,7 @@
 	<td class="num strong">{{score $s.Score}}</td>
 	<td class="num dim">{{stderr $s.Score}}</td>
 	<td class="num">{{$s.Score.Games}}</td>
-	{{range $.Maps}}<td class="num">{{score (index $s.PerMap .)}}</td>{{end}}
+	{{range $.Formats}}<td class="num">{{score (index $s.PerFormat .Key)}}</td>{{end}}
 	<td class="mono">{{short $s.Commit}}</td>
 </tr>
 {{else}}

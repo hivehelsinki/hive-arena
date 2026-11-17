@@ -235,7 +235,15 @@ func serveWeb(ladder *Ladder) {
 		log.Fatal(err)
 	}
 	log.Printf("Website on %s", ladder.Config.Web.Listen)
-	log.Fatal(http.ListenAndServe(ladder.Config.Web.Listen, web.Handler()))
+	// No write timeout: backups and reports can take a while to download
+	server := &http.Server{
+		Addr:              ladder.Config.Web.Listen,
+		Handler:           web.Handler(),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+	}
+	log.Fatal(server.ListenAndServe())
 }
 
 func cmdWeb(ctx context.Context, args []string) {

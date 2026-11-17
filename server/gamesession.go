@@ -484,7 +484,7 @@ func (session *GameSession) persist() error {
 		return err
 	}
 
-	if err := json.NewEncoder(file).Encode(session.report()); err != nil {
+	if err := session.report().WriteJSON(file); err != nil {
 		file.Close()
 		return err
 	}

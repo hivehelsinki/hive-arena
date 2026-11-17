@@ -17,7 +17,7 @@ import (
 // Data under the store directory that is backed up, besides the database.
 // Repository mirrors and Docker images are not: they can be fetched or built again.
 var backupDirs = []string{"reports", "logs", "builds"}
-var backupFiles = []string{"teams.json"}
+var backupFiles = []string{"teams.json", "registry-last.json"}
 
 type BackupFile struct {
 	Path     string    `json:"path"` // relative to the data directory, with forward slashes
@@ -98,17 +98,18 @@ func (web *Web) handleBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now()
-	files, err := web.Store.BackupFiles()
-	if err != nil {
-		serverError(w, err)
-		return
-	}
+	// The snapshot first: every match it has then has its files in the list
 	snapshot, err := web.Store.SnapshotDatabase()
 	if err != nil {
 		serverError(w, err)
 		return
 	}
 	defer os.Remove(snapshot)
+	files, err := web.Store.BackupFiles()
+	if err != nil {
+		serverError(w, err)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/x-tar")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="ladder-backup-%s.tar"`, now.UTC().Format("2006-01-02T150405Z")))

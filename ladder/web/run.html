@@ -1,6 +1,7 @@
 {{define "content"}}
 <h1>{{runName .Run}}</h1>
 <p>{{if eq .Run.Kind "tournament"}}Tournament (not counted in the ladder). {{end}}Started {{time .Run.StartedAt}}{{with .Run.EndedAt}}, ended {{timeptr .}}{{end}}. Status: <span class="status-{{.Run.Status}}">{{.Run.Status}}</span>.</p>
+{{if .Run.ServerImage}}<p class="dim">Arena server image <span class="mono">{{short (trimPrefix .Run.ServerImage "sha256:")}}</span>, ladder version <span class="mono">{{revision .Run.LadderRevision}}</span>.</p>{{end}}
 
 <h2>Standings</h2>
 {{template "standings" .}}
@@ -16,4 +17,5 @@
 
 <h2>Matches</h2>
 {{template "matchrows" .Matches}}
+{{if .More}}<p><a href="/matches?run={{.Run.ID}}">All the matches of this run</a></p>{{end}}
 {{end}}

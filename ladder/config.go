@@ -36,6 +36,11 @@ func (f Format) String() string {
 	return fmt.Sprintf("%s (%d players)", f.Map, f.Players)
 }
 
+// Key identifies a format in the per-format scores
+func (f Format) Key() string {
+	return fmt.Sprintf("%s:%d", f.Map, f.Players)
+}
+
 // The schedule of the ladder runs. It is published on the website as is.
 type Schedule struct {
 	Times    []string `json:"times"`    // daily run start times, "15:04"
@@ -63,6 +68,7 @@ type Config struct {
 		ServerImage  string   `json:"serverImage"`
 		Cores        float64  `json:"cores"`
 		Memory       string   `json:"memory"`
+		ServerMemory string   `json:"serverMemory"`
 		Pids         int      `json:"pids"`
 		JoinTimeout  Duration `json:"joinTimeout"`
 		MatchTimeout Duration `json:"matchTimeout"`
@@ -118,6 +124,7 @@ func LoadConfig(path string) (*Config, error) {
 	config.Runner.ServerImage = defaults.ServerImage
 	config.Runner.Cores = defaults.Cores
 	config.Runner.Memory = defaults.Memory
+	config.Runner.ServerMemory = defaults.ServerMemory
 	config.Runner.Pids = defaults.Pids
 	config.Runner.JoinTimeout = Duration{defaults.JoinTimeout}
 	config.Runner.MatchTimeout = Duration{defaults.MatchTimeout}
@@ -164,7 +171,7 @@ func (c *Config) validate() error {
 	}
 
 	r := c.Runner
-	if r.ServerImage == "" || r.Memory == "" || r.Cores <= 0 || r.Pids <= 0 || r.JoinTimeout.Duration <= 0 || r.MatchTimeout.Duration <= 0 {
+	if r.ServerImage == "" || r.Memory == "" || r.ServerMemory == "" || r.Cores <= 0 || r.Pids <= 0 || r.JoinTimeout.Duration <= 0 || r.MatchTimeout.Duration <= 0 {
 		return fmt.Errorf("runner: serverImage and memory must be set, and cores, pids, joinTimeout and matchTimeout positive")
 	}
 	if c.Build.Timeout.Duration <= 0 || c.Build.KeepImages < 1 || c.Build.MaxImageMB < 0 {
@@ -196,6 +203,7 @@ func (c *Config) RunnerConfig() RunnerConfig {
 	config.ServerImage = c.Runner.ServerImage
 	config.Cores = c.Runner.Cores
 	config.Memory = c.Runner.Memory
+	config.ServerMemory = c.Runner.ServerMemory
 	config.Pids = c.Runner.Pids
 	config.JoinTimeout = c.Runner.JoinTimeout.Duration
 	config.MatchTimeout = c.Runner.MatchTimeout.Duration

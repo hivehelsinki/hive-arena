@@ -1,10 +1,12 @@
 package main
 
 import (
+	"compress/gzip"
 	"embed"
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"io/fs"
 	"log"
 	"net/http"
@@ -28,6 +30,10 @@ type Web struct {
 }
 
 func NewWeb(config *Config, store *Store) (*Web, error) {
+	loc, err := config.Location()
+	if err != nil {
+		loc = time.Local
+	}
 	funcs := template.FuncMap{
 		"revision": func(revision string) string {
 			base, dirty := strings.CutSuffix(revision, "-dirty")
@@ -46,17 +52,12 @@ func NewWeb(config *Config, store *Store) (*Web, error) {
 			return commit
 		},
 		"time": func(t time.Time) string {
-			loc, err := config.Location()
-			if err != nil {
-				loc = time.Local
-			}
 			return t.In(loc).Format("2006-01-02 15:04")
 		},
 		"timeptr": func(t *time.Time) string {
 			if t == nil {
 				return ""
 			}
-			loc, _ := config.Location()
 			return t.In(loc).Format("2006-01-02 15:04")
 		},
 		"duration": func(a, b time.Time) string {
@@ -92,7 +93,8 @@ func NewWeb(config *Config, store *Store) (*Web, error) {
 			}
 			return ""
 		},
-		"add": func(a, b int) int { return a + b },
+		"add":        func(a, b int) int { return a + b },
+		"trimPrefix": strings.TrimPrefix,
 		"runName": func(run Run) string {
 			var config struct{ Name string }
 			json.Unmarshal(run.Config, &config)
@@ -198,14 +200,15 @@ func pathID(r *http.Request) (int64, bool) {
 }
 
 // Map columns of the leaderboard: the maps of the schedule, in order
-func (web *Web) maps() []string {
-	var maps []string
+// formats returns the formats of the schedule, for the per-format scores
+func (web *Web) formats() []Format {
+	var formats []Format
 	for _, f := range web.Config.Schedule.Formats {
-		if !slices.Contains(maps, f.Map) {
-			maps = append(maps, f.Map)
+		if !slices.Contains(formats, f) {
+			formats = append(formats, f)
 		}
 	}
-	return maps
+	return formats
 }
 
 func (web *Web) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
@@ -223,7 +226,7 @@ func (web *Web) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		"Board":   board,
 		"Teams":   teams,
 		"Runs":    runs,
-		"Maps":    web.maps(),
+		"Formats": web.formats(),
 		"NextRun": web.Config.Schedule.NextRunTime(time.Now(), loc),
 	})
 }
@@ -249,18 +252,25 @@ func (web *Web) handleRun(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	matches, err := web.Store.Matches(MatchFilter{RunID: id})
+	matches, err := web.Store.Matches(MatchFilter{RunID: id, Limit: runPageMatches + 1})
 	if err != nil {
 		serverError(w, err)
 		return
+	}
+	more := len(matches) > runPageMatches
+	if more {
+		matches = matches[:runPageMatches]
 	}
 	board := NewLeaderboard(results)
 	var teams []string
 	for _, s := range board.Standings {
 		teams = append(teams, s.Team)
 	}
-	web.render(w, "run", map[string]any{"Run": run, "Board": board, "Teams": teams, "Maps": web.maps(), "Matches": matches})
+	web.render(w, "run", map[string]any{"Run": run, "Board": board, "Teams": teams, "Formats": web.formats(), "Matches": matches, "More": more})
 }
+
+// Matches shown on a run's page, the others are on /matches?run=
+const runPageMatches = 100
 
 func matchFilter(r *http.Request) MatchFilter {
 	q := r.URL.Query()
@@ -312,6 +322,7 @@ func serveGzip(w http.ResponseWriter, r *http.Request, path string, contentType 
 		return
 	}
 	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	if download != "" {
 		w.Header().Set("Content-Disposition", `attachment; filename="`+download+`"`)
@@ -323,12 +334,19 @@ func serveGzip(w http.ResponseWriter, r *http.Request, path string, contentType 
 		http.ServeFile(w, r, path)
 		return
 	}
-	data, err := readGzip(path)
+	// Decompressed as it is sent: reports can be large
+	file, err := os.Open(path)
 	if err != nil {
 		serverError(w, err)
 		return
 	}
-	w.Write(data)
+	defer file.Close()
+	zip, err := gzip.NewReader(file)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	io.Copy(w, zip)
 }
 
 func (web *Web) handleReport(w http.ResponseWriter, r *http.Request) {
@@ -405,7 +423,7 @@ func (web *Web) handleTeam(w http.ResponseWriter, r *http.Request) {
 	}
 	web.render(w, "team", map[string]any{
 		"Name": name, "State": state, "Builds": builds, "Matches": matches,
-		"Standing": standing, "Maps": web.maps(), "H2H": board.HeadToHead[name],
+		"Standing": standing, "Formats": web.formats(), "H2H": board.HeadToHead[name],
 	})
 }
 
@@ -419,7 +437,7 @@ func (web *Web) apiLeaderboard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (web *Web) apiRuns(w http.ResponseWriter, r *http.Request) {
-	runs, err := web.Store.Runs("ladder", 100)
+	runs, err := web.Store.Runs("", 100)
 	if err != nil {
 		serverError(w, err)
 		return

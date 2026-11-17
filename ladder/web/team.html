@@ -17,8 +17,8 @@
 <h2>Current score</h2>
 <p><span class="big">{{score .Score}}</span> <span class="dim">{{stderr .Score}}</span> over {{.Score.Games}} games.</p>
 <table>
-<thead><tr>{{range $.Maps}}<th class="num">{{.}}</th>{{end}}</tr></thead>
-<tbody><tr>{{range $.Maps}}<td class="num">{{score (index $.Standing.PerMap .)}}</td>{{end}}</tr></tbody>
+<thead><tr>{{range $.Formats}}<th class="num" title="{{.}}">{{.Map}} <span class="dim">{{.Players}}p</span></th>{{end}}</tr></thead>
+<tbody><tr>{{range $.Formats}}<td class="num">{{score (index $.Standing.PerFormat .Key)}}</td>{{end}}</tr></tbody>
 </table>
 {{end}}
 

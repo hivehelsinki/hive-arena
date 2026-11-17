@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -86,11 +87,68 @@ func OpenStore(dir string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := db.Exec(schema + buildsSchema); err != nil {
+	store := &Store{db: db, dir: dir}
+	if err := store.migrate(); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("creating the schema: %w", err)
+		return nil, err
 	}
-	return &Store{db: db, dir: dir}, nil
+	return store, nil
+}
+
+// Schema versions: migrations[i] brings the database from version i to i+1.
+// Existing migrations must never change: add new ones at the end.
+var migrations = []string{
+	schema + buildsSchema,
+	`ALTER TABLE runs ADD COLUMN server_image TEXT NOT NULL DEFAULT '';
+	ALTER TABLE runs ADD COLUMN ladder_revision TEXT NOT NULL DEFAULT '';
+	CREATE INDEX IF NOT EXISTS matches_map ON matches(map);`,
+}
+
+// migrate brings the database schema to the current version. A database
+// with data is first copied, in case a migration goes wrong.
+func (s *Store) migrate() error {
+	var version int
+	if err := s.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		return err
+	}
+	if version > len(migrations) {
+		return fmt.Errorf("the database is from a newer version of the ladder (schema version %d, this one knows %d)", version, len(migrations))
+	}
+	if version == len(migrations) {
+		return nil
+	}
+
+	var tables int
+	s.db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'`).Scan(&tables)
+	if tables > 0 {
+		backup := filepath.Join(s.dir, fmt.Sprintf("ladder-v%d-%s.db", version, time.Now().UTC().Format("20060102T150405Z")))
+		if _, err := s.db.Exec(`VACUUM INTO ?`, backup); err != nil {
+			return fmt.Errorf("copying the database before migrating it: %w", err)
+		}
+		log.Printf("Database copied to %s before migrating it", backup)
+	}
+
+	for v := version; v < len(migrations); v++ {
+		tx, err := s.db.Begin()
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(migrations[v]); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("migrating the database to version %d: %w", v+1, err)
+		}
+		if _, err := tx.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, v+1)); err != nil {
+			tx.Rollback()
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	if tables > 0 {
+		log.Printf("Database migrated from version %d to %d", version, len(migrations))
+	}
+	return nil
 }
 
 // removeOld removes the files matching a pattern older than the given age
@@ -129,6 +187,15 @@ type Run struct {
 	Status    RunStatus       `json:"status"`
 	Config    json.RawMessage `json:"config"`
 	Bots      []Bot           `json:"bots"`
+	// What played the run: the arena server image, and the ladder's revision
+	ServerImage    string `json:"serverImage,omitempty"`
+	LadderRevision string `json:"ladderRevision,omitempty"`
+}
+
+// SetRunVersions records what played a run
+func (s *Store) SetRunVersions(id int64, serverImage string, ladderRevision string) error {
+	_, err := s.db.Exec(`UPDATE runs SET server_image = ?, ladder_revision = ? WHERE id = ?`, serverImage, ladderRevision, id)
+	return err
 }
 
 // CreateRun records the start of a run, with its frozen pool of bots
@@ -172,7 +239,7 @@ func (s *Store) MarkInterruptedRuns() error {
 }
 
 func (s *Store) scanRuns(query string, args ...any) ([]Run, error) {
-	rows, err := s.db.Query(`SELECT id, kind, started_at, ended_at, status, config FROM runs `+query, args...)
+	rows, err := s.db.Query(`SELECT id, kind, started_at, ended_at, status, config, server_image, ladder_revision FROM runs `+query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +250,7 @@ func (s *Store) scanRuns(query string, args ...any) ([]Run, error) {
 		var run Run
 		var ended sql.NullTime
 		var config string
-		if err := rows.Scan(&run.ID, &run.Kind, &run.StartedAt, &ended, &run.Status, &config); err != nil {
+		if err := rows.Scan(&run.ID, &run.Kind, &run.StartedAt, &ended, &run.Status, &config, &run.ServerImage, &run.LadderRevision); err != nil {
 			return nil, err
 		}
 		if ended.Valid {

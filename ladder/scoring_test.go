@@ -105,7 +105,7 @@ func TestLeaderboard(t *testing.T) {
 	if !slices.Equal(order, []string{"b", "a", "c"}) {
 		t.Errorf("unexpected order %v", order)
 	}
-	if a := board.Standings[1]; a.Commit != "a2" || a.Score.Games != 2 || a.PerMap["m1"].Mean != 60 {
+	if a := board.Standings[1]; a.Commit != "a2" || a.Score.Games != 2 || a.PerFormat["m1:0"].Mean != 60 {
 		t.Errorf("unexpected standing: %+v", a)
 	}
 

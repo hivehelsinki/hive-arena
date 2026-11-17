@@ -22,6 +22,9 @@ type RunnerConfig struct {
 	Memory      string  // memory limit per bot, in docker format (e.g. "256m")
 	Pids        int     // process limit per bot
 	TempDir     string  // where reports are downloaded (default: the system's)
+	// Memory limit of the server container, in docker format. The server
+	// keeps the whole history of the game in memory.
+	ServerMemory string
 
 	JoinTimeout  time.Duration // time for all bots to join
 	MatchTimeout time.Duration // time for the whole match
@@ -39,20 +42,20 @@ func DefaultRunnerConfig() RunnerConfig {
 		MatchTimeout: 30 * time.Minute,
 		ExitGrace:    5 * time.Second,
 		LogLimit:     256 * 1024,
+		ServerMemory: "2g",
 	}
 }
 
 // Limits of the server container, and of the output docker keeps per container
 const (
-	serverMemory = "1g"
 	serverPids   = "256"
 	dockerLogMax = "1m"
 )
 
 type Bot struct {
-	Name   string
-	Image  string
-	Commit string // for the records only
+	Name   string `json:"name"`
+	Image  string `json:"image"`
+	Commit string `json:"commit"` // for the records only
 }
 
 type Match struct {
@@ -213,7 +216,7 @@ func (run *matchRun) play(ctx context.Context) (*MatchResult, error) {
 	// The server accepts a single game (the runner's), and keeps no files
 	if _, err := docker(ctx, "run", "-d", label, "--name", run.server(),
 		"--pull=never",
-		"--memory", serverMemory, "--memory-swap", serverMemory, "--pids-limit", serverPids,
+		"--memory", run.config.ServerMemory, "--memory-swap", run.config.ServerMemory, "--pids-limit", serverPids,
 		"--log-driver", "json-file", "--log-opt", "max-size="+dockerLogMax, "--log-opt", "max-file=1",
 		"-p", "127.0.0.1::8080",
 		run.config.ServerImage, "server/server", "-p", "8080", "--dev", "-max-games", "1", "-history="); err != nil {

@@ -405,7 +405,10 @@ func (server *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 			writeJson(w, "Game is not over: "+id, http.StatusBadRequest)
 			return
 		}
-		writeJson(w, report, http.StatusOK)
+		w.Header().Set("Content-Type", "application/json")
+		if err := report.WriteJSON(w); err != nil {
+			log.Printf("Could not send the report of game %s: %s", id, err)
+		}
 		return
 	}
 
