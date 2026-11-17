@@ -1,0 +1,138 @@
+package main
+
+import (
+	"encoding/json"
+	"testing"
+	"time"
+
+	"github.com/hivehelsinki/hive-arena/arena"
+)
+
+func newTestStore(t *testing.T) *Store {
+	t.Helper()
+	store, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	return store
+}
+
+// fakeResult builds a match result where bots are given with their flowers, seated in order
+func fakeResult(mapname string, bots []Bot, flowers []uint, statuses []BotStatus) *MatchResult {
+	result := &MatchResult{
+		GameID:  "game",
+		Map:     mapname,
+		Started: time.Now(),
+		Ended:   time.Now(),
+		Report:  json.RawMessage(`{"id":"game"}`),
+		Result:  &arena.GameResult{Turns: 100},
+	}
+	for i, bot := range bots {
+		result.Result.Players = append(result.Result.Players, arena.PlayerResult{Name: bot.Name, Flowers: flowers[i]})
+		result.Bots = append(result.Bots, BotOutcome{Bot: bot, Seat: i, Status: statuses[i], Log: "log of " + bot.Name})
+	}
+	return result
+}
+
+func TestStoreRunsAndLeaderboard(t *testing.T) {
+	store := newTestStore(t)
+
+	a := Bot{Name: "a", Image: "img-a", Commit: "c1"}
+	b := Bot{Name: "b", Image: "img-b", Commit: "c2"}
+	c := Bot{Name: "c", Image: "img-c", Commit: "c3"}
+
+	ok := []BotStatus{Finished, Finished, Finished}
+
+	// An old run, outside of the window
+	old, _ := store.CreateRun("ladder", map[string]any{"repeats": 1}, []Bot{a, b, c})
+	store.RecordMatch(old, fakeResult("m", []Bot{a, b, c}, []uint{0, 0, 9}, ok))
+	store.FinishRun(old, RunComplete)
+
+	run1, err := store.CreateRun("ladder", map[string]any{"repeats": 1}, []Bot{a, b, c})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m1, err := store.RecordMatch(run1, fakeResult("m", []Bot{a, b, c}, []uint{5, 3, 0}, ok))
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.FinishRun(run1, RunComplete)
+
+	run2, _ := store.CreateRun("ladder", map[string]any{"repeats": 1}, []Bot{a, b, c})
+	store.RecordMatch(run2, fakeResult("m", []Bot{a, b, c}, []uint{5, 3, 9}, []BotStatus{Finished, Finished, Crashed}))
+	store.FinishRun(run2, RunIncomplete)
+
+	// Still running: not counted
+	run3, _ := store.CreateRun("ladder", nil, []Bot{a, b, c})
+	store.RecordMatch(run3, fakeResult("m", []Bot{a, b, c}, []uint{0, 0, 9}, ok))
+
+	board, runs, err := store.Leaderboard(2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runs) != 2 || runs[0].ID != run2 || runs[1].ID != run1 || len(runs[0].Bots) != 3 {
+		t.Fatalf("unexpected runs in the window: %+v", runs)
+	}
+
+	// a: 60, 60 / b: 30, 30 / c: 0 (last), 0 (crashed)
+	means := map[string]float64{}
+	for _, s := range board.Standings {
+		means[s.Team] = s.Score.Mean
+	}
+	if means["a"] != 60 || means["b"] != 30 || means["c"] != 0 || board.Standings[0].Team != "a" {
+		t.Errorf("unexpected standings: %+v", board.Standings)
+	}
+
+	// Match details and files
+	match, err := store.Match(m1)
+	if err != nil || match == nil {
+		t.Fatalf("match not found: %v", err)
+	}
+	if match.RunID != run1 || len(match.Bots) != 3 || match.Bots[0].Points != 60 || match.Bots[0].Commit != "c1" {
+		t.Errorf("unexpected match: %+v", match)
+	}
+	report, err := readGzip(store.ReportPath(m1))
+	if err != nil || string(report) != `{"id":"game"}` {
+		t.Errorf("unexpected report: %s, %v", report, err)
+	}
+	log, err := readGzip(store.LogPath(m1, "b"))
+	if err != nil || string(log) != "log of b" {
+		t.Errorf("unexpected log: %s, %v", log, err)
+	}
+
+	// Void matches are not counted
+	store.SetVoid(m1, true, "test")
+	board, _, _ = store.Leaderboard(2)
+	for _, s := range board.Standings {
+		if s.Score.Games != 1 {
+			t.Errorf("void match counted: %+v", s)
+		}
+	}
+
+	// Filters
+	if matches, _ := store.Matches(MatchFilter{RunID: run2}); len(matches) != 1 {
+		t.Errorf("expected 1 match in run 2, got %d", len(matches))
+	}
+	if matches, _ := store.Matches(MatchFilter{Team: "a", Limit: 2}); len(matches) != 2 || matches[0].ID < matches[1].ID {
+		t.Errorf("expected the 2 most recent matches, got %+v", matches)
+	}
+
+	// Interrupted runs
+	store.MarkInterruptedRuns()
+	if run, _ := store.Run(run3); run.Status != RunIncomplete || run.EndedAt == nil {
+		t.Errorf("expected the running run to be marked incomplete: %+v", run)
+	}
+}
+
+func TestStoreMatchWithoutRun(t *testing.T) {
+	store := newTestStore(t)
+	id, err := store.RecordMatch(0, fakeResult("m", []Bot{{Name: "x"}, {Name: "y"}}, []uint{1, 2}, []BotStatus{Finished, Finished}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	match, _ := store.Match(id)
+	if match == nil || match.RunID != 0 || match.Bots[1].Points != 60 {
+		t.Errorf("unexpected match: %+v", match)
+	}
+}

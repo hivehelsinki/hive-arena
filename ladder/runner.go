@@ -41,8 +41,9 @@ func DefaultRunnerConfig() RunnerConfig {
 }
 
 type Bot struct {
-	Name  string
-	Image string
+	Name   string
+	Image  string
+	Commit string // for the records only
 }
 
 type Match struct {

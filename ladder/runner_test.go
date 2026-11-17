@@ -39,10 +39,10 @@ func TestRunMatch(t *testing.T) {
 	runner := Runner{Config: config}
 
 	match := Match{Map: "tiny", Bots: []Bot{
-		{"good", "example-agent-go"},
-		{"crash", "hive-ladder-crashbot"},
-		{"nojoin", "busybox"},
-		{"missing", "hive-ladder-no-such-image"},
+		{Name: "good", Image: "example-agent-go"},
+		{Name: "crash", Image: "hive-ladder-crashbot"},
+		{Name: "nojoin", Image: "busybox"},
+		{Name: "missing", Image: "hive-ladder-no-such-image"},
 	}}
 
 	// Slow: once the crashing bot is gone, each turn waits for the turn timeout
@@ -95,8 +95,8 @@ func TestNoJoinDoesNotWaitForTimeout(t *testing.T) {
 
 	start := time.Now()
 	result, err := runner.Run(context.Background(), Match{Map: "tiny", Bots: []Bot{
-		{"good", "example-agent-go"},
-		{"nojoin", "busybox"},
+		{Name: "good", Image: "example-agent-go"},
+		{Name: "nojoin", Image: "busybox"},
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -113,10 +113,10 @@ func TestValidateMatch(t *testing.T) {
 	if validateMatch(Match{Map: "tiny"}) == nil {
 		t.Error("a match without bots should be invalid")
 	}
-	if validateMatch(Match{Map: "tiny", Bots: []Bot{{"a", "x"}, {"a", "y"}}}) == nil {
+	if validateMatch(Match{Map: "tiny", Bots: []Bot{{Name: "a", Image: "x"}, {Name: "a", Image: "y"}}}) == nil {
 		t.Error("duplicate names should be invalid")
 	}
-	if validateMatch(Match{Map: "tiny", Bots: []Bot{{"a", "x"}, {"b", "y"}}}) != nil {
+	if validateMatch(Match{Map: "tiny", Bots: []Bot{{Name: "a", Image: "x"}, {Name: "b", Image: "y"}}}) != nil {
 		t.Error("valid match rejected")
 	}
 }
