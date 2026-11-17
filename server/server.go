@@ -23,13 +23,21 @@ import (
 const GameStartTimeout = 5 * time.Minute
 
 var MapDir = "maps"
-var HistoryDir = "history"
+var HistoryDir = "history" // empty: reports are not saved
+
+// Maximum number of games the server creates in its lifetime (0: no limit)
+var MaxGames = 0
+
+// Maximum size of a request body
+const MaxBodySize = 1 << 20
 
 type Server struct {
 	mutex sync.Mutex
 
 	Maps     map[string]arena.MapData
 	Sessions map[string]*GameSession
+	JoinIDs  map[string]*GameSession // private game IDs of reserved seats
+	created  int
 }
 
 func loadMaps() map[string]arena.MapData {
@@ -88,10 +96,32 @@ func (server *Server) handleNewGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var names []string
+	if namesStr := r.URL.Query().Get("names"); namesStr != "" {
+		names = strings.Split(namesStr, ",")
+		if len(names) != players || slices.Contains(names, "") || len(slices.Compact(slices.Sorted(slices.Values(names)))) != len(names) {
+			writeJson(w, "Invalid names: there must be one unique name per player", http.StatusBadRequest)
+			return
+		}
+	}
+
 	server.mutex.Lock()
+	if MaxGames > 0 && server.created >= MaxGames {
+		server.mutex.Unlock()
+		writeJson(w, "This server does not accept new games", http.StatusForbidden)
+		return
+	}
+	server.created++
 	id := GenerateUniqueID(server.Sessions)
 	game := NewGameSession(id, players, mapname, mapdata)
 	server.Sessions[id] = game
+	var joinIDs map[string]string
+	if names != nil {
+		joinIDs = game.ReserveSeats(names)
+		for _, joinID := range joinIDs {
+			server.JoinIDs[joinID] = game
+		}
+	}
 	server.mutex.Unlock()
 
 	time.AfterFunc(GameStartTimeout, func() { server.removeIfNotStarted(id) })
@@ -99,13 +129,30 @@ func (server *Server) handleNewGame(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Created game %s (%s, %d players)", id, mapname, players)
 
-	writeJson(w, map[string]any{
+	response := map[string]any{
 		"id":          game.ID,
 		"numPlayers":  players,
 		"map":         game.Map,
 		"createdDate": game.CreatedDate,
 		"adminToken":  game.AdminToken,
-	}, http.StatusOK)
+	}
+	if joinIDs != nil {
+		response["joinIds"] = joinIDs
+	}
+	writeJson(w, response, http.StatusOK)
+}
+
+// removeGame forgets a game, with the private IDs of its reserved seats.
+// The server mutex must be held.
+func (server *Server) removeGame(id string) {
+	game := server.Sessions[id]
+	if game == nil {
+		return
+	}
+	for joinID := range game.JoinIDs {
+		delete(server.JoinIDs, joinID)
+	}
+	delete(server.Sessions, id)
 }
 
 func (server *Server) removeIfNotStarted(id string) {
@@ -114,7 +161,7 @@ func (server *Server) removeIfNotStarted(id string) {
 
 	game := server.Sessions[id]
 	if game != nil && !game.Started() {
-		delete(server.Sessions, id)
+		server.removeGame(id)
 		game.CloseSockets()
 		log.Printf("Removed game %s because of timeout", id)
 	}
@@ -125,19 +172,27 @@ func (server *Server) removeIfOver(id string) {
 	defer server.mutex.Unlock()
 
 	game := server.Sessions[id]
-	if game != nil && game.IsOver() {
-		delete(server.Sessions, id)
+	if game == nil {
+		return
+	}
+	if game.IsOver() {
+		server.removeGame(id)
 		return
 	}
 
 	time.AfterFunc(GameStartTimeout, func() { server.removeIfOver(id) })
 }
 
+// getGameSync returns the game with the given public ID, or with the
+// private ID of one of its reserved seats
 func (server *Server) getGameSync(id string) *GameSession {
 	server.mutex.Lock()
 	defer server.mutex.Unlock()
 
-	return server.Sessions[id]
+	if game := server.Sessions[id]; game != nil {
+		return game
+	}
+	return server.JoinIDs[id]
 }
 
 func (server *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -175,9 +230,15 @@ func (server *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	player := game.AddPlayer(name)
-	if player == nil {
-		writeJson(w, "Game is full", http.StatusBadRequest)
+	var player *Player
+	var err error
+	if id == game.ID {
+		player, err = game.AddPlayer(name)
+	} else {
+		player, err = game.AddReservedPlayer(id)
+	}
+	if err != nil {
+		writeJson(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -247,7 +308,7 @@ func (server *Server) handleOrders(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var orders []*arena.Order
-	err = json.NewDecoder(r.Body).Decode(&orders)
+	err = json.NewDecoder(http.MaxBytesReader(w, r.Body, MaxBodySize)).Decode(&orders)
 	if err != nil {
 		writeJson(w, "Invalid or malformed JSON: "+err.Error(), http.StatusBadRequest)
 		return
@@ -318,7 +379,7 @@ var validID = regexp.MustCompile(`^[a-z0-9-]+$`)
 // findReport looks for the history file of a past game, and returns its path,
 // or an empty string. If several games had the same ID, the most recent wins.
 func findReport(id string) string {
-	if !validID.MatchString(id) {
+	if HistoryDir == "" || !validID.MatchString(id) {
 		return ""
 	}
 
@@ -370,8 +431,10 @@ func (server *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /report", server.handleReport)
 	mux.HandleFunc("GET /forfeit", server.handleForfeit)
 
-	fs := http.FileServer(http.Dir(HistoryDir))
-	mux.Handle("GET /history/", http.StripPrefix("/history/", fs))
+	if HistoryDir != "" {
+		fs := http.FileServer(http.Dir(HistoryDir))
+		mux.Handle("GET /history/", http.StripPrefix("/history/", fs))
+	}
 
 	return mux
 }
@@ -381,6 +444,7 @@ func RunServer(port int) {
 	server := Server{
 		Maps:     loadMaps(),
 		Sessions: make(map[string]*GameSession),
+		JoinIDs:  make(map[string]*GameSession),
 	}
 
 	log.Printf("Listening on port %d", port)

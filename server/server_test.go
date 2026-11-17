@@ -31,6 +31,7 @@ func newTestServerWithState(t *testing.T) (*httptest.Server, *Server) {
 	server := &Server{
 		Maps:     map[string]arena.MapData{"tiny": mapdata},
 		Sessions: make(map[string]*GameSession),
+		JoinIDs:  make(map[string]*GameSession),
 	}
 
 	httpServer := httptest.NewServer(server.Handler())
@@ -289,4 +290,79 @@ func TestForfeitRoute(t *testing.T) {
 	if state.Turn != 1 {
 		t.Errorf("the turn should not wait for the forfeited player, current turn is %d", state.Turn)
 	}
+}
+
+type reservedGame struct {
+	Id         string
+	AdminToken string
+	JoinIds    map[string]string
+}
+
+func TestReservedSeats(t *testing.T) {
+	server := newTestServer(t)
+
+	var game reservedGame
+	call(t, server, "GET", "/newgame?map=tiny&players=2&names=alpha,beta", "", http.StatusOK, &game)
+	if len(game.JoinIds) != 2 || game.JoinIds["alpha"] == "" || game.JoinIds["beta"] == "" || game.JoinIds["alpha"] == game.JoinIds["beta"] {
+		t.Fatalf("expected a private game ID per name, got %v", game.JoinIds)
+	}
+
+	// The public ID cannot be used to join
+	call(t, server, "GET", "/join?id="+game.Id+"&name=alpha", "", http.StatusBadRequest, nil)
+
+	// A private ID joins under its own name, whatever name is given, and only once
+	var player struct {
+		Id    int
+		Token string
+	}
+	alpha := game.JoinIds["alpha"]
+	call(t, server, "GET", "/join?id="+alpha+"&name=beta", "", http.StatusOK, &player)
+	call(t, server, "GET", "/join?id="+alpha+"&name=alpha", "", http.StatusBadRequest, nil)
+
+	var status struct {
+		Games []struct {
+			Id      string
+			Players []string
+		}
+	}
+	call(t, server, "GET", "/status", "", http.StatusOK, &status)
+	if len(status.Games) != 1 || status.Games[0].Id != game.Id || len(status.Games[0].Players) != 1 || status.Games[0].Players[0] != "alpha" {
+		t.Fatalf("expected alpha in the public game, got %+v", status.Games)
+	}
+
+	// The private ID works for all the player routes
+	call(t, server, "GET", "/join?id="+game.JoinIds["beta"]+"&name=x", "", http.StatusOK, nil)
+	call(t, server, "GET", "/game?id="+alpha+"&token="+player.Token, "", http.StatusOK, nil)
+	call(t, server, "POST", "/orders?id="+alpha+"&token="+player.Token+"&turn=0", "[]", http.StatusOK, nil)
+}
+
+func TestInvalidReservedNames(t *testing.T) {
+	server := newTestServer(t)
+	for _, names := range []string{"alpha", "alpha,alpha", "alpha,", "a,b,c"} {
+		call(t, server, "GET", "/newgame?map=tiny&players=2&names="+names, "", http.StatusBadRequest, nil)
+	}
+}
+
+func TestMaxGames(t *testing.T) {
+	server := newTestServer(t)
+	MaxGames = 1
+	t.Cleanup(func() { MaxGames = 0 })
+
+	call(t, server, "GET", "/newgame?map=tiny&players=2", "", http.StatusOK, nil)
+	call(t, server, "GET", "/newgame?map=tiny&players=2", "", http.StatusForbidden, nil)
+}
+
+func TestOrdersBodyLimit(t *testing.T) {
+	server := newTestServer(t)
+	game := startTestGame(t, server, 2)
+
+	body := "[" + strings.Repeat(" ", MaxBodySize) + "]"
+	call(t, server, "POST", fmt.Sprintf("/orders?id=%s&token=%s&turn=0", game.Id, game.Players[0].Token), body, http.StatusBadRequest, nil)
+}
+
+func TestNoHistory(t *testing.T) {
+	server := newTestServer(t)
+	HistoryDir = ""
+
+	call(t, server, "GET", "/report?id=unknown-game", "", http.StatusNotFound, nil)
 }

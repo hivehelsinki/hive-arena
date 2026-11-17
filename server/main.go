@@ -27,7 +27,8 @@ func main() {
 	port := flag.Int("p", 8000, "port on which the server will listen")
 	flag.BoolVar(&DevMode, "dev", false, "run the server in development mode")
 	flag.StringVar(&MapDir, "maps", MapDir, "directory to load the maps from")
-	flag.StringVar(&HistoryDir, "history", HistoryDir, "directory to save the reports of finished games in")
+	flag.StringVar(&HistoryDir, "history", HistoryDir, "directory to save the reports of finished games in (empty: not saved)")
+	flag.IntVar(&MaxGames, "max-games", MaxGames, "maximum number of games the server creates (0: no limit)")
 	flag.Parse()
 
 	fmt.Println("git revision: " + GitRevision())

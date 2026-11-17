@@ -10,8 +10,13 @@ Query string parameters:
 
 - `map`: the name of the map to load. See the maps folder in the Arena repository to see the available maps.
 - `players`: the number of players to spawn on the map. Between 1 and 6.
+- `names` (optional): comma-separated names of the players, one per player, all different. The seats are then reserved (see below).
 
 This creates a new game on the server, with a randomly generated ID such as `blithe-lavender-tapir-4`. The game is then expecting players to join.
+
+**Reserved seats**: with `names`, the response also lists one private game ID per name (`joinIds`). Each player must be given its own private ID: it joins under its reserved name (whatever `name` it sends), only once, and can use that ID instead of the public one for all the other routes. The public ID then cannot be used to join. This lets organizers (such as the ladder) make sure that each agent plays under its own name, and that no one takes someone else's seat.
+
+A server started with `-max-games N` creates at most N games, then answers Forbidden.
 
 Response:
 
@@ -21,7 +26,8 @@ Response:
 	"numPlayer": (int) the number of players the games expects (equal to the 'players' parameter),
 	"map": (string) the chosen map (equal to the 'map' parameter),
 	"createdDate": (string) the time of creation of the game, in ISO 8601 format,
-	"adminToken": (string) an access token used to see the full state of the game (see '/game' route)
+	"adminToken": (string) an access token used to see the full state of the game (see '/game' route),
+	"joinIds": (dictionary, name to string) the private game ID of each reserved seat, only with 'names'
 }
 ```
 
@@ -56,10 +62,10 @@ Allows an agent to join a game that was created, but has not yet started.
 
 Query string parameters:
 
-- `id`: the ID of the game to join
-- `name`: the name of the agent or team to announce to the server
+- `id`: the ID of the game to join (or the private ID of a reserved seat)
+- `name`: the name of the agent or team to announce to the server (ignored for reserved seats)
 
-If the game is full, the response is the JSON string `"Game is full"`, and error code Bad Request. Otherwise:
+If the game is full, the response is the JSON string `"Game is full"`, and error code Bad Request. The same goes for a game with reserved seats joined with its public ID, or a reserved seat already taken. Otherwise:
 
 ```
 {
@@ -144,6 +150,8 @@ Commands with an unknown type, or a missing or unknown direction when the type n
 If the token is correct, the JSON is valid, and the turn is the current one, the HTTP status code is always OK. This does not relate to whether the commands were successfully applied.
 
 If the turn is not the current one (for example, if the commands were sent after the turn timeout), the commands are rejected with error code Bad Request.
+
+The payload is limited to 1 MB, and to 2 × (the player's bees and hives) + 16 commands per turn: more could only fail, as each unit acts at most once per turn. Larger payloads are rejected with error code Bad Request.
 
 The turn is processed once commands from all players are received, or after a fixed timeout (2 seconds).
 

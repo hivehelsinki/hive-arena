@@ -45,6 +45,11 @@ type GameSession struct {
 	History       []arena.Turn
 
 	Sockets []*Socket
+
+	// Reserved seats: private game IDs, each joining once under its name.
+	// Games with reserved seats cannot be joined with their public ID.
+	JoinIDs    map[string]string // private game ID -> name
+	usedJoinID map[string]bool
 }
 
 func generateTokens(count int) []string {
@@ -102,12 +107,40 @@ func (session *GameSession) FullState() *arena.GameState {
 	return session.State.Clone()
 }
 
-func (session *GameSession) AddPlayer(name string) *Player {
+// AddPlayer seats a player who joined with the public game ID
+func (session *GameSession) AddPlayer(name string) (*Player, error) {
 	session.mutex.Lock()
 	defer session.mutex.Unlock()
 
+	if session.JoinIDs != nil {
+		return nil, fmt.Errorf("This game has reserved seats: join with your own game ID")
+	}
+	return session.addPlayer(name)
+}
+
+// AddReservedPlayer seats the player of a reserved seat, under the name of the
+// seat. Each seat can only be taken once.
+func (session *GameSession) AddReservedPlayer(joinID string) (*Player, error) {
+	session.mutex.Lock()
+	defer session.mutex.Unlock()
+
+	name, ok := session.JoinIDs[joinID]
+	if !ok {
+		return nil, fmt.Errorf("Invalid game id: %s", joinID)
+	}
+	if session.usedJoinID[joinID] {
+		return nil, fmt.Errorf("This seat is already taken")
+	}
+	player, err := session.addPlayer(name)
+	if err == nil {
+		session.usedJoinID[joinID] = true
+	}
+	return player, err
+}
+
+func (session *GameSession) addPlayer(name string) (*Player, error) {
 	if session.isFull() {
-		return nil
+		return nil, fmt.Errorf("Game is full")
 	}
 
 	// Seats are assigned at random, so that the join order does not decide
@@ -128,7 +161,27 @@ func (session *GameSession) AddPlayer(name string) *Player {
 		session.BeginTurn()
 	}
 
-	return &player
+	return &player, nil
+}
+
+// ReserveSeats makes the game joinable only through one private game ID per
+// name, and returns them (name -> ID)
+func (session *GameSession) ReserveSeats(names []string) map[string]string {
+	session.mutex.Lock()
+	defer session.mutex.Unlock()
+
+	session.JoinIDs = make(map[string]string)
+	session.usedJoinID = make(map[string]bool)
+	ids := make(map[string]string)
+	for _, name := range names {
+		joinID := fmt.Sprintf("%s-%x", session.ID, rand.Uint64())
+		for session.JoinIDs[joinID] != "" {
+			joinID = fmt.Sprintf("%s-%x", session.ID, rand.Uint64())
+		}
+		session.JoinIDs[joinID] = name
+		ids[name] = joinID
+	}
+	return ids
 }
 
 func (session *GameSession) Player(token string) (Player, bool) {
@@ -231,6 +284,9 @@ func (session *GameSession) SetOrders(playerid int, turn uint, orders []*arena.O
 	if turn != session.State.Turn {
 		return fmt.Errorf("Orders are for turn %d, but the current turn is %d", turn, session.State.Turn)
 	}
+	if limit := session.maxOrders(playerid); len(orders) > limit {
+		return fmt.Errorf("Too many orders: %d, the limit is %d this turn", len(orders), limit)
+	}
 
 	session.PendingOrders[playerid] = orders
 	session.Posted[playerid] = true
@@ -239,6 +295,19 @@ func (session *GameSession) SetOrders(playerid int, turn uint, orders []*arena.O
 
 	session.processIfAllPlayed()
 	return nil
+}
+
+// maxOrders is the maximum number of orders a player can post in the current
+// turn: each unit acts at most once, and hives can spawn bees that act in the
+// same turn. Orders beyond that could only fail.
+func (session *GameSession) maxOrders(playerid int) int {
+	units := 0
+	for _, hex := range session.State.Hexes {
+		if hex.Entity != nil && hex.Entity.Player == playerid && hex.Entity.Type != arena.WALL {
+			units++
+		}
+	}
+	return 2*units + 16
 }
 
 // Forfeit stops waiting for a player's orders for the rest of the game, for
@@ -286,8 +355,10 @@ func (session *GameSession) processTurn() {
 
 	if session.State.GameOver {
 		log.Printf("Game %s is over", session.ID)
-		if err := session.persist(); err != nil {
-			log.Printf("Could not save the history of game %s: %s", session.ID, err)
+		if HistoryDir != "" {
+			if err := session.persist(); err != nil {
+				log.Printf("Could not save the history of game %s: %s", session.ID, err)
+			}
 		}
 	}
 

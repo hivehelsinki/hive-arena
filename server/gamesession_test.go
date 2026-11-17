@@ -25,7 +25,11 @@ func newTestSession(t *testing.T, players int) (*GameSession, []Player) {
 	session := NewGameSession("test", players, "tiny", mapdata)
 	var joined []Player
 	for range players {
-		joined = append(joined, *session.AddPlayer("team"))
+		player, err := session.AddPlayer("team")
+		if err != nil {
+			t.Fatal(err)
+		}
+		joined = append(joined, *player)
 	}
 	return session, joined
 }
@@ -100,7 +104,7 @@ func TestOrdersBeforeStartAreRejected(t *testing.T) {
 	}
 
 	session := NewGameSession("test", 2, "tiny", mapdata)
-	player := session.AddPlayer("team")
+	player, _ := session.AddPlayer("team")
 
 	if err := session.SetOrders(player.ID, 0, []*arena.Order{}); err == nil {
 		t.Error("orders before the game starts should be rejected")
@@ -225,9 +229,26 @@ func TestForfeitBeforeStart(t *testing.T) {
 	DevMode = true
 	mapdata, _ := arena.LoadMap("../maps/tiny.txt")
 	session := NewGameSession("test", 2, "tiny", mapdata)
-	player := session.AddPlayer("team")
+	player, _ := session.AddPlayer("team")
 
 	if err := session.Forfeit(player.ID); err == nil {
 		t.Error("forfeiting before the game starts should fail")
+	}
+}
+
+func TestTooManyOrdersAreRejected(t *testing.T) {
+	session, players := newTestSession(t, 2)
+
+	// Each player starts with a hive and a few bees on tiny
+	limit := session.maxOrders(players[0].ID)
+	orders := make([]*arena.Order, limit+1)
+	for i := range orders {
+		orders[i] = &arena.Order{Type: arena.FORAGE}
+	}
+	if err := session.SetOrders(players[0].ID, 0, orders); err == nil {
+		t.Errorf("%d orders should be rejected", len(orders))
+	}
+	if err := session.SetOrders(players[0].ID, 0, orders[:limit]); err != nil {
+		t.Errorf("%d orders should be accepted: %s", limit, err)
 	}
 }
