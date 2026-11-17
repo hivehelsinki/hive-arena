@@ -20,15 +20,19 @@ import (
 
 func usage() {
 	fmt.Fprintln(os.Stderr, `Usage:
-  ladder serve [-config ladder.json]
-      Run the ladder at the scheduled times, and the website. Send SIGUSR1
-      to start a run now.
+  ladder [-config ladder.json]
+      Run the ladder: runs at the scheduled times, and the website.
+      Send SIGUSR1 to the process to start a run now.
+
+Other commands, for debugging and testing. Except leaderboard and web,
+they play matches or build images: do not use them while the ladder runs.
+
   ladder web [-config ladder.json]
       Run the website only
-  ladder run [-config ladder.json]
-      Play one ladder run now, and exit
   ladder leaderboard [-config ladder.json]
       Print the current leaderboard
+  ladder run [-config ladder.json]
+      Play one ladder run now, and exit
   ladder tournament [-config ladder.json] -formats <map:players,...> [-repeats N] [-teams a,b,...] [-name NAME]
       Play a one-off round-robin now with its own formats, among the
       current bots (all of them, or the given teams). It is shown with the
@@ -36,35 +40,38 @@ func usage() {
   ladder build [-config ladder.json]
       Fetch the registered teams, build and smoke-test their new versions
   ladder rebuild [-config ladder.json] <team>
-      Forget the failed build of a team's current version, so it is built again`)
+      Forget the failed build of a team's current version, so it is built again
+  ladder match [-server-image IMAGE] [-cores N] [-report FILE] [-logs DIR] <map> <name>=<image>...
+      Play one match in containers with the given images, and print its
+      result as JSON (nothing is recorded)`)
 	os.Exit(2)
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		usage()
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
+	// Without a command, run the ladder
+	if len(os.Args) < 2 || strings.HasPrefix(os.Args[1], "-") && os.Args[1] != "-h" && os.Args[1] != "-help" && os.Args[1] != "--help" {
+		cmdServe(ctx, os.Args[1:])
+		return
+	}
+
 	switch os.Args[1] {
-	case "match":
-		cmdMatch(ctx, os.Args[2:])
-	case "serve":
-		cmdServe(ctx, os.Args[2:])
 	case "web":
 		cmdWeb(ctx, os.Args[2:])
-	case "run":
-		cmdRun(ctx, os.Args[2:])
 	case "leaderboard":
 		cmdLeaderboard(os.Args[2:])
+	case "run":
+		cmdRun(ctx, os.Args[2:])
 	case "tournament":
 		cmdTournament(ctx, os.Args[2:])
 	case "build":
 		cmdBuild(ctx, os.Args[2:])
 	case "rebuild":
 		cmdRebuild(os.Args[2:])
+	case "match":
+		cmdMatch(ctx, os.Args[2:])
 	default:
 		usage()
 	}
@@ -173,7 +180,7 @@ func openLadderWithFlags(flags *flag.FlagSet, args []string) (*Ladder, *flag.Fla
 }
 
 func cmdServe(ctx context.Context, args []string) {
-	ladder, _ := openLadder("serve", args)
+	ladder, _ := openLadder("ladder", args)
 	defer ladder.Store.Close()
 
 	if err := RemoveLeftovers(ctx); err != nil {

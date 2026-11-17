@@ -6,15 +6,17 @@ See [deploy/setup.md](deploy/setup.md) to deploy it on a VM.
 
 ## Running the ladder
 
-Copy [ladder.example.json](ladder.example.json) to `ladder.json` and adjust it, then:
+Copy [ladder.example.json](ladder.example.json) to `ladder.json` and adjust it, then run `go run ./ladder` (or `ladder -config path/to/ladder.json`). It plays the runs at the scheduled times and serves the website. Send `SIGUSR1` to the process to start a run right away.
 
-- `go run ./ladder serve`: runs the ladder at the scheduled times, and the website (send `SIGUSR1` to the process to start a run right away)
+The other commands are for debugging and testing (`ladder help` lists them). Except `leaderboard` and `web`, they play matches or build images: don't use them while the ladder runs, they would disturb its matches.
+
 - `go run ./ladder web`: runs the website only
-- `go run ./ladder run`: plays one run now and exits
 - `go run ./ladder leaderboard`: prints the leaderboard
+- `go run ./ladder run`: plays one run now and exits
 - `go run ./ladder tournament -formats balanced:4,tiny:2 [-repeats N] [-teams a,b,c] [-name "Lunch cup"]`: plays a one-off round-robin now, with its own formats, among the current bots (all of them, or the given teams). It appears with the runs on the website, and does not count for the leaderboard.
 - `go run ./ladder build`: fetches the registered teams, builds and smoke-tests their new versions (also done at the start of each run)
 - `go run ./ladder rebuild <team>`: forgets the failed build of a team's current version, so that it is built again (for instance after a network failure during the build)
+- `go run ./ladder match`: plays one match with the given images, without recording anything (see below)
 
 Configuration (`ladder.json`):
 

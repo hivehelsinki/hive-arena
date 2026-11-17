@@ -46,7 +46,7 @@ Set at least:
 - `schedule`: run times, formats, repeats, window. They are shown publicly on the website.
 - `web.listen`: e.g. `:80` (needs `AmbientCapabilities=CAP_NET_BIND_SERVICE` in the unit), or a high port behind a reverse proxy
 
-Check the setup before enabling the service:
+Check the setup before enabling the service (these commands must not run while the service does):
 
 ```sh
 ladder/ladder build -config ladder.json        # fetches and builds the registered teams
@@ -64,8 +64,9 @@ journalctl -u hive-ladder -f
 ```
 
 - Start a run now: `systemctl kill -s USR1 hive-ladder`
-- A team's build failed for a transient reason (e.g. network): `ladder/ladder rebuild -config ladder.json <team>`
-- Lunchtime tournament: `ladder/ladder tournament -config ladder.json -formats balanced:6 -name "Lunch cup"`. It uses the CPU like a run: avoid running it during a ladder run.
+- A team's build failed for a transient reason (e.g. network): `ladder/ladder rebuild -config ladder.json <team>` (safe while the service runs)
+
+The other commands (`ladder help`) are for debugging and testing. Except `leaderboard`, `web` and `rebuild`, stop the service before using them (`systemctl stop hive-ladder`): they play matches or build images, and would disturb the ladder's matches.
 
 ## 5. Network access
 

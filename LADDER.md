@@ -200,7 +200,7 @@ Access is restricted to the campus network at the network level, as for the aren
 
 ## Live events and the big screen
 
-The ladder runs twice a day during the competition week. For the end-of-week live event, the existing flow is kept: matches are played game by game on the regular server, with the teams' own bots, for show. The ladder helps with it: a **tournament mode** (`ladder tournament`) plays a one-off round-robin among chosen teams with its own formats, on the ladder machine, spawning matches the same way. It is recorded as a run of kind "tournament", shown with the runs on the website, and not counted in the leaderboard. Seeding for the live event is taken from the ladder standings (top 8 if there are too many teams).
+The ladder runs twice a day during the competition week. For the end-of-week live event, the existing flow is kept: matches are played game by game on the regular server, with the teams' own bots, for show. The ladder helps with it: a **tournament mode** (`ladder tournament`) plays a one-off round-robin among chosen teams with its own formats, on the ladder machine, spawning matches the same way. It is recorded as a run of kind "tournament", shown with the runs on the website, and not counted in the leaderboard. It is a debugging and testing command: it must not run while the ladder service does (stop the service, or schedule it between runs). Seeding for the live event is taken from the ladder standings (top 8 if there are too many teams).
 
 The **big-screen page** (`/screen`) shows the leaderboard next to the replays of the latest matches, autoplayed one after the other; a lunchtime tournament fills it with fresh matches. A true live view would need the ladder to relay the state of its private match servers to browsers; replays of matches that just ended are much simpler and look the same on a screen.
 
@@ -237,7 +237,7 @@ All the steps of the plan are implemented, on the `server-ladder-support` branch
 1. **Bot contract and templates**: [docs/docker.md](docs/docker.md); Dockerfiles for both example agents, which read `ARENA_HOST`, `ARENA_GAME_ID` and `ARENA_NAME`.
 2. **Match runner** (`ladder/runner.go`): with the example bots, a match takes 1-2 seconds; a full test run of 25 matches took under a minute. Real bots will be slower: measure with the first real teams and set `repeats` accordingly.
 3. **Store and scoring** (`ladder/store.go`, `ladder/scoring.go`).
-4. **Scheduler** (`ladder/scheduler.go`): `ladder serve` (scheduled runs, SIGUSR1 for a run now), `ladder run`, `ladder leaderboard`.
+4. **Scheduler** (`ladder/scheduler.go`): `ladder` runs the ladder (scheduled runs, SIGUSR1 for a run now, and the website); the other commands are for debugging and testing.
 5. **Registry and builder** (`ladder/registry.go`, `ladder/builder.go`). Failed builds are not retried automatically (a broken tag stays broken); `ladder rebuild <team>` forgets a failed build after a transient failure.
 6. **Website** (`ladder/web.go`, `ladder/web/`).
 7. **Web viewer**: `viewer/build-web.sh`, served at `/viewer/`.
