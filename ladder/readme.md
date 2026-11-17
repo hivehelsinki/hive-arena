@@ -31,7 +31,7 @@ Configuration (`ladder.json`):
 - `build`: build timeout, number of successful images kept per team, map of the smoke test
 - `minFreeDiskGB`: below this free space in `dataDir`, a warning is logged and `/health` reports a problem
 - `web.listen`: address of the website
-- `web.backupToken`: enables the backup routes (`/backup/...?token=`), see [deploy/setup.md](deploy/setup.md)
+- `web.backupToken`: enables the backup route (`/backup?token=`), see [deploy/setup.md](deploy/setup.md)
 
 ## Teams and builds
 
@@ -84,4 +84,4 @@ Replays open in the browser version of the viewer, served at `/viewer/` from `we
 
 - `/health`: `ok`, or the list of problems with status 503 (for monitoring)
 - `/api/status`: disk space, Docker, database, current, last and next run, teams with problems
-- `/backup/archive.tar?token=&since=`: a consistent snapshot of the database and the reports and logs (all, or written since a time), to be fetched by a backup system elsewhere. See [deploy/setup.md](deploy/setup.md).
+- `/backup?token=`: a tar archive named after the time, with a consistent snapshot of the database and all reports and logs, to be fetched by a backup system elsewhere. See [deploy/setup.md](deploy/setup.md).

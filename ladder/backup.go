@@ -3,7 +3,6 @@ package main
 import (
 	"archive/tar"
 	"crypto/subtle"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -11,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -27,11 +25,11 @@ type BackupFile struct {
 	Modified time.Time `json:"modified"`
 }
 
-// BackupFiles lists the files to back up, modified at or after `since` (zero for all)
-func (s *Store) BackupFiles(since time.Time) ([]BackupFile, error) {
+// BackupFiles lists the files to back up
+func (s *Store) BackupFiles() ([]BackupFile, error) {
 	var files []BackupFile
 	add := func(path string, info fs.FileInfo) {
-		if info.ModTime().Before(since) || strings.HasSuffix(path, ".tmp") {
+		if strings.HasSuffix(path, ".tmp") {
 			return
 		}
 		rel, _ := filepath.Rel(s.dir, path)
@@ -82,8 +80,7 @@ func (s *Store) SnapshotDatabase() (string, error) {
 	return path, nil
 }
 
-// The backup routes, enabled when a token is configured. Everything in them
-// is read-only.
+// The backup route is enabled when a token is configured
 func (web *Web) backupAllowed(w http.ResponseWriter, r *http.Request) bool {
 	token := web.Config.Web.BackupToken
 	given := r.URL.Query().Get("token")
@@ -94,92 +91,14 @@ func (web *Web) backupAllowed(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-func parseSince(r *http.Request) (time.Time, error) {
-	since := r.URL.Query().Get("since")
-	if since == "" {
-		return time.Time{}, nil
-	}
-	if seconds, err := strconv.ParseInt(since, 10, 64); err == nil {
-		return time.Unix(seconds, 0), nil
-	}
-	return time.Parse(time.RFC3339, since)
-}
-
-// GET /backup/manifest?token=&since=: the files to back up, as JSON
-func (web *Web) handleBackupManifest(w http.ResponseWriter, r *http.Request) {
+// GET /backup?token=: everything in one tar archive, named after the time
+// of the backup: a consistent snapshot of the database, and all the files
+func (web *Web) handleBackup(w http.ResponseWriter, r *http.Request) {
 	if !web.backupAllowed(w, r) {
-		return
-	}
-	since, err := parseSince(r)
-	if err != nil {
-		http.Error(w, "invalid since: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 	now := time.Now()
-	files, err := web.Store.BackupFiles(since)
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{"time": now.Unix(), "files": files})
-}
-
-// GET /backup/files/<path>?token=: one file of the manifest
-func (web *Web) handleBackupFile(w http.ResponseWriter, r *http.Request) {
-	if !web.backupAllowed(w, r) {
-		return
-	}
-	rel := r.PathValue("path")
-	allowed := false
-	for _, prefix := range backupDirs {
-		allowed = allowed || strings.HasPrefix(rel, prefix+"/")
-	}
-	for _, name := range backupFiles {
-		allowed = allowed || rel == name
-	}
-	if !allowed || strings.Contains(rel, "..") {
-		http.NotFound(w, r)
-		return
-	}
-	w.Header().Set("Content-Type", "application/octet-stream")
-	http.ServeFile(w, r, filepath.Join(web.Store.dir, filepath.FromSlash(rel)))
-}
-
-// GET /backup/database?token=: a consistent snapshot of the SQLite database
-func (web *Web) handleBackupDatabase(w http.ResponseWriter, r *http.Request) {
-	if !web.backupAllowed(w, r) {
-		return
-	}
-	path, err := web.Store.SnapshotDatabase()
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	defer os.Remove(path)
-
-	w.Header().Set("Content-Type", "application/vnd.sqlite3")
-	w.Header().Set("Content-Disposition", `attachment; filename="ladder.db"`)
-	http.ServeFile(w, r, path)
-}
-
-// GET /backup/archive.tar?token=&since=: everything in one tar archive, the
-// database snapshot and the files modified since the given time (all of
-// them by default). The X-Backup-Time header gives the time to pass as
-// `since` next time, for an incremental backup.
-func (web *Web) handleBackupArchive(w http.ResponseWriter, r *http.Request) {
-	if !web.backupAllowed(w, r) {
-		return
-	}
-	since, err := parseSince(r)
-	if err != nil {
-		http.Error(w, "invalid since: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Files written after this point go into the next backup
-	now := time.Now()
-	files, err := web.Store.BackupFiles(since)
+	files, err := web.Store.BackupFiles()
 	if err != nil {
 		serverError(w, err)
 		return
@@ -192,8 +111,7 @@ func (web *Web) handleBackupArchive(w http.ResponseWriter, r *http.Request) {
 	defer os.Remove(snapshot)
 
 	w.Header().Set("Content-Type", "application/x-tar")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="ladder-backup-%s.tar"`, now.Format("20060102-150405")))
-	w.Header().Set("X-Backup-Time", strconv.FormatInt(now.Unix(), 10))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="ladder-backup-%s.tar"`, now.UTC().Format("2006-01-02T150405Z")))
 
 	archive := tar.NewWriter(w)
 	addFile := func(name string, path string) error {
