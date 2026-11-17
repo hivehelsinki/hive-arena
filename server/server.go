@@ -7,6 +7,8 @@ import (
 	"maps"
 	"net/http"
 	"os"
+	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -18,9 +20,9 @@ import (
 	"github.com/hivehelsinki/hive-arena/arena"
 )
 
-const MapDir = "maps"
 const GameStartTimeout = 5 * time.Minute
 
+var MapDir = "maps"
 var HistoryDir = "history"
 
 type Server struct {
@@ -45,7 +47,7 @@ func loadMaps() map[string]arena.MapData {
 			continue
 		}
 
-		mapdata, err := arena.LoadMap(MapDir + "/" + entry.Name())
+		mapdata, err := arena.LoadMap(filepath.Join(MapDir, entry.Name()))
 		if err != nil {
 			log.Fatalf("Could not load map %s: %s", name, err)
 		}
@@ -283,6 +285,51 @@ func (server *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	game.RegisterWebSocket(socket)
 }
 
+var validID = regexp.MustCompile(`^[a-z0-9-]+$`)
+
+// findReport looks for the history file of a past game, and returns its path,
+// or an empty string. If several games had the same ID, the most recent wins.
+func findReport(id string) string {
+	if !validID.MatchString(id) {
+		return ""
+	}
+
+	files, _ := filepath.Glob(filepath.Join(HistoryDir, "*-"+id+"-*.json"))
+	if len(files) == 0 {
+		return ""
+	}
+
+	// File names begin with the creation date
+	slices.Sort(files)
+	return files[len(files)-1]
+}
+
+func (server *Server) handleReport(w http.ResponseWriter, r *http.Request) {
+	logRoute(r)
+
+	id := r.URL.Query().Get("id")
+
+	// Games stay in memory for a while after they end
+	if game := server.getGameSync(id); game != nil {
+		report := game.Report()
+		if report == nil {
+			writeJson(w, "Game is not over: "+id, http.StatusBadRequest)
+			return
+		}
+		writeJson(w, report, http.StatusOK)
+		return
+	}
+
+	path := findReport(id)
+	if path == "" {
+		writeJson(w, "Game not found: "+id, http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	http.ServeFile(w, r, path)
+}
+
 func (server *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
@@ -292,8 +339,9 @@ func (server *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /game", server.handleGame)
 	mux.HandleFunc("POST /orders", server.handleOrders)
 	mux.HandleFunc("GET /ws", server.handleWebSocket)
+	mux.HandleFunc("GET /report", server.handleReport)
 
-	fs := http.FileServer(http.Dir("./" + HistoryDir + "/"))
+	fs := http.FileServer(http.Dir(HistoryDir))
 	mux.Handle("GET /history/", http.StripPrefix("/history/", fs))
 
 	return mux

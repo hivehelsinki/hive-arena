@@ -13,6 +13,12 @@ import (
 
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
+	httpServer, _ := newTestServerWithState(t)
+	return httpServer
+}
+
+func newTestServerWithState(t *testing.T) (*httptest.Server, *Server) {
+	t.Helper()
 
 	DevMode = true
 	HistoryDir = t.TempDir()
@@ -29,7 +35,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 
 	httpServer := httptest.NewServer(server.Handler())
 	t.Cleanup(httpServer.Close)
-	return httpServer
+	return httpServer, server
 }
 
 // call sends a request, checks its status code, and decodes the JSON response into result (if not nil)
@@ -166,4 +172,98 @@ func TestPostOrders(t *testing.T) {
 	}
 
 	call(t, server, "POST", route(0, "0"), "[]", http.StatusBadRequest, nil)
+}
+
+func TestRandomSeats(t *testing.T) {
+	server := newTestServer(t)
+
+	firstSeats := make(map[int]bool)
+	for range 20 {
+		game := startTestGame(t, server, 3)
+
+		seats := make(map[int]bool)
+		for _, player := range game.Players {
+			seats[player.Id] = true
+		}
+		if len(seats) != 3 || !seats[0] || !seats[1] || !seats[2] {
+			t.Fatalf("expected each seat to be taken once, got %+v", game.Players)
+		}
+
+		// Each token gives access to the view of its own seat
+		var view arena.GameState
+		call(t, server, "GET", "/game?id="+game.Id+"&token="+game.Players[0].Token, "", http.StatusOK, &view)
+
+		firstSeats[game.Players[0].Id] = true
+	}
+
+	if len(firstSeats) < 2 {
+		t.Errorf("expected the first player to join to get different seats, always got %v", firstSeats)
+	}
+}
+
+// playToEnd posts empty orders for all players until the game is over
+func playToEnd(t *testing.T, server *httptest.Server, game testGame) {
+	t.Helper()
+
+	for turn := 0; ; turn++ {
+		var state arena.GameState
+		call(t, server, "GET", "/game?id="+game.Id+"&token="+game.AdminToken, "", http.StatusOK, &state)
+		if state.GameOver {
+			return
+		}
+		if turn > 1000 {
+			t.Fatal("game did not end")
+		}
+		for _, player := range game.Players {
+			call(t, server, "POST", fmt.Sprintf("/orders?id=%s&token=%s&turn=%d", game.Id, player.Token, state.Turn), "[]", http.StatusOK, nil)
+		}
+	}
+}
+
+func TestReport(t *testing.T) {
+	server, state := newTestServerWithState(t)
+
+	call(t, server, "GET", "/report?id=nope", "", http.StatusNotFound, nil)
+	call(t, server, "GET", "/report?id=../x", "", http.StatusNotFound, nil)
+
+	game := startTestGame(t, server, 2)
+	call(t, server, "GET", "/report?id="+game.Id, "", http.StatusBadRequest, nil)
+
+	playToEnd(t, server, game)
+
+	check := func(report arena.PersistedGame) {
+		t.Helper()
+		if report.Id != game.Id || len(report.Players) != 2 || len(report.History) < 2 {
+			t.Fatalf("unexpected report: %s, %v, %d turns", report.Id, report.Players, len(report.History))
+		}
+		result := report.Result
+		if result == nil || len(result.Players) != 2 || len(result.Winners) == 0 {
+			t.Fatalf("unexpected result: %+v", result)
+		}
+		for seat, player := range game.Players {
+			if result.Players[player.Id].Name != fmt.Sprintf("team%d", seat) {
+				t.Errorf("result names should be indexed by player ID, got %+v", result.Players)
+			}
+		}
+	}
+
+	// From memory
+	var report arena.PersistedGame
+	call(t, server, "GET", "/report?id="+game.Id, "", http.StatusOK, &report)
+	check(report)
+
+	var status arena.StatusResponse
+	call(t, server, "GET", "/status", "", http.StatusOK, &status)
+	if len(status.Games) != 1 || status.Games[0].Result == nil {
+		t.Errorf("expected the status of a finished game to include its result, got %+v", status)
+	}
+
+	// From the history directory, once the game is removed from memory
+	state.mutex.Lock()
+	delete(state.Sessions, game.Id)
+	state.mutex.Unlock()
+
+	report = arena.PersistedGame{}
+	call(t, server, "GET", "/report?id="+game.Id, "", http.StatusOK, &report)
+	check(report)
 }

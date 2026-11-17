@@ -7,6 +7,7 @@ import (
 	"maps"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"slices"
 	"sync"
 	"time"
@@ -33,7 +34,8 @@ type GameSession struct {
 	CreatedDate  time.Time
 	AdminToken   string
 	PlayerTokens []string
-	Players      []Player
+	Seats        []*Player // indexed by player ID, nil for seats not taken yet
+	joined       int
 	State        *arena.GameState
 
 	PendingOrders [][]*arena.Order
@@ -65,13 +67,14 @@ func NewGameSession(id string, players int, mapname string, mapdata arena.MapDat
 		CreatedDate:  time.Now(),
 		AdminToken:   tokens[0],
 		PlayerTokens: tokens[1:],
+		Seats:        make([]*Player, players),
 		State:        state,
 		History:      []arena.Turn{{Orders: nil, State: state.Clone()}},
 	}
 }
 
 func (session *GameSession) isFull() bool {
-	return len(session.Players) == session.State.NumPlayers
+	return session.joined == session.State.NumPlayers
 }
 
 // Started reports whether all players have joined
@@ -105,10 +108,19 @@ func (session *GameSession) AddPlayer(name string) *Player {
 		return nil
 	}
 
-	id := len(session.Players)
+	// Seats are assigned at random, so that the join order does not decide
+	// who plays from which starting position
+	var free []int
+	for seat, player := range session.Seats {
+		if player == nil {
+			free = append(free, seat)
+		}
+	}
+	id := free[rand.Intn(len(free))]
 	player := Player{id, name, session.PlayerTokens[id]}
 
-	session.Players = append(session.Players, player)
+	session.Seats[id] = &player
+	session.joined++
 
 	if session.isFull() {
 		session.BeginTurn()
@@ -121,23 +133,32 @@ func (session *GameSession) Player(token string) (Player, bool) {
 	session.mutex.Lock()
 	defer session.mutex.Unlock()
 
-	playerid := slices.Index(session.PlayerTokens, token)
-	if playerid < 0 || playerid >= len(session.Players) {
+	playerid := session.seatOf(token)
+	if playerid < 0 {
 		return Player{}, false
 	}
-	return session.Players[playerid], true
+	return *session.Seats[playerid], true
 }
 
 func (session *GameSession) GetView(token string) *arena.GameState {
 	session.mutex.Lock()
 	defer session.mutex.Unlock()
 
-	playerid := slices.Index(session.PlayerTokens, token)
-	if playerid < 0 || playerid >= len(session.Players) {
+	playerid := session.seatOf(token)
+	if playerid < 0 {
 		return nil
 	}
 
 	return session.State.PlayerView(playerid)
+}
+
+// seatOf returns the player ID of a player who joined with the given token, or -1
+func (session *GameSession) seatOf(token string) int {
+	playerid := slices.Index(session.PlayerTokens, token)
+	if playerid < 0 || session.Seats[playerid] == nil {
+		return -1
+	}
+	return playerid
 }
 
 func (session *GameSession) BeginTurn() {
@@ -184,7 +205,7 @@ func (session *GameSession) SetOrders(playerid int, turn uint, orders []*arena.O
 	session.PendingOrders[playerid] = orders
 	session.Posted[playerid] = true
 
-	log.Printf("Player %s posted orders in game %s", session.Players[playerid].Name, session.ID)
+	log.Printf("Player %s posted orders in game %s", session.Seats[playerid].Name, session.ID)
 
 	if session.allPlayed() {
 		// Turns last at least MinTurnDuration, so that games can be followed live
@@ -280,27 +301,54 @@ func (session *GameSession) CloseSockets() {
 	}
 }
 
-func (session *GameSession) persist() error {
-	date, _ := session.CreatedDate.MarshalText()
-	path := fmt.Sprintf("%s/%s-%s-%s.json",
-		HistoryDir,
-		date,
-		session.ID,
-		session.Map,
-	)
-
-	players := make([]string, len(session.Players))
-	for i, player := range session.Players {
-		players[i] = player.Name
+// playerNames returns the names of the players who joined, ordered by player ID
+func (session *GameSession) playerNames() []string {
+	var names []string
+	for _, player := range session.Seats {
+		if player != nil {
+			names = append(names, player.Name)
+		}
 	}
+	return names
+}
 
-	info := arena.PersistedGame{
+// result returns the final result of the game, or nil if it is not over
+func (session *GameSession) result() *arena.GameResult {
+	if !session.State.GameOver {
+		return nil
+	}
+	return arena.NewGameResult(session.State, session.playerNames())
+}
+
+func (session *GameSession) report() *arena.PersistedGame {
+	return &arena.PersistedGame{
 		Id:          session.ID,
 		Map:         session.Map,
 		CreatedDate: session.CreatedDate,
-		Players:     players,
+		Players:     session.playerNames(),
 		History:     session.History,
+		Result:      session.result(),
 	}
+}
+
+// Report returns the full report of the game, or nil if it is not over
+func (session *GameSession) Report() *arena.PersistedGame {
+	session.mutex.Lock()
+	defer session.mutex.Unlock()
+
+	if !session.State.GameOver {
+		return nil
+	}
+	return session.report()
+}
+
+func (session *GameSession) persist() error {
+	date, _ := session.CreatedDate.MarshalText()
+	path := filepath.Join(HistoryDir, fmt.Sprintf("%s-%s-%s.json",
+		date,
+		session.ID,
+		session.Map,
+	))
 
 	if err := os.MkdirAll(HistoryDir, 0o755); err != nil {
 		return err
@@ -311,7 +359,7 @@ func (session *GameSession) persist() error {
 		return err
 	}
 
-	if err := json.NewEncoder(file).Encode(info); err != nil {
+	if err := json.NewEncoder(file).Encode(session.report()); err != nil {
 		file.Close()
 		return err
 	}
@@ -322,17 +370,13 @@ func (session *GameSession) Status() arena.SessionStatus {
 	session.mutex.Lock()
 	defer session.mutex.Unlock()
 
-	var players []string
-	for _, player := range session.Players {
-		players = append(players, player.Name)
-	}
-
 	return arena.SessionStatus{
 		Id:          session.ID,
 		CreatedDate: session.CreatedDate,
 		Map:         session.Map,
 		NumPlayers:  session.State.NumPlayers,
-		Players:     players,
+		Players:     session.playerNames(),
 		GameOver:    session.State.GameOver,
+		Result:      session.result(),
 	}
 }

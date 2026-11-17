@@ -45,7 +45,8 @@ Each game status follows the following format:
 	"players": (array of string) the names of the players who joined the game,
 	"map": (string) the chosen map,
 	"createdDate": (string) the time of creation of the game, in ISO 8601 format,
-	"gameOver": (bool) whether the game is over or not
+	"gameOver": (bool) whether the game is over or not,
+	"result": (Result object) the final result, only once the game is over (see '/report')
 }
 ```
 
@@ -62,7 +63,7 @@ If the game is full, the response is the JSON string `"Game is full"`, and error
 
 ```
 {
-	"id": (int) the ID of the player, from 0 to the number of players on the map - 1,
+	"id": (int) the ID of the player, from 0 to the number of players on the map - 1. Seats are assigned at random among the free ones, so the ID does not depend on the order in which players join.
 	"token": (string) a unique personal token for that player, used for authentication in the other routes
 }
 ```
@@ -166,3 +167,41 @@ When the game begins, and every time a turn is processed, the following message 
 If a websocket is opened after the game has already begun, an initial message similar to the one above is sent to the listener to indicate the current turn.
 
 After sending a message with `gameOver` set to `true`, the server closes the websocket.
+
+## GET /report
+
+Returns the full report of a finished game. This is the same content as the files saved in the server's history directory, which the viewer can read.
+
+Query string parameters:
+
+- `id`: the ID of the game
+
+If the game is still running, the response is an error with code Bad Request. If no game with this ID is known, the response is an error with code Not Found.
+
+```
+{
+	"id": (string) the game ID,
+	"map": (string) the map name,
+	"createdDate": (string) the time of creation of the game, in ISO 8601 format,
+	"players": (array of string) the names of the players, indexed by player ID,
+	"history": (array of turns) the full state and the orders of every turn,
+	"result": (Result object) the final result of the game
+}
+```
+
+The result is given in the following format:
+
+```
+{
+	"turns": (int) the number of turns played,
+	"winners": (array of int) all the players who are tied for the win,
+	"players": (array of objects, indexed by player ID) for each player:
+		{
+			"name": (string) the name of the player,
+			"flowers": (int) the final number of flowers in reserve,
+			"rank": (int) 1 + the number of players with strictly more flowers (tied players share the same rank)
+		}
+}
+```
+
+Reports of games played before this route existed do not include `result`.

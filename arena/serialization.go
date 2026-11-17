@@ -43,6 +43,9 @@ type PersistedGame struct {
 	CreatedDate time.Time `json:"createdDate"`
 	Players     []string  `json:"players"`
 	History     []Turn    `json:"history"`
+
+	// Result is set once the game is over. Older reports do not have it.
+	Result *GameResult `json:"result,omitempty"`
 }
 
 type Turn struct {
@@ -57,6 +60,9 @@ type SessionStatus struct {
 	NumPlayers  int       `json:"numPlayers"`
 	Players     []string  `json:"players"`
 	GameOver    bool      `json:"gameOver"`
+
+	// Result is set once the game is over
+	Result *GameResult `json:"result,omitempty"`
 }
 
 type StatusResponse struct {

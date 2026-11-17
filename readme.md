@@ -7,11 +7,11 @@ A friendly AI competition for the Hive students!
 ## Running the arena
 
 - Install the Go compiler (for instance `brew install go` on MacOS, or `apt install golang-go` or `snap install go` on Ubuntu, or follow instructions from the official website).
-- Run `go run ./server`. Optionally add the `-p <port>` option to select which port should the server listen on.
+- Run `go run ./server`. Optionally add the `-p <port>` option to select which port should the server listen on, `--maps <dir>` to load maps from another directory than `maps`, and `--history <dir>` to save game reports in another directory than `history`.
 
 The server is now ready to host games. Multiple games can run concurrently.
 
-In addition to the API routes to be used programmatically, the `/status` route shows information about all currently running games, and `/history` contains JSON reports of past completed games.
+In addition to the API routes to be used programmatically, the `/status` route shows information about all currently running games, `/history` contains JSON reports of past completed games, and `/report?id=<game id>` returns the report of a given finished game.
 
 ## Development mode
 
@@ -19,7 +19,7 @@ By default, the server ensures a minimum turn duration of 0.5 seconds. To bypass
 
 ## Building for production
 
-Building an executable with `go build -C server .` will embed the git revision and the executable will print it at startup. Note that the server looks for the `map` directory in the current working directory, so it can be run from the repo root as `./server/server -p port`.
+Building an executable with `go build -C server .` will embed the git revision and the executable will print it at startup. By default, the server looks for the `maps` directory in the current working directory (see the `--maps` option), so it can be run from the repo root as `./server/server -p port`.
 
 A Dockerfile is also provided for smoother deployment. Follow the usual Docker building process, or use the `runDocker.sh` script.
 
