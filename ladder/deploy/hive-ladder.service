@@ -1,0 +1,22 @@
+# systemd unit for the ladder. Install as /etc/systemd/system/hive-ladder.service,
+# then: systemctl daemon-reload && systemctl enable --now hive-ladder
+# Start a run right away: systemctl kill -s USR1 hive-ladder
+
+[Unit]
+Description=Hive Arena ladder
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+User=ladder
+Group=docker
+WorkingDirectory=/opt/hive-arena
+ExecStart=/opt/hive-arena/ladder/ladder serve -config /opt/hive-arena/ladder.json
+Restart=on-failure
+RestartSec=10
+# Let a match finish its cleanup on stop
+KillSignal=SIGINT
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target

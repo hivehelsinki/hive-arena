@@ -173,7 +173,7 @@ If many more teams show up (when full round-robins become too large), the option
 Every match is stored:
 
 - **In SQLite**: match id, timestamp, map, `n`, seat/player index, team and commit per seat, flowers, rank, points, status per bot (finished, crashed, timeout), and whether the match is valid (e.g. server failure matches are marked void and not counted).
-- **As files**: the server's JSON report (the same format as `history/` today, so the existing viewer reads it unchanged), stored compressed, with container logs of each bot (truncated to a size limit) for debugging, available to the team that owns the bot.
+- **As files**: the server's JSON report (the same format as `history/` today, so the existing viewer reads it unchanged), stored compressed, with container logs of each bot (truncated to a size limit) for debugging. Without accounts, logs are public like the rest of the site; teams should not print anything secret.
 
 The store is the source of truth: leaderboards, head-to-head tables and windows are queries over it.
 
@@ -192,9 +192,9 @@ Access is restricted to the campus network at the network level, as for the aren
 
 ## Live events and the big screen
 
-The ladder runs twice a day during the competition week. For the end-of-week live event, the existing flow is kept: matches are played game by game on the regular server, with the teams' own bots, for show. The ladder helps with it: a **tournament mode** reads a config (set of teams, maps, format) and runs a bracket or round-robin on the ladder machine, spawning matches the same way and showing results live on the website. Seeding for the live event is taken from the ladder standings (top 8 if there are too many teams).
+The ladder runs twice a day during the competition week. For the end-of-week live event, the existing flow is kept: matches are played game by game on the regular server, with the teams' own bots, for show. The ladder helps with it: a **tournament mode** (`ladder tournament`) plays a one-off round-robin among chosen teams with its own formats, on the ladder machine, spawning matches the same way. It is recorded as a run of kind "tournament", shown with the runs on the website, and not counted in the leaderboard. Seeding for the live event is taken from the ladder standings (top 8 if there are too many teams).
 
-A daily scheduled "showcase" match on the big-screen page, around lunchtime, draws people in. It is just a regular 6-player or 4-player match, with the live view of the game.
+The **big-screen page** (`/screen`) shows the leaderboard next to the replays of the latest matches, autoplayed one after the other; a lunchtime tournament fills it with fresh matches. A true live view would need the ladder to relay the state of its private match servers to browsers; replays of matches that just ended are much simpler and look the same on a screen.
 
 ## Server changes
 
@@ -205,6 +205,7 @@ The server needs no change to work with the ladder, but a few small ones make th
 3. **Random seats.** A joining player gets a random free seat instead of the next one in join order, so seating does not depend on container start-up timing (ladder) or on who joins first (live events). The `players` list in the report is indexed by seat.
 4. **Results in the report.** A `result` block in the report and in the finished game's status, with the final flowers, rank and winners per player. The ladder and website then do not re-derive scores from the last state.
 5. **CORS and websocket origin.** CORS headers on the read routes and an origin check that accepts the configured origins, so the web viewer can talk to the arena server directly during live events. Not needed for the ladder itself, since the ladder site serves its own reports.
+7. **Forfeit route** (added during implementation). `GET /forfeit?id=&token=<admin token>&player=` stops waiting for a player's orders. The runner uses it when a bot's container exits mid-game: otherwise every remaining turn waits for the 2-second timeout, and a crashing bot would make its matches last minutes.
 6. **Lighter Docker image.** A multi-stage `Dockerfile` (build with the Go toolchain, run from a small image with the binary and `maps/`) and a `.dockerignore` excluding `history/`, so per-match server start-up is fast.
 
 Not changed: `--dev` stays a process flag (the ladder spawns a server per match, with `--dev`; the 2-second turn timeout stays), and `/newgame` stays unauthenticated (the ladder's servers are on private networks, the live server is campus-only).
@@ -220,20 +221,22 @@ A campus VM, handed over with root. The ladder binary runs under systemd with ac
 
 If load grows, the one-VM design can be split later (runner vs web), as everything between them goes through the store.
 
-## Implementation plan
+## Implementation status
 
-0. **Server changes** (items 1-4 above; 5-6 can come later): directory flags, `/report`, random seats, results in the report. With tests.
-1. **Bot contract and templates.** Dockerfiles for `example-agent-go` and `example-agent-lua` following the env-variable convention. Docs.
-2. **Match runner.** Given a map, a list of images and limits, run one match in containers (network, server, bots, cleanup) and return the report. Test with the example bots; measure the resource limits and match duration.
-3. **Store and scoring.** SQLite schema, recording of results, and the points/window/head-to-head/standard-error queries, with unit tests on known finishing orders (ties, crashes).
-4. **Scheduler.** Twice-daily runs (and manual trigger), frozen pool, lineups for a given pool and map, best of N, interleaved queue, random seats, deadline, house bots, one match at a time.
-5. **Registry and builder.** `teams.json` sync, tag resolution, `docker build` with limits, smoke test, image pruning, build logs.
-6. **Web site (no replay).** Leaderboard, head-to-head, match list, team pages, downloads, JSON API.
-7. **Web viewer.** Productionize the wasm build of the viewer; load reports by URL; embed in match pages.
-8. **Tournament mode and big-screen page.**
-9. **Deployment on the VM**, dry run with the example bots and a few volunteer bots, then open registration.
+All the steps of the plan are implemented, on the `server-ladder-support` branch, one commit per step:
 
-The game review happens after this work. Steps 1-4 deliver a working ladder with results in the database; 5-7 make it self-service and public.
+0. **Server changes**: items 1-4, 6 and 7 above. Item 5 (CORS) is not done: the ladder serves the viewer and reports itself, so it is only needed if the web viewer should talk to a live arena server.
+1. **Bot contract and templates**: [docs/docker.md](docs/docker.md); Dockerfiles for both example agents, which read `ARENA_HOST`, `ARENA_GAME_ID` and `ARENA_NAME`.
+2. **Match runner** (`ladder/runner.go`): with the example bots, a match takes 1-2 seconds; a full test run of 25 matches took under a minute. Real bots will be slower: measure with the first real teams and set `repeats` accordingly.
+3. **Store and scoring** (`ladder/store.go`, `ladder/scoring.go`).
+4. **Scheduler** (`ladder/scheduler.go`): `ladder serve` (scheduled runs, SIGUSR1 for a run now), `ladder run`, `ladder leaderboard`.
+5. **Registry and builder** (`ladder/registry.go`, `ladder/builder.go`). Failed builds are not retried automatically (a broken tag stays broken); `ladder rebuild <team>` forgets a failed build after a transient failure.
+6. **Website** (`ladder/web.go`, `ladder/web/`).
+7. **Web viewer**: `viewer/build-web.sh`, served at `/viewer/`.
+8. **Tournament mode and big-screen page**: round-robin tournaments only (no elimination brackets, which matter little with a handful of teams).
+9. **Deployment**: [ladder/deploy/setup.md](ladder/deploy/setup.md) and a systemd unit. To do on the VM: dry run with the example bots and a few volunteer bots, then open registration.
+
+The game review happens after this work.
 
 ## Decisions
 

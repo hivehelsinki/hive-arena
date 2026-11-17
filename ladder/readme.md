@@ -2,7 +2,7 @@
 
 The ladder service: plays registered bots against each other in Docker containers, records the results, and publishes them. See [LADDER.md](../LADDER.md) for the design.
 
-Work in progress. Currently available:
+See [deploy/setup.md](deploy/setup.md) to deploy it on a VM.
 
 ## Running the ladder
 
