@@ -72,7 +72,7 @@
 	<td>{{time .StartedAt}}</td>
 	<td>{{.Map}}</td>
 	<td>{{range .Bots}}<span class="result p{{.Points}} {{.Status}}" title="{{.Status}}, {{.Flowers}} flowers">{{.Team}} {{.Points}}</span> {{end}}</td>
-	<td class="num">{{.Turns}}</td>
+	<td class="num">{{if .Error}}<span class="error" title="{{.Error}}">failed</span>{{else}}{{.Turns}}{{end}}</td>
 </tr>
 {{else}}
 <tr><td colspan="5" class="dim">No matches.</td></tr>

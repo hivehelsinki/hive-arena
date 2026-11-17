@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"runtime/debug"
+	"strings"
 	"time"
 )
 
@@ -114,9 +116,18 @@ func (l *Ladder) Play(ctx context.Context, kind string, config any, pool []Bot, 
 			break
 		}
 
-		result, err := l.Player.Run(ctx, match)
+		log.Printf("Run %d: match %d/%d: %s, %s", runID, i+1, len(matches), match.Map, botNames(match.Bots))
+		result, err := l.playMatch(ctx, match)
 		if err != nil {
-			log.Printf("Run %d: match %d (%s) failed: %s", runID, i+1, match.Map, err)
+			log.Printf("Run %d: match %d failed: %s", runID, i+1, err)
+			// Recorded as void, with the bots' output, unless the ladder is stopping
+			if result != nil && ctx.Err() == nil {
+				if id, err := l.Store.RecordMatch(runID, result); err != nil {
+					log.Printf("Run %d: could not record the failed match: %s", runID, err)
+				} else {
+					log.Printf("Run %d: failed match recorded as #%d (void)", runID, id)
+				}
+			}
 			errors++
 			if errors >= maxRunnerErrors {
 				status = RunFailed
@@ -127,11 +138,12 @@ func (l *Ladder) Play(ctx context.Context, kind string, config any, pool []Bot, 
 		errors = 0
 
 		id, err := l.Store.RecordMatch(runID, result)
+		result.RemoveReport()
 		if err != nil {
 			l.Store.FinishRun(runID, RunFailed)
 			return runID, fmt.Errorf("recording a match: %w", err)
 		}
-		log.Printf("Run %d: match %d/%d recorded as #%d (%s, %s)", runID, i+1, len(matches), id, match.Map, result.Ended.Sub(result.Started).Round(time.Second))
+		log.Printf("Run %d: match %d/%d recorded as #%d (%s)", runID, i+1, len(matches), id, result.Ended.Sub(result.Started).Round(time.Second))
 	}
 
 	if err := l.Store.FinishRun(runID, status); err != nil {
@@ -139,6 +151,25 @@ func (l *Ladder) Play(ctx context.Context, kind string, config any, pool []Bot, 
 	}
 	log.Printf("Run %d: %s", runID, status)
 	return runID, nil
+}
+
+// playMatch plays a match. A panic (a bug) fails the match, not the ladder.
+func (l *Ladder) playMatch(ctx context.Context, match Match) (result *MatchResult, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			log.Printf("Panic while playing a match: %v\n%s", p, debug.Stack())
+			result, err = nil, fmt.Errorf("internal error: %v", p)
+		}
+	}()
+	return l.Player.Run(ctx, match)
+}
+
+func botNames(bots []Bot) string {
+	var names []string
+	for _, bot := range bots {
+		names = append(names, bot.Name)
+	}
+	return strings.Join(names, ", ")
 }
 
 // Serve runs the ladder at the scheduled times, and when `trigger` receives

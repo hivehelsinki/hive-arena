@@ -17,6 +17,8 @@ import (
 type ArenaClient struct {
 	Base string // e.g. http://127.0.0.1:1234
 	http http.Client
+	// For downloads of reports, which can be large: only limited by the context
+	downloads http.Client
 }
 
 func NewArenaClient(base string) *ArenaClient {
@@ -63,13 +65,16 @@ func (c *ArenaClient) get(ctx context.Context, route string, query url.Values, r
 }
 
 type NewGameResponse struct {
-	Id         string `json:"id"`
-	AdminToken string `json:"adminToken"`
+	Id         string            `json:"id"`
+	AdminToken string            `json:"adminToken"`
+	JoinIds    map[string]string `json:"joinIds"`
 }
 
-func (c *ArenaClient) NewGame(ctx context.Context, mapname string, players int) (*NewGameResponse, error) {
+// NewGame creates a game whose seats are reserved for the given names
+func (c *ArenaClient) NewGame(ctx context.Context, mapname string, names []string) (*NewGameResponse, error) {
 	var game NewGameResponse
-	err := c.get(ctx, "/newgame", url.Values{"map": {mapname}, "players": {fmt.Sprint(players)}}, &game)
+	query := url.Values{"map": {mapname}, "players": {fmt.Sprint(len(names))}, "names": {strings.Join(names, ",")}}
+	err := c.get(ctx, "/newgame", query, &game)
 	return &game, err
 }
 
@@ -87,13 +92,23 @@ func (c *ArenaClient) GameStatus(ctx context.Context, id string) (*arena.Session
 	return nil, nil
 }
 
-// Report returns the raw report of a finished game, or nil if it is not over yet
-func (c *ArenaClient) Report(ctx context.Context, id string) ([]byte, error) {
-	data, err := c.request(ctx, "GET", "/report", url.Values{"id": {id}}, "")
-	if herr, ok := err.(*httpError); ok && herr.Status == http.StatusBadRequest {
-		return nil, nil
+// DownloadReport writes the report of a finished game to w, as it is received
+func (c *ArenaClient) DownloadReport(ctx context.Context, id string, w io.Writer) error {
+	req, err := http.NewRequestWithContext(ctx, "GET", c.Base+"/report?"+url.Values{"id": {id}}.Encode(), nil)
+	if err != nil {
+		return err
 	}
-	return data, err
+	res, err := c.downloads.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		message, _ := io.ReadAll(io.LimitReader(res.Body, 1024))
+		return &httpError{res.StatusCode, strings.TrimSpace(string(message))}
+	}
+	_, err = io.Copy(w, res.Body)
+	return err
 }
 
 type JoinResponse struct {

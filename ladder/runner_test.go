@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 )
@@ -22,6 +23,10 @@ func requireDocker(t *testing.T) {
 		{"build", "-q", "-t", "hive-arena-server", ".."},
 		{"build", "-q", "-t", "example-agent-go", "-f", "../example-agent-go/Dockerfile", ".."},
 		{"build", "-q", "-t", "hive-ladder-crashbot", "testdata/crashbot"},
+		{"build", "-q", "-t", "hive-ladder-slowcrashbot", "testdata/slowcrashbot"},
+		{"build", "-q", "-t", "hive-ladder-nojoinbot", "testdata/nojoinbot"},
+		{"build", "-q", "-t", "hive-ladder-impostorbot", "testdata/impostorbot"},
+		{"build", "-q", "-t", "hive-ladder-idlebot", "testdata/idlebot"},
 	}
 	for _, args := range builds {
 		if out, err := exec.Command("docker", args...).CombinedOutput(); err != nil {
@@ -50,8 +55,12 @@ func TestRunMatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if result.Result == nil || len(result.Result.Players) != 4 || len(result.Report) == 0 {
+	defer result.RemoveReport()
+	if result.Result == nil || len(result.Result.Players) != 4 || result.ReportFile == "" {
 		t.Fatalf("unexpected result: %+v", result)
+	}
+	if report, err := readGzip(result.ReportFile); err != nil || !strings.Contains(string(report), `"history"`) {
+		t.Errorf("expected the report in %s: %s", result.ReportFile, err)
 	}
 
 	expected := map[string]BotStatus{"good": Finished, "crash": Crashed, "nojoin": NoJoin, "missing": NoJoin}
@@ -109,6 +118,102 @@ func TestNoJoinDoesNotWaitForTimeout(t *testing.T) {
 	}
 	if result.Bots[1].Status != NoJoin {
 		t.Errorf("unexpected outcome: %+v", result.Bots[1])
+	}
+}
+
+// Bots that exit before the game starts are forfeited once it does, so that
+// the server does not wait for their orders every turn
+func TestEarlyCrashesAreForfeited(t *testing.T) {
+	requireDocker(t)
+
+	config := DefaultRunnerConfig()
+	config.JoinTimeout = 30 * time.Second
+	runner := Runner{Config: config}
+
+	start := time.Now()
+	result, err := runner.Run(context.Background(), Match{Map: "tiny", Bots: []Bot{
+		{Name: "good", Image: "example-agent-go"},
+		{Name: "crash", Image: "hive-ladder-crashbot"},
+		{Name: "slowcrash", Image: "hive-ladder-slowcrashbot"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer result.RemoveReport()
+
+	for _, bot := range result.Bots[1:] {
+		if bot.Status != Crashed || !result.Result.Players[bot.Seat].Forfeited {
+			t.Errorf("%s should have crashed and been forfeited: %+v", bot.Name, bot)
+		}
+	}
+	// Without forfeits, each of the 50+ turns would wait for the 2 s turn timeout
+	if elapsed := time.Since(start); elapsed > 60*time.Second {
+		t.Errorf("the match took %s: the crashed bots were not forfeited", elapsed)
+	}
+}
+
+// A bot always plays under its own name, whatever name it joins with
+func TestBotsJoinUnderTheirOwnName(t *testing.T) {
+	requireDocker(t)
+
+	runner := Runner{Config: DefaultRunnerConfig()}
+	result, err := runner.Run(context.Background(), Match{Map: "tiny", Bots: []Bot{
+		{Name: "good", Image: "example-agent-go"},
+		{Name: "honest", Image: "hive-ladder-impostorbot"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer result.RemoveReport()
+
+	bot := result.Bots[1]
+	if bot.Seat < 0 || result.Result.Players[bot.Seat].Name != "honest" {
+		t.Errorf("the bot should play under its own name: %+v, players %+v", bot, result.Result.Players)
+	}
+}
+
+// The output of a bot that did not join is kept: it usually says why
+func TestNoJoinOutputIsKept(t *testing.T) {
+	requireDocker(t)
+
+	runner := Runner{Config: DefaultRunnerConfig()}
+	result, err := runner.Run(context.Background(), Match{Map: "tiny", Bots: []Bot{
+		{Name: "good", Image: "example-agent-go"},
+		{Name: "broken", Image: "hive-ladder-nojoinbot"},
+		{Name: "missing", Image: "hive-ladder-no-such-image"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer result.RemoveReport()
+
+	if bot := result.Bots[1]; bot.Status != NoJoin || !strings.Contains(bot.Log, "no configuration found") {
+		t.Errorf("expected the output of the bot that did not join: %+v", bot)
+	}
+	if bot := result.Bots[2]; bot.Status != NoJoin || !strings.Contains(bot.Log, "could not be started") {
+		t.Errorf("expected the reason why the bot could not be started: %+v", bot)
+	}
+}
+
+// A failed match returns what is known about the bots
+func TestFailedMatchHasPartialResult(t *testing.T) {
+	requireDocker(t)
+
+	config := DefaultRunnerConfig()
+	config.MatchTimeout = 15 * time.Second
+	runner := Runner{Config: config}
+
+	// The idle bot makes every turn wait for the turn timeout
+	result, err := runner.Run(context.Background(), Match{Map: "tiny", Bots: []Bot{
+		{Name: "good", Image: "example-agent-go"},
+		{Name: "idle", Image: "hive-ladder-idlebot"},
+	}})
+	if err == nil {
+		result.RemoveReport()
+		t.Fatal("the match should have timed out")
+	}
+	if result == nil || result.Error == "" || len(result.Bots) != 2 || !strings.Contains(result.Bots[1].Log, "joined") {
+		t.Fatalf("expected a partial result with the bots' output, got %+v (%s)", result, err)
 	}
 }
 

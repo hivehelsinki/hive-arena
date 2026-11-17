@@ -56,7 +56,7 @@ let lastShown = 0;
 async function nextReplay() {
 	let delay = 10;
 	try {
-		const matches = await (await fetch("/api/matches?limit=20")).json();
+		const matches = ((await (await fetch("/api/matches?limit=20")).json()) || []).filter(m => !m.void);
 		if (matches && matches.length > 0) {
 			// The most recent match not shown yet, or else a random recent one
 			let match = matches.find(m => m.id > lastShown) || matches[Math.floor(Math.random() * matches.length)];

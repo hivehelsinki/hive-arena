@@ -1,7 +1,7 @@
 package main
 
 import (
-	"encoding/json"
+	"compress/gzip"
 	"os"
 	"testing"
 	"time"
@@ -26,9 +26,14 @@ func fakeResult(mapname string, bots []Bot, flowers []uint, statuses []BotStatus
 		Map:     mapname,
 		Started: time.Now(),
 		Ended:   time.Now(),
-		Report:  json.RawMessage(`{"id":"game"}`),
 		Result:  &arena.GameResult{Turns: 100},
 	}
+	file, _ := os.CreateTemp("", "report-*.json.gz")
+	zip := gzip.NewWriter(file)
+	zip.Write([]byte(`{"id":"game"}`))
+	zip.Close()
+	file.Close()
+	result.ReportFile = file.Name()
 	for i, bot := range bots {
 		result.Result.Players = append(result.Result.Players, arena.PlayerResult{Name: bot.Name, Flowers: flowers[i]})
 		result.Bots = append(result.Bots, BotOutcome{Bot: bot, Seat: i, Status: statuses[i], Log: "log of " + bot.Name})
@@ -156,5 +161,58 @@ func TestWriteGzipIsAtomic(t *testing.T) {
 	}
 	if _, err := os.Stat(path + ".tmp"); !os.IsNotExist(err) {
 		t.Error("temporary file left behind")
+	}
+}
+
+func TestRecordVoidMatch(t *testing.T) {
+	store := newTestStore(t)
+	a := Bot{Name: "a", Image: "img-a", Commit: "c1"}
+	b := Bot{Name: "b", Image: "img-b", Commit: "c2"}
+
+	run, _ := store.CreateRun("ladder", nil, []Bot{a, b})
+	failed := &MatchResult{
+		GameID: "game", Map: "m", Started: time.Now(), Ended: time.Now(),
+		Error: "the match took more than 30m0s",
+		Bots: []BotOutcome{
+			{Bot: a, Seat: -1, Status: Finished, ExitCode: -1, Log: "log of a"},
+			{Bot: b, Seat: -1, Status: Crashed, ExitCode: 1},
+		},
+	}
+	id, err := store.RecordMatch(run, failed)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	match, err := store.Match(id)
+	if err != nil || match == nil {
+		t.Fatal(err)
+	}
+	if !match.Void || match.Error != failed.Error || len(match.Bots) != 2 {
+		t.Errorf("expected a void match with its error and bots: %+v", match)
+	}
+	if log, err := readGzip(store.LogPath(id, "a")); err != nil || string(log) != "log of a" {
+		t.Errorf("expected the log of a: %q, %v", log, err)
+	}
+
+	// Not counted, and not a failure of the bots
+	results, _ := store.Results([]int64{run})
+	if len(results) != 0 {
+		t.Errorf("a void match should not count: %+v", results)
+	}
+	if n, _ := store.ConsecutiveFailures("b", "c2"); n != 0 {
+		t.Errorf("a void match should not count as a failure, got %d", n)
+	}
+}
+
+func TestRecordMatchRejectsUnseatedBots(t *testing.T) {
+	store := newTestStore(t)
+	a := Bot{Name: "a", Image: "img-a", Commit: "c1"}
+	b := Bot{Name: "b", Image: "img-b", Commit: "c2"}
+
+	result := fakeResult("m", []Bot{a, b}, []uint{1, 2}, []BotStatus{Finished, Finished})
+	defer result.RemoveReport()
+	result.Bots[1].Seat = -1
+	if _, err := store.RecordMatch(0, result); err == nil {
+		t.Error("a bot without a seat should be an error, not a crash")
 	}
 }

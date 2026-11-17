@@ -111,12 +111,17 @@ func cmdMatch(ctx context.Context, args []string) {
 
 	runner := Runner{Config: config}
 	result, err := runner.Run(ctx, match)
-	if err != nil {
+	if result == nil {
 		log.Fatal(err)
 	}
+	defer result.RemoveReport()
 
-	if *report != "" {
-		if err := os.WriteFile(*report, result.Report, 0o644); err != nil {
+	if *report != "" && result.ReportFile != "" {
+		data, err := readGzip(result.ReportFile)
+		if err == nil {
+			err = os.WriteFile(*report, data, 0o644)
+		}
+		if err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -130,12 +135,16 @@ func cmdMatch(ctx context.Context, args []string) {
 		}
 	}
 
-	result.Report = nil
+	result.ReportFile = ""
 	for i := range result.Bots {
 		result.Bots[i].Log = fmt.Sprintf("(%d bytes)", len(result.Bots[i].Log))
 	}
 	out, _ := json.MarshalIndent(result, "", "  ")
 	fmt.Println(string(out))
+	if err != nil {
+		result.RemoveReport()
+		log.Fatal(err)
+	}
 }
 
 // openLadder parses the common flags, loads the configuration and opens the store
@@ -159,7 +168,9 @@ func openLadderWithFlags(flags *flag.FlagSet, args []string) (*Ladder, *flag.Fla
 	}
 	LogDiskWarning(config)
 
-	smoke := config.RunnerConfig()
+	runnerConfig := config.RunnerConfig()
+	runnerConfig.TempDir = store.TempDir()
+	smoke := runnerConfig
 	smoke.MatchTimeout = 5 * time.Minute
 	builder := &Builder{
 		Store:        store,
@@ -173,7 +184,7 @@ func openLadderWithFlags(flags *flag.FlagSet, args []string) (*Ladder, *flag.Fla
 	ladder := &Ladder{
 		Config: config,
 		Store:  store,
-		Player: &Runner{Config: config.RunnerConfig()},
+		Player: &Runner{Config: runnerConfig},
 		Rand:   rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 	ladder.Pool = func(ctx context.Context) ([]Bot, error) {

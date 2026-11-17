@@ -5,17 +5,20 @@
 	{{.Map}}, {{len .Bots}} players, {{.Turns}} turns. Played {{time .StartedAt}} in {{duration .StartedAt .EndedAt}}{{if .RunID}}, in <a href="/runs/{{.RunID}}">run #{{.RunID}}</a>{{end}}.
 	{{if .Void}}<strong>Void: not counted.</strong>{{end}}
 </p>
+{{if .Error}}<p class="error">This match failed: {{.Error}}</p>{{end}}
+{{if .Turns}}
 <p>
 	<a class="button" href="/viewer/?match={{.ID}}">Watch the replay</a>
 	<a class="button" href="/matches/{{.ID}}/report.json?download">Download the report</a>
 	<span class="dim">(readable with the desktop viewer: <code>go run ./viewer --file match-{{.ID}}.json</code>)</span>
 </p>
+{{end}}
 <table>
 <thead><tr><th>Seat</th><th>Team</th><th>Version</th><th class="num">Flowers</th><th class="num">Points</th><th>Status</th><th>Log</th></tr></thead>
 <tbody>
 {{range .Bots}}
 <tr>
-	<td>{{.Seat}}</td>
+	<td>{{if ge .Seat 0}}{{.Seat}}{{end}}</td>
 	<td><a href="/teams/{{.Team}}">{{.Team}}</a></td>
 	<td class="mono">{{short .Commit}}</td>
 	<td class="num">{{.Flowers}}</td>

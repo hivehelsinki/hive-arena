@@ -208,8 +208,12 @@ func (b *Builder) dockerBuild(ctx context.Context, team Team, dir string, build 
 // smokeTest plays a 1-player game with the new image: it must join and play until the end
 func (b *Builder) smokeTest(ctx context.Context, build *Build, output io.Writer) (BuildStatus, string) {
 	result, err := b.Smoke.Run(ctx, Match{Map: b.SmokeMap, Bots: []Bot{{Name: build.Team, Image: build.Image, Commit: build.Commit}}})
+	result.RemoveReport()
 	if err != nil {
 		fmt.Fprintf(output, "Error: %s\n", err)
+		if result != nil {
+			fmt.Fprintf(output, "--- Agent output\n%s", result.Bots[0].Log)
+		}
 		return BuildSmokeFailed, err.Error()
 	}
 

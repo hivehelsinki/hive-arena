@@ -70,20 +70,19 @@ CREATE INDEX IF NOT EXISTS match_bots_team ON match_bots(team);
 `
 
 func OpenStore(dir string) (*Store, error) {
-	for _, sub := range []string{"reports", "logs", "builds"} {
+	for _, sub := range []string{"reports", "logs", "builds", "tmp"} {
 		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
 			return nil, err
 		}
 	}
 
-	// Database snapshots left by an interrupted backup
-	if leftovers, _ := filepath.Glob(filepath.Join(dir, "snapshot-*.db")); leftovers != nil {
-		for _, path := range leftovers {
-			os.Remove(path)
-		}
-	}
+	// Left by an interrupted backup or match. Recent ones may belong to
+	// another ladder process using the same data (e.g. the service).
+	removeOld(filepath.Join(dir, "snapshot-*.db"), time.Hour)
+	removeOld(filepath.Join(dir, "tmp", "*"), 24*time.Hour)
 
-	db, err := sql.Open("sqlite", filepath.Join(dir, "ladder.db")+"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
+	// synchronous(FULL): a committed transaction survives a power loss
+	db, err := sql.Open("sqlite", filepath.Join(dir, "ladder.db")+"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, err
 	}
@@ -92,6 +91,21 @@ func OpenStore(dir string) (*Store, error) {
 		return nil, fmt.Errorf("creating the schema: %w", err)
 	}
 	return &Store{db: db, dir: dir}, nil
+}
+
+// removeOld removes the files matching a pattern older than the given age
+func removeOld(pattern string, age time.Duration) {
+	paths, _ := filepath.Glob(pattern)
+	for _, path := range paths {
+		if info, err := os.Stat(path); err == nil && time.Since(info.ModTime()) > age {
+			os.Remove(path)
+		}
+	}
+}
+
+// TempDir is a directory for temporary files, on the same file system as the data
+func (s *Store) TempDir() string {
+	return filepath.Join(s.dir, "tmp")
 }
 
 func (s *Store) Close() error {
@@ -218,15 +232,32 @@ func (s *Store) Runs(kind string, limit int) ([]Run, error) {
 
 // RecordMatch stores a played match: its results with the points of each
 // bot, its report and the bot logs. runID is 0 for matches outside of runs.
+// The report file is moved into the store.
+//
+// A failed match (with an error, and no game result) is recorded as void:
+// it does not count, but its bots and their output are kept.
 func (s *Store) RecordMatch(runID int64, result *MatchResult) (int64, error) {
-	placements := make([]Placement, len(result.Bots))
-	for i, bot := range result.Bots {
-		placements[i] = Placement{
-			Flowers: result.Result.Players[bot.Seat].Flowers,
-			Failed:  bot.Status != Finished,
-		}
+	void := result.Error != ""
+	if !void && (result.Result == nil || result.ReportFile == "") {
+		return 0, fmt.Errorf("the match has no result")
 	}
-	points := MatchPoints(placements)
+
+	placements := make([]Placement, len(result.Bots))
+	points := make([]int, len(result.Bots))
+	turns := 0
+	if !void {
+		for i, bot := range result.Bots {
+			if bot.Seat < 0 || bot.Seat >= len(result.Result.Players) {
+				return 0, fmt.Errorf("bot %s has no seat in the game", bot.Name)
+			}
+			placements[i] = Placement{
+				Flowers: result.Result.Players[bot.Seat].Flowers,
+				Failed:  bot.Status != Finished,
+			}
+		}
+		points = MatchPoints(placements)
+		turns = int(result.Result.Turns)
+	}
 
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -234,8 +265,8 @@ func (s *Store) RecordMatch(runID int64, result *MatchResult) (int64, error) {
 	}
 	defer tx.Rollback()
 
-	res, err := tx.Exec(`INSERT INTO matches (run_id, game_id, map, players, started_at, ended_at, turns) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		nullID(runID), result.GameID, result.Map, len(result.Bots), result.Started, result.Ended, result.Result.Turns)
+	res, err := tx.Exec(`INSERT INTO matches (run_id, game_id, map, players, started_at, ended_at, turns, void, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		nullID(runID), result.GameID, result.Map, len(result.Bots), result.Started, result.Ended, turns, void, result.Error)
 	if err != nil {
 		return 0, err
 	}
@@ -248,9 +279,15 @@ func (s *Store) RecordMatch(runID int64, result *MatchResult) (int64, error) {
 		}
 	}
 
-	// Files first, durably: a match in the database always has its report
-	if err := writeGzip(s.ReportPath(id), result.Report); err != nil {
-		return 0, err
+	// Files first, durably: a match in the database always has its report.
+	// Files of a match whose recording was interrupted may remain under the
+	// same ID: they are replaced.
+	os.RemoveAll(filepath.Dir(s.LogPath(id, "")))
+	os.Remove(s.ReportPath(id))
+	if !void {
+		if err := moveFileDurably(result.ReportFile, s.ReportPath(id)); err != nil {
+			return 0, err
+		}
 	}
 	for _, bot := range result.Bots {
 		if bot.Log == "" {
@@ -262,6 +299,26 @@ func (s *Store) RecordMatch(runID int64, result *MatchResult) (int64, error) {
 	}
 
 	return id, tx.Commit()
+}
+
+// moveFileDurably moves a file within the file system, durably
+func moveFileDurably(from string, to string) error {
+	file, err := os.Open(from)
+	if err != nil {
+		return err
+	}
+	err = file.Sync()
+	file.Close()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
+		return err
+	}
+	if err := os.Rename(from, to); err != nil {
+		return err
+	}
+	return syncDir(filepath.Dir(to))
 }
 
 func nullID(id int64) any {
@@ -426,7 +483,8 @@ type MatchSummary struct {
 	EndedAt   time.Time  `json:"endedAt"`
 	Turns     int        `json:"turns"`
 	Void      bool       `json:"void"`
-	Bots      []MatchBot `json:"bots"` // by seat
+	Error     string     `json:"error,omitempty"` // why the match failed or was voided
+	Bots      []MatchBot `json:"bots"`            // by seat
 }
 
 type MatchFilter struct {
@@ -457,7 +515,7 @@ func (s *Store) Matches(filter MatchFilter) ([]MatchSummary, error) {
 		where = append(where, "m.id < ?")
 		args = append(args, filter.Before)
 	}
-	query := `SELECT m.id, COALESCE(m.run_id, 0), m.game_id, m.map, m.started_at, m.ended_at, m.turns, m.void FROM matches m`
+	query := `SELECT m.id, COALESCE(m.run_id, 0), m.game_id, m.map, m.started_at, m.ended_at, m.turns, m.void, m.error FROM matches m`
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -473,7 +531,7 @@ func (s *Store) Matches(filter MatchFilter) ([]MatchSummary, error) {
 	var matches []MatchSummary
 	for rows.Next() {
 		var m MatchSummary
-		if err := rows.Scan(&m.ID, &m.RunID, &m.GameID, &m.Map, &m.StartedAt, &m.EndedAt, &m.Turns, &m.Void); err != nil {
+		if err := rows.Scan(&m.ID, &m.RunID, &m.GameID, &m.Map, &m.StartedAt, &m.EndedAt, &m.Turns, &m.Void, &m.Error); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -484,22 +542,33 @@ func (s *Store) Matches(filter MatchFilter) ([]MatchSummary, error) {
 		return nil, err
 	}
 
-	for i := range matches {
-		bots, err := s.db.Query(`SELECT team, image, commit_id, seat, flowers, points, status, exit_code FROM match_bots WHERE match_id = ? ORDER BY seat`, matches[i].ID)
-		if err != nil {
+	if len(matches) == 0 {
+		return matches, nil
+	}
+
+	// The bots of all the matches at once
+	index := make(map[int64]int)
+	ids := make([]any, len(matches))
+	for i, m := range matches {
+		index[m.ID] = i
+		ids[i] = m.ID
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	bots, err := s.db.Query(`SELECT match_id, team, image, commit_id, seat, flowers, points, status, exit_code FROM match_bots WHERE match_id IN (`+placeholders+`) ORDER BY match_id, seat, team`, ids...)
+	if err != nil {
+		return nil, err
+	}
+	defer bots.Close()
+	for bots.Next() {
+		var matchID int64
+		var b MatchBot
+		if err := bots.Scan(&matchID, &b.Team, &b.Image, &b.Commit, &b.Seat, &b.Flowers, &b.Points, &b.Status, &b.ExitCode); err != nil {
 			return nil, err
 		}
-		for bots.Next() {
-			var b MatchBot
-			if err := bots.Scan(&b.Team, &b.Image, &b.Commit, &b.Seat, &b.Flowers, &b.Points, &b.Status, &b.ExitCode); err != nil {
-				bots.Close()
-				return nil, err
-			}
-			matches[i].Bots = append(matches[i].Bots, b)
-		}
-		bots.Close()
+		m := &matches[index[matchID]]
+		m.Bots = append(m.Bots, b)
 	}
-	return matches, nil
+	return matches, bots.Err()
 }
 
 func (s *Store) Match(id int64) (*MatchSummary, error) {
