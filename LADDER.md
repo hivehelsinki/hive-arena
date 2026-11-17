@@ -103,7 +103,9 @@ Container limits, the same for every bot: `--read-only`, `--tmpfs /tmp`, non-roo
 
 The target VM has only **2 virtual cores**, and with `--dev` matches are CPU-bound rather than paced by the clock. So **matches run one at a time**: nothing else competes for the CPU, and a bot's result does not depend on what else is running. Within a match, the CPU is split equally between the `n` bots: `--cpus = cores / n` (2 cores give 1.0 each in a 2-player match, 0.5 in a 4-player one, 0.33 in a 6-player one). The server container has no limit of its own: it only works between turns (validating and applying orders), when the bots are mostly waiting, so it should not take much from them. This is an assumption to verify: in step 2, measure match duration and the server's CPU use with the example bots, and adjust (e.g. reserve a fraction of a core for the server) if it turns out to matter. The per-bot CPU share differs between formats, but is identical for all bots in a match, which is what matters for fairness. If time per run turns out too tight, the answer is a larger VM or fewer matches per run, not unequal shares.
 
-A bot is counted as **crashed or timed out** if its container exits before the game is over or it never joins. The match goes on; the bot is ranked last (see "Scoring").
+A bot is counted as **crashed** if its container exits before the game is over, and as **no-join** if it does not join in time (or its container exits first). The match goes on: the runner joins a stand-in in place of a missing bot, which posts empty orders every turn so the game is not slowed down. Either way the bot is ranked last (see "Scoring").
+
+A crashed bot's seat is a different matter: the runner does not have its token, so every remaining turn waits for the 2-second turn timeout, and a game with a crash can last a few minutes. That is acceptable with the time available between runs; if it becomes a problem, a staff-only server route to forfeit a seat (the server then stops waiting for that player) would fix it.
 
 ## Games and lineups
 
