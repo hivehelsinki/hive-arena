@@ -3,13 +3,15 @@ local utils = require "utils"
 
 local args = {...}
 
-local host = args[1]
-local gameid = args[2]
-local name = args[3]
+-- Arguments, or environment variables when run by the ladder (see docs/docker.md)
+local host = args[1] or os.getenv "ARENA_HOST"
+local gameid = args[2] or os.getenv "ARENA_GAME_ID"
+local name = args[3] or os.getenv "ARENA_NAME"
 
 if not host or not gameid or not name then
 	print "Usage: lua main.lua <host> <gameid> <name>"
-	return
+	print "or set the ARENA_HOST, ARENA_GAME_ID and ARENA_NAME environment variables"
+	os.exit(1)
 end
 
 local function makeOrders(state, player)

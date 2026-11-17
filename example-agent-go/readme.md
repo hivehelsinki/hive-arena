@@ -10,6 +10,10 @@ The library expects you to implement a `think` function with the following proto
 
 All types are defined in the `arena` package (the `arena` directory of this repository, imported as `github.com/hivehelsinki/hive-arena/arena`), and mirror closely the structures expected and returned by the API.
 
+## Docker
+
+When no command line arguments are given, the agent reads the `ARENA_HOST`, `ARENA_GAME_ID` and `ARENA_NAME` environment variables instead. That is how the ladder runs agents, from a Docker image: build this one with `docker build -f example-agent-go/Dockerfile -t example-agent-go .` from the repository root. See [docs/docker.md](../docs/docker.md) for the conventions your own Dockerfile has to follow.
+
 ## Test script
 
 A very basic script is provided to start a new game and run a number of agents against each other automatically. Some values are hardcoded, tweak at will.

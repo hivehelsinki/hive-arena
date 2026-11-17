@@ -31,6 +31,8 @@ That allows you to focus on the logic of your agent instead of the implementatio
 
 See readme files in each relevant directory.
 
+To take part in the ladder, an agent must come with a Dockerfile following the conventions in [docs/docker.md](docs/docker.md). Both templates provide one.
+
 ## Developing agents in other languages
 
 To start an agent from scratch, you will need to implement the network protocol yourself. An agent should:
