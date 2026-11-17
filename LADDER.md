@@ -105,7 +105,7 @@ The target VM has only **2 virtual cores**, and with `--dev` matches are CPU-bou
 
 A bot is counted as **crashed** if its container exits before the game is over, and as **no-join** if it does not join in time (or its container exits first). The match goes on: the runner joins a stand-in in place of a missing bot, which posts empty orders every turn so the game is not slowed down. Either way the bot is ranked last (see "Scoring").
 
-A crashed bot's seat is a different matter: the runner does not have its token, so every remaining turn waits for the 2-second turn timeout, and a game with a crash can last a few minutes. That is acceptable with the time available between runs; if it becomes a problem, a staff-only server route to forfeit a seat (the server then stops waiting for that player) would fix it.
+When a bot crashes mid-game, the runner forfeits its seat through the server's `/forfeit` route (admin token only): the server stops waiting for its orders, so the rest of the game is not slowed down by the turn timeout.
 
 ## Games and lineups
 

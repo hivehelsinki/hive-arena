@@ -45,7 +45,6 @@ func TestRunMatch(t *testing.T) {
 		{Name: "missing", Image: "hive-ladder-no-such-image"},
 	}}
 
-	// Slow: once the crashing bot is gone, each turn waits for the turn timeout
 	result, err := runner.Run(context.Background(), match)
 	if err != nil {
 		t.Fatal(err)
@@ -68,6 +67,10 @@ func TestRunMatch(t *testing.T) {
 	}
 	if len(seats) != 4 {
 		t.Errorf("expected 4 different seats, got %v", seats)
+	}
+
+	if crash := result.Bots[1]; !result.Result.Players[crash.Seat].Forfeited {
+		t.Error("the crashed bot should have been forfeited")
 	}
 
 	for _, bot := range result.Bots {

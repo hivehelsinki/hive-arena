@@ -90,8 +90,9 @@ type matchRun struct {
 	match  Match
 	prefix string // prefix of all docker object names
 
-	client *ArenaClient
-	gameID string
+	client     *ArenaClient
+	gameID     string
+	adminToken string
 
 	mutex      sync.Mutex
 	exitCodes  map[int]int  // per bot index, for bots that exited
@@ -186,6 +187,7 @@ func (run *matchRun) play(ctx context.Context) (*MatchResult, error) {
 		return nil, fmt.Errorf("creating the game: %w", err)
 	}
 	run.gameID = game.Id
+	run.adminToken = game.AdminToken
 
 	result := &MatchResult{GameID: game.Id, Map: run.match.Map, Started: time.Now()}
 
@@ -288,6 +290,16 @@ func (run *matchRun) waitForBot(ctx context.Context, i int) {
 	// so a game still running means the bot stopped too early
 	status, err := run.client.GameStatus(ctx, run.gameID)
 	live := err == nil && status != nil && !status.GameOver
+
+	// If it had joined, the server should not wait for its orders anymore
+	if live && len(status.Players) == status.NumPlayers {
+		seat := slices.Index(status.Players, run.match.Bots[i].Name)
+		if seat >= 0 {
+			if err := run.client.Forfeit(ctx, run.gameID, run.adminToken, seat); err != nil {
+				log.Printf("%s: could not forfeit %s: %s", run.prefix, run.match.Bots[i].Name, err)
+			}
+		}
+	}
 
 	run.mutex.Lock()
 	defer run.mutex.Unlock()

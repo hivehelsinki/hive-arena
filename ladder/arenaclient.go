@@ -117,3 +117,8 @@ func (c *ArenaClient) PostOrders(ctx context.Context, id string, token string, t
 	_, err := c.request(ctx, "POST", "/orders", url.Values{"id": {id}, "token": {token}, "turn": {fmt.Sprint(turn)}}, orders)
 	return err
 }
+
+func (c *ArenaClient) Forfeit(ctx context.Context, id string, adminToken string, player int) error {
+	_, err := c.request(ctx, "GET", "/forfeit", url.Values{"id": {id}, "token": {adminToken}, "player": {fmt.Sprint(player)}}, "")
+	return err
+}

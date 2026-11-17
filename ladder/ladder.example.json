@@ -1,0 +1,30 @@
+{
+	"dataDir": "data",
+	"schedule": {
+		"times": ["08:00", "16:00"],
+		"timezone": "Europe/Helsinki",
+		"formats": [
+			{"map": "balanced", "players": 4},
+			{"map": "pure3", "players": 3},
+			{"map": "tiny", "players": 2},
+			{"map": "balanced", "players": 6}
+		],
+		"repeats": 3,
+		"window": 4,
+		"maxFailures": 5
+	},
+	"deadlineMargin": "10m",
+	"runner": {
+		"serverImage": "hive-arena-server",
+		"cores": 2,
+		"memory": "256m",
+		"pids": 64,
+		"joinTimeout": "1m",
+		"matchTimeout": "30m"
+	},
+	"houseBots": [
+		{"name": "house-go", "image": "example-agent-go", "commit": "house"},
+		{"name": "house-lua", "image": "example-agent-lua", "commit": "house"}
+	],
+	"bots": []
+}

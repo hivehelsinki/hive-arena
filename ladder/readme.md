@@ -4,6 +4,30 @@ The ladder service: plays registered bots against each other in Docker container
 
 Work in progress. Currently available:
 
+## Running the ladder
+
+Copy [ladder.example.json](ladder.example.json) to `ladder.json` and adjust it, then:
+
+- `go run ./ladder serve`: runs the ladder at the scheduled times (send `SIGUSR1` to the process to start a run right away)
+- `go run ./ladder run`: plays one run now and exits
+- `go run ./ladder leaderboard`: prints the leaderboard
+
+Configuration (`ladder.json`):
+
+- `dataDir`: where the database, reports and logs are kept
+- `schedule`: published as is with each run.
+  - `times`, `timezone`: daily start times of the runs
+  - `formats`: each run plays every lineup of the pool for each format (map and number of players)
+  - `repeats`: how many times each lineup is played in a run
+  - `window`: the leaderboard is computed over this many recent runs
+  - `maxFailures`: a bot that fails (crashes or doesn't join) this many matches in a row with the same commit is left out of the next runs, until its commit changes
+- `deadlineMargin`: a run stops this long before the next scheduled run, even if not all matches were played (it is then marked incomplete)
+- `runner`: server image, CPU cores split between the bots of a match, per-bot memory and process limits, timeouts
+- `houseBots`: bots that always take part (reference bots)
+- `bots`: the team bots (temporary, until the registry is implemented)
+
+Matches are played one at a time. A crashed bot's seat is forfeited (the server stops waiting for its orders), so it does not slow the game down.
+
 ## Playing one match
 
 ```sh
@@ -25,4 +49,4 @@ Containers and networks are always removed at the end. All of them have the `hiv
 
 ## Tests
 
-`go test ./ladder` runs the runner tests with Docker (skipped with `-short` or when Docker is unavailable). One of them plays a game with a crashing bot, which takes about 2 minutes, since every remaining turn waits for the turn timeout.
+`go test ./ladder` runs the runner tests with Docker (skipped with `-short` or when Docker is unavailable). 

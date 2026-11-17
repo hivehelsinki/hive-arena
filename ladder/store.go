@@ -470,3 +470,29 @@ func (s *Store) SetVoid(id int64, void bool, reason string) error {
 	_, err := s.db.Exec(`UPDATE matches SET void = ?, error = ? WHERE id = ?`, void, reason, id)
 	return err
 }
+
+// ConsecutiveFailures returns how many of a bot's most recent matches with
+// the given commit, in a row, it failed (crashed or did not join)
+func (s *Store) ConsecutiveFailures(team string, commit string) (int, error) {
+	rows, err := s.db.Query(`
+		SELECT b.status FROM match_bots b JOIN matches m ON m.id = b.match_id
+		WHERE b.team = ? AND b.commit_id = ? AND m.void = 0
+		ORDER BY m.id DESC LIMIT 100`, team, commit)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	count := 0
+	for rows.Next() {
+		var status BotStatus
+		if err := rows.Scan(&status); err != nil {
+			return 0, err
+		}
+		if status == Finished {
+			break
+		}
+		count++
+	}
+	return count, rows.Err()
+}
