@@ -122,33 +122,62 @@ func TestLatestTagNone(t *testing.T) {
 }
 
 func TestParseTeams(t *testing.T) {
-	valid := `[{"name": "Super-Team_1", "repo": "https://example.com/a.git", "members": ["x"]}, {"name": "b", "repo": "r", "ref": "v1", "dockerfile": "bot/Dockerfile", "context": "bot"}]`
-	teams, err := ParseTeams([]byte(valid))
-	if err != nil || len(teams) != 2 || teams[1].Ref != "v1" {
-		t.Errorf("unexpected result: %+v, %v", teams, err)
+	valid := `[{"name": "Super-Team_1", "repo": "https://example.com/a.git", "members": ["x"]}, {"name": "b", "repo": "https://example.com/b", "ref": "v1", "dockerfile": "bot/Dockerfile", "context": "bot"}]`
+	teams, problems, err := ParseTeams([]byte(valid), true)
+	if err != nil || len(problems) != 0 || len(teams) != 2 || teams[1].Ref != "v1" {
+		t.Errorf("unexpected result: %+v, %v, %v", teams, problems, err)
 	}
 
+	// Invalid entries are left out, without affecting the others
 	invalid := []string{
-		`[{"name": "a b", "repo": "r"}]`,
-		`[{"name": "", "repo": "r"}]`,
-		`[{"name": "a", "repo": ""}]`,
-		`[{"name": "a", "repo": "r"}, {"name": "A", "repo": "r"}]`,
-		`[{"name": "a", "repo": "r", "context": "../x"}]`,
-		`{`,
+		`{"name": "a b", "repo": "https://r"}`,
+		`{"name": "", "repo": "https://r"}`,
+		`{"name": "c", "repo": ""}`,
+		`{"name": "Super-team_1", "repo": "https://r"}`,
+		`{"name": "c", "repo": "https://r", "context": "../x"}`,
+		`{"name": "c", "repo": "/home/someone/repo"}`,
+		`{"name": "c", "repo": "file:///etc"}`,
+		`{"name": "c", "repo": "ssh://git@example.com/x"}`,
+		`{"name": "c", "repo": "https://r", "ref": "--upload-pack=x"}`,
 	}
-	for _, data := range invalid {
-		if _, err := ParseTeams([]byte(data)); err == nil {
-			t.Errorf("expected an error for %s", data)
+	for _, entry := range invalid {
+		data := `[{"name": "Super-Team_1", "repo": "https://example.com/a.git"}, ` + entry + `]`
+		teams, problems, err := ParseTeams([]byte(data), true)
+		if err != nil || len(teams) != 1 || len(problems) != 1 {
+			t.Errorf("expected %s to be left out with a problem: %+v, %v, %v", entry, teams, problems, err)
 		}
+	}
+
+	// Local registries (staff) may use any repository
+	if teams, problems, _ := ParseTeams([]byte(`[{"name": "c", "repo": "/srv/bot"}]`), false); len(teams) != 1 || len(problems) != 0 {
+		t.Errorf("a local registry should accept local repositories: %v", problems)
+	}
+
+	if _, _, err := ParseTeams([]byte(`{`), true); err == nil {
+		t.Error("expected an error for invalid JSON")
 	}
 }
 
 func TestLoadTeamsFromRepository(t *testing.T) {
 	repo := newTestRepo(t)
-	repo.commit(map[string]string{"teams.json": `[{"name": "a", "repo": "r"}]`}, 10)
+	repo.commit(map[string]string{"teams.json": `[{"name": "a", "repo": "https://example.com/a"}, {"name": "b", "repo": "/tmp/b"}]`}, 10)
+	dataDir := t.TempDir()
 
-	teams, err := LoadTeams(context.Background(), RegistryConfig{URL: repo.dir}, t.TempDir())
-	if err != nil || len(teams) != 1 || teams[0].Name != "a" {
-		t.Errorf("unexpected result: %+v, %v", teams, err)
+	teams, problems, err := LoadTeams(context.Background(), RegistryConfig{URL: repo.dir}, dataDir)
+	if err != nil || len(teams) != 1 || teams[0].Name != "a" || len(problems) != 1 {
+		t.Errorf("unexpected result: %+v, %v, %v", teams, problems, err)
+	}
+
+	// An invalid registry: the last valid version is used
+	repo.commit(map[string]string{"teams.json": `[{"name": "a",`}, 20)
+	teams, problems, err = LoadTeams(context.Background(), RegistryConfig{URL: repo.dir}, dataDir)
+	if err != nil || len(teams) != 1 || teams[0].Name != "a" || len(problems) == 0 {
+		t.Errorf("expected the last valid registry, with a problem: %+v, %v, %v", teams, problems, err)
+	}
+
+	// An unreachable registry: the last fetched version is used
+	teams, problems, err = LoadTeams(context.Background(), RegistryConfig{URL: "/nonexistent"}, dataDir)
+	if err != nil || len(teams) != 1 || len(problems) == 0 {
+		t.Errorf("expected the last fetched registry, with a problem: %+v, %v, %v", teams, problems, err)
 	}
 }

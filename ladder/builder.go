@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -38,14 +40,31 @@ type Builder struct {
 	Smoke        MatchPlayer
 	SmokeMap     string
 	BuildTimeout time.Duration
-	KeepImages   int // successful images kept per team
+	KeepImages   int   // successful images kept per team (at least 1)
+	MaxImageSize int64 // in bytes, 0 for no limit
+
+	// For the service only, as they affect all of the machine's builds:
+	// clear the build cache mounts before each build (they are shared
+	// between all builds, so a team could plant files in another team's
+	// build), and limit the build cache to this size (e.g. "10GB")
+	IsolateCaches bool
+	CacheLimit    string
 }
+
+// Time limit for fetching a repository
+const fetchTimeout = 5 * time.Minute
+
+// errNotRecorded is returned by build when it could not be completed for a
+// reason that is not the team's (interruption, docker or network failure):
+// it is not recorded, and tried again at the next resolution
+type errNotRecorded struct{ error }
 
 // The state of a team's bot, at the time of the last pool resolution
 type TeamState struct {
-	Team  Team   `json:"team"`
-	Bot   *Bot   `json:"bot,omitempty"`   // the bot that plays, if any
-	Error string `json:"error,omitempty"` // why the latest version is not the one that plays
+	Team    Team   `json:"team"`
+	Bot     *Bot   `json:"bot,omitempty"`     // the team's current bot, if any
+	Error   string `json:"error,omitempty"`   // why the latest version is not the current bot
+	LeftOut string `json:"leftOut,omitempty"` // why the current bot does not play
 }
 
 func imageName(team string, commit string) string {
@@ -68,23 +87,48 @@ func (b *Builder) Pool(ctx context.Context, teams []Team) ([]Bot, []TeamState) {
 		}
 		states = append(states, state)
 	}
+	if b.CacheLimit != "" {
+		b.limitCache()
+	}
 	return bots, states
+}
+
+// imageExists reports whether a docker image is present. When docker does
+// not answer, the image is assumed to be there.
+func imageExists(image string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	_, err := docker(ctx, "image", "inspect", "--format", "{{.Id}}", image)
+	if err == nil {
+		return true
+	}
+	return !strings.Contains(err.Error(), "No such image")
 }
 
 func (b *Builder) resolve(ctx context.Context, team Team) TeamState {
 	state := TeamState{Team: team}
 
+	// The previous good build whose image is still there
 	fallback := func(err error) TeamState {
 		state.Error = err.Error()
-		build, ferr := b.Store.LastGoodBuild(team.Name)
-		if ferr == nil && build != nil {
-			state.Bot = &Bot{Name: team.Name, Image: build.Image, Commit: build.Commit}
+		builds, ferr := b.Store.GoodBuilds(team.Name)
+		if ferr != nil {
+			return state
+		}
+		for _, build := range builds {
+			if imageExists(build.Image) {
+				state.Bot = &Bot{Name: team.Name, Image: build.Image, Commit: build.Commit}
+				break
+			}
 		}
 		return state
 	}
 
 	dir := filepath.Join(b.DataDir, "repos", strings.ToLower(team.Name)+".git")
-	if err := Mirror(ctx, team.Repo, dir); err != nil {
+	fetchCtx, cancel := context.WithTimeout(ctx, fetchTimeout)
+	err := Mirror(fetchCtx, team.Repo, dir)
+	cancel()
+	if err != nil {
 		return fallback(fmt.Errorf("fetching the repository: %w", err))
 	}
 
@@ -107,8 +151,17 @@ func (b *Builder) resolve(ctx context.Context, team Team) TeamState {
 	if err != nil {
 		return fallback(err)
 	}
+	// A good build whose image disappeared (pruned, or restored data on
+	// another machine) is built again
+	if build != nil && build.Status == BuildOK && !imageExists(build.Image) {
+		log.Printf("Team %s: the image %s is missing, building it again", team.Name, build.Image)
+		build = nil
+	}
 	if build == nil {
-		build = b.build(ctx, team, dir, tag)
+		build, err = b.build(ctx, team, dir, tag)
+		if err != nil {
+			return fallback(fmt.Errorf("%s (%s): %w; it will be tried again", tag.Name, tag.Commit[:12], err))
+		}
 	}
 	if build.Status != BuildOK {
 		return fallback(fmt.Errorf("%s (%s): %s", tag.Name, tag.Commit[:12], build.Status))
@@ -118,8 +171,9 @@ func (b *Builder) resolve(ctx context.Context, team Team) TeamState {
 	return state
 }
 
-// build builds and smoke-tests a commit, and records the result
-func (b *Builder) build(ctx context.Context, team Team, dir string, tag Tag) *Build {
+// build builds and smoke-tests a commit, and records the result. Failures
+// that are not the team's are not recorded: they return an error.
+func (b *Builder) build(ctx context.Context, team Team, dir string, tag Tag) (*Build, error) {
 	build := &Build{
 		Team:      team.Name,
 		Tag:       tag.Name,
@@ -129,19 +183,40 @@ func (b *Builder) build(ctx context.Context, team Team, dir string, tag Tag) *Bu
 	}
 	log.Printf("Team %s: building %s (%s)", team.Name, tag.Name, tag.Commit[:12])
 
+	if b.IsolateCaches {
+		b.clearCacheMounts()
+	}
+
 	var output strings.Builder
 	err := b.dockerBuild(ctx, team, dir, build, &output)
+	if err != nil && transientBuildFailure(output.String()) {
+		err = errNotRecorded{fmt.Errorf("%w (registry or network failure)", err)}
+	}
+	if err == nil {
+		err = b.checkImageSize(build.Image)
+	}
 	if err != nil {
 		build.Status = BuildFailed
 		build.Error = err.Error()
 	} else {
 		fmt.Fprintf(&output, "\n=== Smoke test: 1-player game on %s\n", b.SmokeMap)
-		build.Status, build.Error = b.smokeTest(ctx, build, &output)
+		build.Status, build.Error, err = b.smokeTest(ctx, build, &output)
 	}
 	build.EndedAt = time.Now()
 
-	if build.Status != BuildOK {
-		docker(context.Background(), "rmi", build.Image)
+	if build.Status != BuildOK || err != nil {
+		cleanup, cancel := context.WithTimeout(context.Background(), time.Minute)
+		docker(cleanup, "rmi", build.Image)
+		cancel()
+	}
+
+	var notRecorded errNotRecorded
+	if errors.As(err, &notRecorded) || ctx.Err() != nil {
+		if ctx.Err() != nil {
+			err = fmt.Errorf("interrupted")
+		}
+		log.Printf("Team %s: build %s not completed: %s", team.Name, tag.Name, err)
+		return nil, err
 	}
 
 	id, err := b.Store.RecordBuild(build, output.String())
@@ -154,7 +229,60 @@ func (b *Builder) build(ctx context.Context, team Team, dir string, tag Tag) *Bu
 	if build.Status == BuildOK {
 		b.prune(team.Name)
 	}
-	return build
+	return build, nil
+}
+
+// transientBuildFailure reports whether a build failed because of a
+// temporary problem of the image registry, according to its output
+func transientBuildFailure(output string) bool {
+	for _, sign := range []string{"toomanyrequests", "TLS handshake timeout", "503 Service Unavailable"} {
+		if strings.Contains(output, sign) {
+			return true
+		}
+	}
+	return false
+}
+
+// checkImageSize fails if an image is larger than the limit
+func (b *Builder) checkImageSize(image string) error {
+	if b.MaxImageSize <= 0 {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	out, err := docker(ctx, "image", "inspect", "--format", "{{.Size}}", image)
+	if err != nil {
+		return errNotRecorded{err}
+	}
+	size, _ := strconv.ParseInt(out, 10, 64)
+	if size > b.MaxImageSize {
+		return fmt.Errorf("the image is too large: %d MB, the limit is %d MB", size>>20, b.MaxImageSize>>20)
+	}
+	return nil
+}
+
+// clearCacheMounts removes the contents of build cache mounts
+// (RUN --mount=type=cache), which are shared between all builds
+func (b *Builder) clearCacheMounts() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	if _, err := docker(ctx, "builder", "prune", "--force", "--filter", "type=exec.cachemount"); err != nil {
+		log.Printf("Could not clear the build cache mounts: %s", err)
+	}
+}
+
+// limitCache keeps the build cache under its size limit
+func (b *Builder) limitCache() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	_, err := docker(ctx, "builder", "prune", "--force", "--max-used-space", b.CacheLimit)
+	if err != nil && strings.Contains(err.Error(), "unknown flag") {
+		// Docker before 28
+		_, err = docker(ctx, "builder", "prune", "--force", "--keep-storage", b.CacheLimit)
+	}
+	if err != nil {
+		log.Printf("Could not limit the build cache: %s", err)
+	}
 }
 
 // dockerBuild builds the image from the commit's files, without a checkout:
@@ -197,32 +325,38 @@ func (b *Builder) dockerBuild(ctx context.Context, team Team, dir string, build 
 		return fmt.Errorf("the build took more than %s", b.BuildTimeout)
 	}
 	if archiveErr != nil {
-		return fmt.Errorf("reading the repository: %w", archiveErr)
+		return errNotRecorded{fmt.Errorf("reading the repository: %w", archiveErr)}
 	}
 	if buildErr != nil {
+		if !dockerAvailable() {
+			return errNotRecorded{fmt.Errorf("docker is not available")}
+		}
 		return fmt.Errorf("docker build failed")
 	}
 	return nil
 }
 
-// smokeTest plays a 1-player game with the new image: it must join and play until the end
-func (b *Builder) smokeTest(ctx context.Context, build *Build, output io.Writer) (BuildStatus, string) {
+// smokeTest plays a 1-player game with the new image: it must join and play
+// until the end. A match that could not be played at all (server or docker
+// failure) is not the team's failure: it returns an error.
+func (b *Builder) smokeTest(ctx context.Context, build *Build, output io.Writer) (BuildStatus, string, error) {
 	result, err := b.Smoke.Run(ctx, Match{Map: b.SmokeMap, Bots: []Bot{{Name: build.Team, Image: build.Image, Commit: build.Commit}}})
 	result.RemoveReport()
 	if err != nil {
 		fmt.Fprintf(output, "Error: %s\n", err)
-		if result != nil {
-			fmt.Fprintf(output, "--- Agent output\n%s", result.Bots[0].Log)
+		if result == nil {
+			return "", "", errNotRecorded{fmt.Errorf("smoke test: %w", err)}
 		}
-		return BuildSmokeFailed, err.Error()
+		fmt.Fprintf(output, "--- Agent output\n%s", result.Bots[0].Log)
+		return BuildSmokeFailed, err.Error(), nil
 	}
 
 	bot := result.Bots[0]
 	fmt.Fprintf(output, "Status: %s, exit code %d, %d turns\n--- Agent output\n%s", bot.Status, bot.ExitCode, result.Result.Turns, bot.Log)
 	if bot.Status != Finished {
-		return BuildSmokeFailed, fmt.Sprintf("the agent did not play the game to the end (%s)", bot.Status)
+		return BuildSmokeFailed, fmt.Sprintf("the agent did not play the game to the end (%s)", bot.Status), nil
 	}
-	return BuildOK, ""
+	return BuildOK, "", nil
 }
 
 // prune removes the images of a team's older successful builds
@@ -231,8 +365,18 @@ func (b *Builder) prune(team string) {
 	if err != nil || len(builds) <= b.KeepImages {
 		return
 	}
-	for _, build := range builds[b.KeepImages:] {
-		docker(context.Background(), "rmi", build.Image)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	// Older builds may share their image with a kept one (a rebuilt image)
+	keep := max(b.KeepImages, 1)
+	kept := make(map[string]bool)
+	for _, build := range builds[:keep] {
+		kept[build.Image] = true
+	}
+	for _, build := range builds[keep:] {
+		if !kept[build.Image] {
+			docker(ctx, "rmi", build.Image)
+		}
 	}
 }
 

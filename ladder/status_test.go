@@ -18,7 +18,7 @@ func TestStatusAndHealth(t *testing.T) {
 	run, _ := store.CreateRun("ladder", nil, []Bot{a, b})
 	store.RecordMatch(run, fakeResult("m", []Bot{a, b}, []uint{1, 0}, []BotStatus{Finished, Finished}))
 	store.FinishRun(run, RunComplete)
-	store.SaveTeamStates([]TeamState{{Team: Team{Name: "a"}, Bot: &a}, {Team: Team{Name: "b"}, Error: "build-failed"}})
+	store.SavePoolState(&PoolState{Teams: []TeamState{{Team: Team{Name: "a"}, Bot: &a}, {Team: Team{Name: "b"}, Error: "build-failed"}}})
 
 	web, err := NewWeb(config, store)
 	if err != nil {

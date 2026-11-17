@@ -62,6 +62,25 @@ func TestBuilder(t *testing.T) {
 		t.Errorf("the build log should include the smoke test:\n%s", log)
 	}
 
+	// A missing image (pruned, or data restored elsewhere) is built again
+	if out, err := dockerCombined(ctx, "rmi", bots[0].Image); err != nil {
+		t.Fatalf("removing the image: %s", out)
+	}
+	bots, states = builder.Pool(ctx, []Team{team})
+	if len(bots) != 1 || bots[0].Commit != good || !imageExists(bots[0].Image) {
+		t.Fatalf("expected the v1 bot, built again, got %+v %+v", bots, states)
+	}
+
+	// An interrupted build is not recorded: it is tried again next time
+	slow := repo.commit(map[string]string{"Dockerfile": "FROM busybox\nRUN sleep 60\n"}, 15)
+	repo.git("tag", "v1b", slow)
+	interrupted, cancel := context.WithTimeout(ctx, 5*time.Second)
+	builder.Pool(interrupted, []Team{team})
+	cancel()
+	if build, _ := store.BuildFor("Testers", slow); build != nil {
+		t.Errorf("an interrupted build should not be recorded: %+v", build)
+	}
+
 	// A broken Dockerfile: the previous version keeps playing
 	broken := repo.commit(map[string]string{"Dockerfile": "FROM busybox\nRUN exit 1\n"}, 20)
 	repo.git("tag", "v2", broken)
@@ -95,6 +114,17 @@ func TestBuilder(t *testing.T) {
 	bots, _ = builder.Pool(ctx, []Team{{Name: "other", Repo: other.dir}})
 	if len(bots) != 0 {
 		t.Errorf("expected no bot, got %+v", bots)
+	}
+
+	// Images over the size limit fail
+	large := newTestRepo(t)
+	large.commit(map[string]string{"Dockerfile": "FROM busybox\n"}, 10)
+	large.git("tag", "v1")
+	builder.MaxImageSize = 1 << 20
+	_, states = builder.Pool(ctx, []Team{{Name: "large", Repo: large.dir}})
+	builder.MaxImageSize = 0
+	if build, _ := store.LastBuild("large"); build == nil || build.Status != BuildFailed || !strings.Contains(build.Error, "too large") {
+		t.Errorf("expected the build to fail because of the image size: %+v %+v", build, states)
 	}
 
 	// Unreachable repository

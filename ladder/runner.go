@@ -206,7 +206,7 @@ func (run *matchRun) play(ctx context.Context) (*MatchResult, error) {
 
 	// Bots only get the internal network. The server is also on the default
 	// bridge network, with a port published on localhost for the runner.
-	if err := createMatchNetwork(ctx, run.network()); err != nil {
+	if err := run.createNetwork(ctx); err != nil {
 		return nil, err
 	}
 
@@ -304,38 +304,17 @@ func (run *matchRun) play(ctx context.Context) (*MatchResult, error) {
 	return result, nil
 }
 
-// createMatchNetwork creates the internal network of a match. Where Docker
-// supports it (version 28 and later), bots cannot reach the host through the
-// network's gateway.
-func createMatchNetwork(ctx context.Context, name string) error {
-	args := []string{"network", "create", "--internal", "--label=" + DockerLabel}
-	if dockerIsolatesGateways() {
-		args = append(args, "-o", "com.docker.network.bridge.gateway_mode_ipv4=isolated")
-	}
-	_, err := docker(ctx, append(args, name)...)
+// Prefix of the network interfaces of match networks. The service drops
+// traffic from these interfaces to the host (see deploy/setup.sh), so that
+// bots cannot reach services listening on the host through the gateway.
+const BridgePrefix = "hl-"
+
+// createMatchNetwork creates the internal network of a match
+func (run *matchRun) createNetwork(ctx context.Context) error {
+	bridge := BridgePrefix + strings.TrimPrefix(run.prefix, "hive-ladder-")
+	_, err := docker(ctx, "network", "create", "--internal", "--label="+DockerLabel,
+		"-o", "com.docker.network.bridge.name="+bridge, run.network())
 	return err
-}
-
-var (
-	gatewayCheck     sync.Once
-	gatewayIsolation bool
-)
-
-// dockerIsolatesGateways reports whether Docker can isolate the gateway of a
-// network from the host (Docker 28 or later). Older versions accept the
-// option, and ignore it.
-func dockerIsolatesGateways() bool {
-	gatewayCheck.Do(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		version, err := docker(ctx, "version", "--format", "{{.Server.Version}}")
-		major, _ := strconv.Atoi(strings.Split(version, ".")[0])
-		gatewayIsolation = err == nil && major >= 28
-		if !gatewayIsolation {
-			log.Printf("Warning: Docker %q cannot isolate the bots from the host (Docker 28 or later is needed): bots can reach services listening on the host", version)
-		}
-	})
-	return gatewayIsolation
 }
 
 func (run *matchRun) waitForServer(ctx context.Context) error {

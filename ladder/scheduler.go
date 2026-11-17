@@ -75,22 +75,9 @@ const maxRunnerErrors = 3
 func (l *Ladder) RunOnce(ctx context.Context, deadline time.Time) (int64, error) {
 	LogDiskWarning(l.Config)
 
-	teams, err := l.Pool(ctx)
+	pool, err := l.Pool(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("getting the pool: %w", err)
-	}
-
-	var pool []Bot
-	for _, bot := range teams {
-		failures, err := l.Store.ConsecutiveFailures(bot.Name, bot.Commit)
-		if err != nil {
-			return 0, err
-		}
-		if l.Config.Schedule.MaxFailures > 0 && failures >= l.Config.Schedule.MaxFailures {
-			log.Printf("Leaving %s out of the run: failed %d matches in a row with commit %s", bot.Name, failures, bot.Commit)
-			continue
-		}
-		pool = append(pool, bot)
 	}
 
 	return l.Play(ctx, "ladder", l.Config.Schedule, pool, l.Config.Schedule.Formats, l.Config.Schedule.Repeats, deadline)

@@ -6,7 +6,10 @@
 	Repository: <a href="{{.Team.Repo}}">{{.Team.Repo}}</a>{{with .Team.Members}}. Members: {{range $i, $m := .}}{{if $i}}, {{end}}{{$m}}{{end}}{{end}}.
 	{{with .Team.Ref}}Pinned to <code>{{.}}</code>.{{end}}
 </p>
-{{if .Bot}}<p>Playing: <span class="mono">{{short .Bot.Commit}}</span>.</p>{{else}}<p class="error">No working version yet: this team does not play.</p>{{end}}
+{{if .Bot}}
+	{{if .LeftOut}}<p class="error">Version <span class="mono">{{short .Bot.Commit}}</span>: {{.LeftOut}}</p>
+	{{else}}<p>Playing: <span class="mono">{{short .Bot.Commit}}</span>.</p>{{end}}
+{{else}}<p class="error">No working version yet: this team does not play.</p>{{end}}
 {{with .Error}}<p class="error">The latest version is not playing: {{.}}</p>{{end}}
 {{end}}
 

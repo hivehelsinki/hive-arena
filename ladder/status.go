@@ -105,10 +105,15 @@ type Status struct {
 	NextRun    time.Time `json:"nextRun"`
 
 	Teams struct {
-		Registered int      `json:"registered"`
-		Playing    int      `json:"playing"`
-		Errors     []string `json:"errors"` // teams whose latest version is not playing
+		Registered int       `json:"registered"`
+		Playing    int       `json:"playing"`
+		Errors     []string  `json:"errors"`  // teams whose latest version is not their current bot
+		LeftOut    []string  `json:"leftOut"` // teams left out of the runs for failing
+		UpdatedAt  time.Time `json:"updatedAt"`
 	} `json:"teams"`
+	// Problems found in the registry at the last resolution (invalid
+	// entries, registry unreachable)
+	RegistryProblems []string `json:"registryProblems"`
 }
 
 // A run longer ago than this means the scheduler is not running
@@ -134,8 +139,10 @@ func (web *Web) status() Status {
 		status.Docker = "ok"
 	}
 
-	if info, err := os.Stat(filepath.Join(web.Store.dir, "ladder.db")); err == nil {
-		status.Database.Size = info.Size()
+	for _, file := range []string{"ladder.db", "ladder.db-wal"} {
+		if info, err := os.Stat(filepath.Join(web.Store.dir, file)); err == nil {
+			status.Database.Size += info.Size()
+		}
 	}
 	counts, err := web.Store.Counts()
 	if err != nil {
@@ -166,16 +173,25 @@ func (web *Web) status() Status {
 		status.NextRun = web.Config.Schedule.NextRunTime(time.Now(), loc)
 	}
 
-	states, _ := web.Store.TeamStates()
-	status.Teams.Registered = len(states)
+	pool, _ := web.Store.PoolState()
+	status.Teams.Registered = len(pool.Teams)
+	status.Teams.UpdatedAt = pool.UpdatedAt
 	status.Teams.Errors = []string{}
-	for _, state := range states {
-		if state.Bot != nil {
+	status.Teams.LeftOut = []string{}
+	for _, state := range pool.Teams {
+		if state.Bot != nil && state.LeftOut == "" {
 			status.Teams.Playing++
 		}
 		if state.Error != "" {
 			status.Teams.Errors = append(status.Teams.Errors, state.Team.Name)
 		}
+		if state.LeftOut != "" {
+			status.Teams.LeftOut = append(status.Teams.LeftOut, state.Team.Name)
+		}
+	}
+	status.RegistryProblems = pool.Problems
+	if status.RegistryProblems == nil {
+		status.RegistryProblems = []string{}
 	}
 
 	if status.Warnings == nil {

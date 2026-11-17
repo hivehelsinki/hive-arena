@@ -21,7 +21,7 @@ func TestBackup(t *testing.T) {
 	run, _ := store.CreateRun("ladder", nil, []Bot{a, b})
 	match, _ := store.RecordMatch(run, fakeResult("m", []Bot{a, b}, []uint{1, 0}, []BotStatus{Finished, Finished}))
 	store.RecordBuild(&Build{Team: "a", Status: BuildOK}, "build log")
-	store.SaveTeamStates([]TeamState{{Team: Team{Name: "a"}}})
+	store.SavePoolState(&PoolState{Teams: []TeamState{{Team: Team{Name: "a"}}}})
 
 	web, err := NewWeb(config, store)
 	if err != nil {

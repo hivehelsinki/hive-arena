@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // Label set on every Docker object created by the ladder, so that leftovers
@@ -55,4 +56,12 @@ func RemoveLeftovers(ctx context.Context) error {
 func dockerCombined(ctx context.Context, args ...string) (string, error) {
 	out, err := exec.CommandContext(ctx, "docker", args...).CombinedOutput()
 	return string(out), err
+}
+
+// dockerAvailable reports whether the docker daemon answers
+func dockerAvailable() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	_, err := docker(ctx, "version", "--format", "{{.Server.Version}}")
+	return err == nil
 }

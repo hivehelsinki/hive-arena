@@ -682,6 +682,10 @@ func (s *Store) BuildFor(team string, commit string) (*Build, error) {
 	return firstBuild(s.scanBuilds(`WHERE team = ? AND commit_id = ? ORDER BY id DESC LIMIT 1`, team, commit))
 }
 
+func (s *Store) LastBuild(team string) (*Build, error) {
+	return firstBuild(s.scanBuilds(`WHERE team = ? ORDER BY id DESC LIMIT 1`, team))
+}
+
 func (s *Store) LastGoodBuild(team string) (*Build, error) {
 	return firstBuild(s.scanBuilds(`WHERE team = ? AND status = ? ORDER BY id DESC LIMIT 1`, team, BuildOK))
 }
@@ -702,25 +706,33 @@ func (s *Store) DeleteBuild(id int64) error {
 	return err
 }
 
-// SaveTeamStates keeps the state of each team's bot at the last pool resolution, for the website
-func (s *Store) SaveTeamStates(states []TeamState) error {
-	data, err := json.MarshalIndent(states, "", "\t")
+// SavePoolState keeps the state of the teams at the last pool resolution, for the website
+func (s *Store) SavePoolState(state *PoolState) error {
+	data, err := json.MarshalIndent(state, "", "\t")
 	if err != nil {
 		return err
 	}
 	return writeFileDurably(filepath.Join(s.dir, "teams.json"), data)
 }
 
-func (s *Store) TeamStates() ([]TeamState, error) {
+// PoolState returns the state of the teams at the last pool resolution
+// (empty if there was none)
+func (s *Store) PoolState() (*PoolState, error) {
+	state := &PoolState{}
 	data, err := os.ReadFile(filepath.Join(s.dir, "teams.json"))
 	if os.IsNotExist(err) {
-		return nil, nil
+		return state, nil
 	}
 	if err != nil {
-		return nil, err
+		return state, err
 	}
-	var states []TeamState
-	return states, json.Unmarshal(data, &states)
+	return state, json.Unmarshal(data, state)
+}
+
+// TeamStates returns the state of each team at the last pool resolution
+func (s *Store) TeamStates() ([]TeamState, error) {
+	state, err := s.PoolState()
+	return state.Teams, err
 }
 
 // Counts returns the number of runs, matches and builds

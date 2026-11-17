@@ -23,7 +23,7 @@ func TestWebPages(t *testing.T) {
 	match, _ := store.RecordMatch(run, fakeResult("m", []Bot{a, b, c}, []uint{5, 3, 0}, []BotStatus{Finished, Finished, Crashed}))
 	store.FinishRun(run, RunComplete)
 	store.RecordBuild(&Build{Team: "alpha", Tag: "v1", Commit: "0123456789abcdef", Status: BuildOK}, "build output")
-	store.SaveTeamStates([]TeamState{{Team: Team{Name: "alpha", Repo: "https://example.com/alpha", Members: []string{"x"}}, Bot: &a}})
+	store.SavePoolState(&PoolState{Teams: []TeamState{{Team: Team{Name: "alpha", Repo: "https://example.com/alpha", Members: []string{"x"}}, Bot: &a}}})
 
 	web, err := NewWeb(config, store)
 	if err != nil {

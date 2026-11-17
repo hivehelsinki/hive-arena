@@ -179,6 +179,10 @@ func openLadderWithFlags(flags *flag.FlagSet, args []string) (*Ladder, *flag.Fla
 		SmokeMap:     config.Build.SmokeMap,
 		BuildTimeout: config.Build.Timeout.Duration,
 		KeepImages:   config.Build.KeepImages,
+		MaxImageSize: config.Build.MaxImageMB << 20,
+		// This machine is dedicated to the ladder
+		IsolateCaches: true,
+		CacheLimit:    config.Build.CacheLimit,
 	}
 
 	ladder := &Ladder{
@@ -187,17 +191,14 @@ func openLadderWithFlags(flags *flag.FlagSet, args []string) (*Ladder, *flag.Fla
 		Player: &Runner{Config: runnerConfig},
 		Rand:   rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
-	ladder.Pool = func(ctx context.Context) ([]Bot, error) {
-		teams, err := LoadTeams(ctx, config.Registry, config.DataDir)
-		if err != nil {
-			return nil, err
-		}
-		bots, states := builder.Pool(ctx, teams)
-		if err := store.SaveTeamStates(states); err != nil {
-			return nil, err
-		}
-		return bots, nil
+	pool := &PoolResolver{
+		Registry:    config.Registry,
+		DataDir:     config.DataDir,
+		MaxFailures: config.Schedule.MaxFailures,
+		Store:       store,
+		Builder:     builder,
 	}
+	ladder.Pool = pool.Resolve
 	return ladder, flags
 }
 

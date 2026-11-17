@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -49,6 +50,8 @@ type Schedule struct {
 
 type Config struct {
 	DataDir string `json:"dataDir"`
+	// The maps of the arena server, to check the configured formats
+	MapsDir string `json:"mapsDir"`
 	// A warning is logged, and /health reports a problem, below this free space
 	MinFreeDiskGB float64 `json:"minFreeDiskGB"`
 
@@ -72,6 +75,8 @@ type Config struct {
 		Timeout    Duration `json:"timeout"`
 		KeepImages int      `json:"keepImages"` // successful images kept per team
 		SmokeMap   string   `json:"smokeMap"`   // map of the 1-player smoke test
+		MaxImageMB int64    `json:"maxImageMB"` // larger images fail their build (0: no limit)
+		CacheLimit string   `json:"cacheLimit"` // size the docker build cache is kept under, e.g. "10GB" (empty: no limit)
 	} `json:"build"`
 
 	Web struct {
@@ -92,6 +97,7 @@ func LoadConfig(path string) (*Config, error) {
 	defaults := DefaultRunnerConfig()
 	config := &Config{
 		DataDir:        "data",
+		MapsDir:        "maps",
 		DeadlineMargin: Duration{10 * time.Minute},
 		Schedule: Schedule{
 			Times:       []string{"08:00", "16:00"},
@@ -107,6 +113,8 @@ func LoadConfig(path string) (*Config, error) {
 	config.Build.Timeout = Duration{10 * time.Minute}
 	config.Build.KeepImages = 3
 	config.Build.SmokeMap = "tiny"
+	config.Build.MaxImageMB = 2048
+	config.Build.CacheLimit = "10GB"
 	config.Runner.ServerImage = defaults.ServerImage
 	config.Runner.Cores = defaults.Cores
 	config.Runner.Memory = defaults.Memory
@@ -126,6 +134,9 @@ func (c *Config) validate() error {
 	if _, err := c.Location(); err != nil {
 		return err
 	}
+	if len(c.Schedule.Times) == 0 {
+		return fmt.Errorf("no run times configured")
+	}
 	for _, t := range c.Schedule.Times {
 		if _, err := time.Parse("15:04", t); err != nil {
 			return fmt.Errorf("invalid run time %q", t)
@@ -138,9 +149,40 @@ func (c *Config) validate() error {
 		if f.Players < 2 || f.Players > 6 {
 			return fmt.Errorf("invalid format %s", f)
 		}
+		if err := c.checkMap(f.Map); err != nil {
+			return err
+		}
+	}
+	if err := c.checkMap(c.Build.SmokeMap); err != nil {
+		return err
 	}
 	if c.Schedule.Repeats < 1 || c.Schedule.Window < 1 {
 		return fmt.Errorf("repeats and window must be at least 1")
+	}
+	if c.Registry.URL == "" && c.Registry.Path == "" {
+		return fmt.Errorf("no registry configured (registry.url or registry.path)")
+	}
+
+	r := c.Runner
+	if r.ServerImage == "" || r.Memory == "" || r.Cores <= 0 || r.Pids <= 0 || r.JoinTimeout.Duration <= 0 || r.MatchTimeout.Duration <= 0 {
+		return fmt.Errorf("runner: serverImage and memory must be set, and cores, pids, joinTimeout and matchTimeout positive")
+	}
+	if c.Build.Timeout.Duration <= 0 || c.Build.KeepImages < 1 || c.Build.MaxImageMB < 0 {
+		return fmt.Errorf("build: timeout must be positive, and keepImages at least 1")
+	}
+	if c.DeadlineMargin.Duration < 0 {
+		return fmt.Errorf("deadlineMargin must not be negative")
+	}
+	return nil
+}
+
+// checkMap checks that a map exists
+func (c *Config) checkMap(name string) error {
+	if name == "" || strings.ContainsAny(name, "/\\.") {
+		return fmt.Errorf("invalid map name %q", name)
+	}
+	if _, err := os.Stat(filepath.Join(c.MapsDir, name+".txt")); err != nil {
+		return fmt.Errorf("unknown map %q (maps are read from %s, see mapsDir)", name, c.MapsDir)
 	}
 	return nil
 }

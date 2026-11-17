@@ -166,18 +166,22 @@ func TestRunOnceDeadline(t *testing.T) {
 	}
 }
 
-func TestRunOnceLeavesFailingBotsOut(t *testing.T) {
+func TestLeaveOutFailing(t *testing.T) {
 	player := &fakePlayer{failing: map[string]bool{"bot1": true}}
-	ladder := newTestLadder(t, testBots(2), player)
-
+	bots := testBots(3)
+	ladder := newTestLadder(t, bots, player)
 	ladder.RunOnce(context.Background(), time.Now().Add(time.Hour))
-	runID, _ := ladder.RunOnce(context.Background(), time.Now().Add(time.Hour))
 
-	run, _ := ladder.Store.Run(runID)
-	for _, bot := range run.Bots {
-		if bot.Name == "bot1" {
-			t.Errorf("bot1 failed every match and should be left out: %+v", run.Bots)
-		}
+	states := []TeamState{{Team: Team{Name: "bot0"}, Bot: &bots[0]}, {Team: Team{Name: "bot1"}, Bot: &bots[1]}}
+	pool, err := leaveOutFailing(ladder.Store, 2, states)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pool) != 1 || pool[0].Name != "bot0" {
+		t.Errorf("bot1 failed every match and should be left out: %+v", pool)
+	}
+	if states[1].LeftOut == "" || states[0].LeftOut != "" {
+		t.Errorf("the state of bot1 should say why it is left out: %+v", states)
 	}
 }
 
