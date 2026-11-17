@@ -78,7 +78,7 @@ type Config struct {
 		Listen string `json:"listen"` // address of the public website, e.g. ":8080"
 		// Directory of the browser build of the viewer (see viewer/build-web.sh), served at /viewer/
 		ViewerDir string `json:"viewerDir"`
-		// Token for the backup routes (/backup/...?token=), disabled if empty
+		// Token for the backup route (/backup?token=), disabled if empty
 		BackupToken string `json:"backupToken"`
 	} `json:"web"`
 }
