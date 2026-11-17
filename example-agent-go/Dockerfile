@@ -3,7 +3,7 @@
 # In your own repository, with your own go.mod, the build context is the
 # repository root and the paths below change accordingly.
 
-FROM golang:1.25 AS build
+FROM golang:1.26 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
