@@ -80,7 +80,7 @@ if [ -n "$missing" ]; then
 	packages=""
 	for tool in $missing; do
 		case $tool in
-			docker) packages="$packages docker.io" ;;
+			docker) packages="$packages docker.io docker-buildx" ;;
 			*) packages="$packages $tool" ;;
 		esac
 	done
@@ -92,9 +92,15 @@ current_go=$(go env GOVERSION 2>/dev/null | sed 's/^go//') || true
 if [ -z "$current_go" ] || ! version_at_least "$current_go" "$GO_REQUIRED"; then
 	install_go
 fi
+# BuildKit, needed by Dockerfiles using recent features
+if ! docker buildx version >/dev/null 2>&1; then
+	command -v apt-get >/dev/null 2>&1 || fail "docker buildx is missing: install it, then run this script again"
+	echo "Installing docker-buildx"
+	apt-get install -y -q docker-buildx
+fi
 systemctl enable --now docker >/dev/null 2>&1 || true
 docker info >/dev/null 2>&1 || fail "docker is installed but not running"
-echo "git, go ($(go env GOVERSION)), docker ($(docker version --format '{{.Server.Version}}')): ok"
+echo "git, go ($(go env GOVERSION)), docker ($(docker version --format '{{.Server.Version}}'), buildx): ok"
 
 if [ -z "${SETUP_UPDATED:-}" ]; then
 	step "Update"
@@ -117,7 +123,7 @@ echo "At $(as_owner git log -1 --format='%h %s (%cr)')"
 
 step "Service user"
 if ! id "$SERVICE_USER" >/dev/null 2>&1; then
-	useradd --system --create-home --shell /usr/sbin/nologin "$SERVICE_USER"
+	useradd --system --user-group --create-home --shell /usr/sbin/nologin "$SERVICE_USER"
 	echo "Created user $SERVICE_USER"
 fi
 usermod -aG docker "$SERVICE_USER"
