@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"image/color"
 	"math"
@@ -53,6 +52,10 @@ type Viewer struct {
 	Scale  float64
 
 	Live <-chan LiveUpdate
+
+	// Size of the screen, as given by Layout (the window size is not
+	// available in the browser)
+	Width, Height int
 
 	// Autoplay
 	Playing   bool
@@ -160,7 +163,7 @@ type CoordHex struct {
 
 func (viewer *Viewer) CoordsToTransform(coords arena.Coords) ebiten.GeoM {
 	m := ebiten.GeoM{}
-	w, h := ebiten.WindowSize()
+	w, h := viewer.Width, viewer.Height
 
 	m.Translate(
 		float64(Dx*coords.Col/2-Dx/2)-Dx*viewer.Cx/2,
@@ -264,6 +267,7 @@ func (viewer *Viewer) Draw(screen *ebiten.Image) {
 }
 
 func (viewer *Viewer) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
+	viewer.Width, viewer.Height = outsideWidth, outsideHeight
 	return outsideWidth, outsideHeight
 }
 
@@ -284,24 +288,18 @@ func CenterTile(state *arena.GameState) (int, int) {
 }
 
 func main() {
-	url := flag.String("url", "", "URL of the history file to view")
-	file := flag.String("file", "", "path to the history file to view")
-	host := flag.String("host", "", "host for the live game to watch")
-	gameId := flag.String("id", "", "ID of the live game to watch")
-	token := flag.String("token", "", "access token for the live game to watch")
-	flag.Parse()
+	args := readArgs()
 
 	var game *arena.PersistedGame
 	var live <-chan LiveUpdate
-	if *url != "" {
-		game = GetURL(*url)
-	} else if *file != "" {
-		game = GetFile(*file)
-	} else if *host != "" && *gameId != "" && *token != "" {
-		game, live = StartLiveWatch(*host, *gameId, *token)
-
+	if args.URL != "" {
+		game = GetURL(args.URL)
+	} else if args.File != "" {
+		game = GetFile(args.File)
+	} else if args.Host != "" && args.GameID != "" && args.Token != "" {
+		game, live = StartLiveWatch(args.Host, args.GameID, args.Token)
 	} else {
-		flag.PrintDefaults()
+		printUsage()
 		return
 	}
 

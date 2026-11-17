@@ -33,7 +33,8 @@
 		"smokeMap": "tiny"
 	},
 	"web": {
-		"listen": ":8080"
+		"listen": ":8080",
+		"viewerDir": "viewer/web"
 	},
 	"houseBots": [
 		{"name": "house-go", "image": "example-agent-go", "commit": "house"},

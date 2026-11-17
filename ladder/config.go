@@ -73,6 +73,8 @@ type Config struct {
 
 	Web struct {
 		Listen string `json:"listen"` // address of the public website, e.g. ":8080"
+		// Directory of the browser build of the viewer (see viewer/build-web.sh), served at /viewer/
+		ViewerDir string `json:"viewerDir"`
 	} `json:"web"`
 
 	// Bots that always take part (e.g. the example agents), as references
@@ -100,6 +102,7 @@ func LoadConfig(path string) (*Config, error) {
 		},
 	}
 	config.Web.Listen = ":8080"
+	config.Web.ViewerDir = "viewer/web"
 	config.Build.Timeout = Duration{10 * time.Minute}
 	config.Build.KeepImages = 3
 	config.Build.SmokeMap = "tiny"

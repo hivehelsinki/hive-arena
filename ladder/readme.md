@@ -74,3 +74,5 @@ Containers and networks are always removed at the end. All of them have the `hiv
 ## Website
 
 Read-only, no accounts: leaderboard (with per-map scores and the head-to-head table) over the window of recent runs, runs, matches (filterable by team and map), team pages with builds and their logs, match pages with bot outputs and report downloads. The same data is available as JSON under `/api/` (`leaderboard`, `runs`, `matches`, `teams`).
+
+Replays open in the browser version of the viewer, served at `/viewer/` from `web.viewerDir` (default `viewer/web`, relative to the working directory). Build it first with `viewer/build-web.sh`.

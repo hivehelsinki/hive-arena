@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -110,6 +111,9 @@ func (web *Web) Handler() http.Handler {
 	static, _ := fs.Sub(webFiles, "web/static")
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static)))
 
+	if web.Config.Web.ViewerDir != "" {
+		mux.Handle("GET /viewer/", http.StripPrefix("/viewer/", viewerHandler(web.Config.Web.ViewerDir)))
+	}
 	mux.HandleFunc("GET /{$}", web.handleLeaderboard)
 	mux.HandleFunc("GET /runs", web.handleRuns)
 	mux.HandleFunc("GET /runs/{id}", web.handleRun)
@@ -126,6 +130,25 @@ func (web *Web) Handler() http.Handler {
 	mux.HandleFunc("GET /api/teams", web.apiTeams)
 
 	return mux
+}
+
+// viewerHandler serves the browser build of the viewer, with the
+// precompressed WebAssembly file when the client accepts it
+func viewerHandler(dir string) http.Handler {
+	files := http.FileServer(http.Dir(dir))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "viewer.wasm" && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			path := filepath.Join(dir, "viewer.wasm.gz")
+			if _, err := os.Stat(path); err == nil {
+				w.Header().Set("Content-Type", "application/wasm")
+				w.Header().Set("Content-Encoding", "gzip")
+				w.Header().Set("Vary", "Accept-Encoding")
+				http.ServeFile(w, r, path)
+				return
+			}
+		}
+		files.ServeHTTP(w, r)
+	})
 }
 
 func (web *Web) render(w http.ResponseWriter, page string, data map[string]any) {

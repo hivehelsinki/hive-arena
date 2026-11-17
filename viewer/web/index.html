@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hive Arena viewer</title>
+<style>
+	html, body { margin: 0; height: 100%; background: #111; color: #ccc; font: 15px system-ui, sans-serif; }
+	#status { position: fixed; top: 45%; width: 100%; text-align: center; }
+	#help { position: fixed; bottom: 0.5em; right: 0.8em; font-size: 12px; opacity: 0.6; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="status">Loading the viewer...</div>
+<div id="help">←/→ turn (shift ×10, alt ×50) · ↑/↓ first/last · space play/pause · wheel or w/q zoom · click to center</div>
+<script src="wasm_exec.js"></script>
+<script>
+	const go = new Go();
+	WebAssembly.instantiateStreaming(fetch("viewer.wasm"), go.importObject)
+		.then(result => {
+			document.getElementById("status").remove();
+			go.run(result.instance);
+		})
+		.catch(err => {
+			document.getElementById("status").textContent = "Could not load the viewer: " + err;
+		});
+</script>
+</body>
+</html>
