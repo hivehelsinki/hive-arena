@@ -18,7 +18,8 @@ type Team struct {
 	// Optional: a tag, branch or commit to use instead of the latest tag on main
 	Ref string `json:"ref,omitempty"`
 	// Optional: the Dockerfile and build context, relative to the repository
-	// root (defaults: Dockerfile, and the root)
+	// root (defaults: the root, and the Dockerfile at the top of the context).
+	// The Dockerfile must be inside the context.
 	Dockerfile string `json:"dockerfile,omitempty"`
 	Context    string `json:"context,omitempty"`
 }
@@ -46,6 +47,9 @@ func ParseTeams(data []byte) ([]Team, error) {
 		}
 		if strings.Contains(team.Context, "..") || strings.Contains(team.Dockerfile, "..") {
 			return nil, fmt.Errorf("team %s: invalid dockerfile or context path", team.Name)
+		}
+		if _, err := contextDockerfile(team); err != nil {
+			return nil, fmt.Errorf("team %s: %w", team.Name, err)
 		}
 	}
 	return teams, nil

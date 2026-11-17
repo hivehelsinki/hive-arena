@@ -45,7 +45,7 @@ The registry file lists the teams:
 ]
 ```
 
-Optional fields: `ref` (a tag, branch or commit to use instead of the latest tag on `main`), `dockerfile` and `context` (paths in the repository, defaults `Dockerfile` and the root).
+Optional fields: `ref` (a tag, branch or commit to use instead of the latest tag on `main`), `context` and `dockerfile` (paths from the repository root: the build context, default the root, and the Dockerfile, inside the context, default the `Dockerfile` at the top of the context).
 
 At the start of each run, for each team, the ladder updates a mirror of its repository, takes the most recent tag on `main`, and builds it if it is new (`git archive | docker build -`, no checkout). A new image must pass a smoke test: a 1-player game, played to the end. Builds and their logs are recorded; a failed build is not retried (see `rebuild`), and the team's last good image keeps playing.
 

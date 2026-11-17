@@ -167,9 +167,9 @@ func (b *Builder) dockerBuild(ctx context.Context, team Team, dir string, build 
 	if team.Context != "" {
 		tree += ":" + strings.Trim(team.Context, "/")
 	}
-	dockerfile := team.Dockerfile
-	if dockerfile == "" {
-		dockerfile = "Dockerfile"
+	dockerfile, err := contextDockerfile(team)
+	if err != nil {
+		return err
 	}
 
 	archive := exec.CommandContext(ctx, "git", "archive", "--format=tar", tree)
@@ -230,4 +230,23 @@ func (b *Builder) prune(team string) {
 	for _, build := range builds[b.KeepImages:] {
 		docker(context.Background(), "rmi", build.Image)
 	}
+}
+
+// contextDockerfile returns the path of a team's Dockerfile inside its build
+// context. Both are given relative to the repository root; the default is the
+// Dockerfile at the top of the context.
+func contextDockerfile(team Team) (string, error) {
+	if team.Dockerfile == "" {
+		return "Dockerfile", nil
+	}
+	context := strings.Trim(team.Context, "/")
+	dockerfile := strings.Trim(team.Dockerfile, "/")
+	if context == "" {
+		return dockerfile, nil
+	}
+	relative, found := strings.CutPrefix(dockerfile, context+"/")
+	if !found {
+		return "", fmt.Errorf("the Dockerfile %s is not inside the build context %s", team.Dockerfile, team.Context)
+	}
+	return relative, nil
 }

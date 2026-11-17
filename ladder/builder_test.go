@@ -103,3 +103,24 @@ func TestBuilder(t *testing.T) {
 		t.Errorf("expected the last good build as a fallback, got %+v %+v", bots, states)
 	}
 }
+
+func TestContextDockerfile(t *testing.T) {
+	cases := []struct {
+		dockerfile, context, want string
+		fails                     bool
+	}{
+		{"", "", "Dockerfile", false},
+		{"", "bot", "Dockerfile", false},
+		{"build/Dockerfile", "", "build/Dockerfile", false},
+		{"bot/Dockerfile", "bot", "Dockerfile", false},
+		{"bot/docker/Dockerfile", "bot/", "docker/Dockerfile", false},
+		{"Dockerfile", "bot", "", true},
+		{"bots/Dockerfile", "bot", "", true},
+	}
+	for _, c := range cases {
+		got, err := contextDockerfile(Team{Dockerfile: c.dockerfile, Context: c.context})
+		if (err != nil) != c.fails || got != c.want {
+			t.Errorf("dockerfile %q, context %q: got %q, %v", c.dockerfile, c.context, got, err)
+		}
+	}
+}
