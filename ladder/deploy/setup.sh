@@ -37,11 +37,41 @@ cd "$REPO"
 
 # Files of the repository stay owned by the user who cloned it
 OWNER=$(stat -c %U "$REPO")
-as_owner() { sudo -u "$OWNER" -H env PATH="$PATH" "$@"; }
+OWNER_HOME=$(getent passwd "$OWNER" | cut -d: -f6)
+as_owner() {
+	if [ "$OWNER" = root ]; then
+		"$@"
+	else
+		runuser -u "$OWNER" -- env HOME="$OWNER_HOME" PATH="$PATH" "$@"
+	fi
+}
+
+# Go version required by go.mod
+GO_REQUIRED=$(sed -n 's/^go \([0-9.]*\)$/\1/p' go.mod)
+
+# Whether version $1 is at least version $2
+version_at_least() {
+	[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n1)" = "$2" ]
+}
+
+# Installs the official Go release required by go.mod in /usr/local/go
+install_go() {
+	arch=$(dpkg --print-architecture 2>/dev/null || uname -m)
+	case $arch in
+		amd64 | x86_64) arch=amd64 ;;
+		arm64 | aarch64) arch=arm64 ;;
+	esac
+	echo "Installing Go $GO_REQUIRED in /usr/local/go"
+	curl -fsSL "https://go.dev/dl/go$GO_REQUIRED.linux-$arch.tar.gz" -o /tmp/go.tar.gz
+	rm -rf /usr/local/go
+	tar -C /usr/local -xzf /tmp/go.tar.gz
+	rm /tmp/go.tar.gz
+	export PATH="/usr/local/go/bin:$PATH"
+}
 
 step "Tools"
 missing=""
-for tool in git go docker curl gzip; do
+for tool in git docker curl gzip; do
 	command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
 done
 if [ -n "$missing" ]; then
@@ -50,7 +80,6 @@ if [ -n "$missing" ]; then
 	packages=""
 	for tool in $missing; do
 		case $tool in
-			go) packages="$packages golang-go" ;;
 			docker) packages="$packages docker.io" ;;
 			*) packages="$packages $tool" ;;
 		esac
@@ -58,6 +87,10 @@ if [ -n "$missing" ]; then
 	apt-get update -q
 	# shellcheck disable=SC2086
 	apt-get install -y -q $packages
+fi
+current_go=$(go env GOVERSION 2>/dev/null | sed 's/^go//') || true
+if [ -z "$current_go" ] || ! version_at_least "$current_go" "$GO_REQUIRED"; then
+	install_go
 fi
 systemctl enable --now docker >/dev/null 2>&1 || true
 docker info >/dev/null 2>&1 || fail "docker is installed but not running"
