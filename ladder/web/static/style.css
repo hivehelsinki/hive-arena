@@ -1,61 +1,121 @@
+/* Hive Arena ladder: "Honeycomb". Light: warm and friendly, cards on a
+   honey-tinted page. Dark: a night hive, dark panels and amber glow.
+   Chart series colors are validated (colorblind-safe as a set of three) on
+   both surfaces; text never takes a series color. */
 :root {
-	--bg: #fffdf7;
-	--fg: #222;
-	--dim: #777;
-	--accent: #d9a400;
-	--line: #e8e1cc;
-	--good: #2e7d32;
-	--bad: #c62828;
-	color-scheme: light dark;
+	--bg: #fff8e9; --card: #ffffff; --fg: #2b2118; --dim: #8a7a66; --accent: #f2a900; --accent-ink: #a86a00;
+	--line: #f1e6cf; --hover: #fff6dd; --chip: #f6eedb; --good: #2e7d32; --bad: #c62828;
+	--series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --context: #d9cdb4; --grid: #f3ead8;
+	--shadow: 0 1px 2px rgb(120 80 0 / 0.08), 0 6px 20px rgb(120 80 0 / 0.06);
+	--glow: none;
+	color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
-	:root { --bg: #1b1a17; --fg: #eee; --dim: #999; --line: #3a372f; --good: #81c784; --bad: #ef9a9a; }
+	:root {
+		--bg: #121019; --card: #1a1824; --fg: #ece8f5; --dim: #8c86a0; --accent: #ffb000; --accent-ink: #ffb000;
+		--line: #2a2738; --hover: #221f2f; --chip: #24212f; --good: #6fe39a; --bad: #ff7a7a;
+		--series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --context: #3f3b52; --grid: #24212f;
+		--shadow: 0 0 0 1px #2a2738;
+		--glow: 0 0 10px rgb(255 176 0 / 0.45);
+		color-scheme: dark;
+	}
 }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
-header { display: flex; align-items: baseline; gap: 2em; padding: 0.8em 1.5em; border-bottom: 3px solid var(--accent); }
-header .title { font-weight: bold; font-size: 1.2em; }
-header nav a { margin-right: 1em; }
-main { max-width: 1100px; margin: 0 auto; padding: 1em 1.5em 3em; }
-a { color: inherit; text-decoration-color: var(--accent); }
-h1, h2 { font-weight: 600; }
-table { border-collapse: collapse; margin: 0.5em 0 1em; }
-th, td { padding: 0.3em 0.7em; border-bottom: 1px solid var(--line); text-align: left; }
-th { font-weight: 600; font-size: 0.9em; }
+
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.55 ui-rounded, "SF Pro Rounded", system-ui, sans-serif; }
+@media (prefers-color-scheme: dark) {
+	body { background: radial-gradient(1200px 500px at 50% -200px, #2a1f3d 0%, var(--bg) 70%) no-repeat, var(--bg); }
+}
+
+header {
+	display: flex; align-items: center; flex-wrap: wrap; gap: 0.6em 2.5em; padding: 1.1em 2em;
+	background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='27.71' height='48' viewBox='0 0 27.71 48'%3E%3Cg fill='none' stroke='%23ffffff' stroke-opacity='.22' stroke-width='1.5'%3E%3Cpolygon points='0.00,16.00 -13.86,8.00 -13.86,-8.00 -0.00,-16.00 13.86,-8.00 13.86,8.00'/%3E%3Cpolygon points='27.71,16.00 13.86,8.00 13.86,-8.00 27.71,-16.00 41.57,-8.00 41.57,8.00'/%3E%3Cpolygon points='13.86,40.00 -0.00,32.00 0.00,16.00 13.86,8.00 27.71,16.00 27.71,32.00'/%3E%3Cpolygon points='0.00,64.00 -13.86,56.00 -13.86,40.00 -0.00,32.00 13.86,40.00 13.86,56.00'/%3E%3Cpolygon points='27.71,64.00 13.86,56.00 13.86,40.00 27.71,32.00 41.57,40.00 41.57,56.00'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 27.71px 48px, linear-gradient(135deg, #f7b500, #f08c00);
+	color: #2b1a00;
+}
+header a { color: inherit; }
+header .title { font-size: 1.35em; font-weight: 800; letter-spacing: -0.01em; text-decoration: none; }
+header .title::before { content: "⬢"; margin-right: 0.35em; color: #fff3c4; }
+header nav { display: flex; flex-wrap: wrap; gap: 0.5em; }
+header nav a { text-decoration: none; font-weight: 600; padding: 0.25em 0.8em; border-radius: 999px; background: rgb(255 255 255 / 0.25); }
+header nav a:hover { background: rgb(255 255 255 / 0.5); }
+@media (prefers-color-scheme: dark) {
+	header {
+		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='27.71' height='48' viewBox='0 0 27.71 48'%3E%3Cg fill='none' stroke='%23ffb000' stroke-opacity='.12' stroke-width='1.5'%3E%3Cpolygon points='0.00,16.00 -13.86,8.00 -13.86,-8.00 -0.00,-16.00 13.86,-8.00 13.86,8.00'/%3E%3Cpolygon points='27.71,16.00 13.86,8.00 13.86,-8.00 27.71,-16.00 41.57,-8.00 41.57,8.00'/%3E%3Cpolygon points='13.86,40.00 -0.00,32.00 0.00,16.00 13.86,8.00 27.71,16.00 27.71,32.00'/%3E%3Cpolygon points='0.00,64.00 -13.86,56.00 -13.86,40.00 -0.00,32.00 13.86,40.00 13.86,56.00'/%3E%3Cpolygon points='27.71,64.00 13.86,56.00 13.86,40.00 27.71,32.00 41.57,40.00 41.57,56.00'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 27.71px 48px, linear-gradient(135deg, #2a1f10, #16131d 70%);
+		border-bottom: 1px solid #3a2a10; color: var(--fg);
+	}
+	header .title { color: var(--accent); text-shadow: var(--glow); }
+	header .title::before { color: var(--accent); }
+	header nav a { background: rgb(255 176 0 / 0.1); color: var(--fg); }
+	header nav a:hover { background: rgb(255 176 0 / 0.22); }
+}
+
+main { max-width: 1080px; margin: 0 auto; padding: 1em 1.5em 3em; }
+h1 { font-size: 2.2em; font-weight: 800; letter-spacing: -0.02em; margin: 0.6em 0 0.2em; }
+h2 { font-size: 1.25em; font-weight: 700; margin-top: 2em; }
+a { color: inherit; text-decoration-color: var(--accent); text-underline-offset: 3px; }
+
+/* Tables and charts sit on cards */
+table, .chart {
+	background: var(--card); border-radius: 16px; box-shadow: var(--shadow);
+	border-collapse: separate; border-spacing: 0; overflow: hidden; margin: 0.5em 0 1em;
+}
+th, td { padding: 0.5em 0.9em; border-bottom: 1px solid var(--line); text-align: left; }
+tr:last-child td { border-bottom: 0; }
+th { color: var(--dim); font-weight: 600; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.04em; }
+.nocase { text-transform: none; letter-spacing: 0; }
+tbody tr:hover td { background-color: var(--hover); }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
-.strong { font-weight: bold; }
-.big { font-size: 2em; font-weight: bold; }
+.strong { font-weight: bold; color: var(--accent-ink); text-shadow: var(--glow); }
+.big { font-size: 2em; font-weight: 800; }
 .dim { color: var(--dim); }
 .mono, code { font-family: ui-monospace, monospace; font-size: 0.9em; }
-.tag { font-size: 0.75em; border: 1px solid var(--dim); border-radius: 3px; padding: 0 0.3em; color: var(--dim); }
+.tag { font-size: 0.75em; border: 1px solid var(--dim); border-radius: 999px; padding: 0 0.45em; color: var(--dim); }
 .error, .status-crashed, .status-no-join, .status-build-failed, .status-smoke-failed, .status-failed { color: var(--bad); }
-.status-incomplete { color: var(--accent); }
+.status-incomplete { color: var(--accent-ink); }
 .good { color: var(--good); font-weight: bold; }
 .bad { color: var(--bad); }
+
+/* Hexagon rank badges: gold, silver and bronze for the top 3 */
+table.standings td:first-child { width: 2.4em; text-align: center; }
+table.standings tbody td:first-child { font-weight: 800; font-size: 0.85em; background: no-repeat center / 2.1em url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 34'%3E%3Cpath d='M15 1l13 7.5v17L15 33 2 25.5v-17z' fill='%23f6eedb'/%3E%3C/svg%3E"); }
+table.standings tbody tr:nth-child(1) td:first-child { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 34'%3E%3Cpath d='M15 1l13 7.5v17L15 33 2 25.5v-17z' fill='%23f7c300'/%3E%3C/svg%3E"); }
+table.standings tbody tr:nth-child(2) td:first-child { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 34'%3E%3Cpath d='M15 1l13 7.5v17L15 33 2 25.5v-17z' fill='%23d5d9de'/%3E%3C/svg%3E"); }
+table.standings tbody tr:nth-child(3) td:first-child { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 34'%3E%3Cpath d='M15 1l13 7.5v17L15 33 2 25.5v-17z' fill='%23e7b48a'/%3E%3C/svg%3E"); }
+table.standings tbody tr:nth-child(-n+3) td:first-child { color: #2b1a00; }
+p + table.standings td:nth-child(2) a { font-weight: 700; }
+p + table.standings tbody tr:first-child td:nth-child(2) a::after { content: " 👑"; }
+@media (prefers-color-scheme: dark) {
+	table.standings tbody td:first-child { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 34'%3E%3Cpath d='M15 1l13 7.5v17L15 33 2 25.5v-17z' fill='%232a2738'/%3E%3C/svg%3E"); color: var(--dim); }
+	table.standings tbody tr:nth-child(1) td:first-child { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 34'%3E%3Cpath d='M15 1l13 7.5v17L15 33 2 25.5v-17z' fill='%23ffb000'/%3E%3C/svg%3E"); }
+	table.standings tbody tr:nth-child(2) td:first-child { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 34'%3E%3Cpath d='M15 1l13 7.5v17L15 33 2 25.5v-17z' fill='%23c9ced6'/%3E%3C/svg%3E"); }
+	table.standings tbody tr:nth-child(3) td:first-child { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 34'%3E%3Cpath d='M15 1l13 7.5v17L15 33 2 25.5v-17z' fill='%23d99a6c'/%3E%3C/svg%3E"); }
+	table.standings tbody tr:nth-child(-n+3) td:first-child { filter: drop-shadow(0 0 6px rgb(255 176 0 / 0.35)); }
+	p + table.standings tbody tr:first-child td { background-color: rgb(255 176 0 / 0.07); }
+	.num, .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+}
+
 .h2h td { text-align: center; min-width: 3em; }
-.h2h td.self { background: var(--line); }
+.h2h th { text-transform: none; letter-spacing: 0; }
+.h2h tbody th { font-size: 1em; color: var(--fg); }
+.h2h td.self { background-color: var(--chip); }
 .h2h th.vertical { height: 8em; vertical-align: bottom; }
 .h2h th.vertical span { writing-mode: vertical-rl; transform: rotate(180deg); }
-.result { display: inline-block; margin-right: 0.4em; padding: 0 0.3em; border-radius: 3px; }
-.result.p60 { background: var(--accent); color: #000; }
+.result { display: inline-block; margin-right: 0.4em; padding: 0 0.55em; border-radius: 999px; background: var(--chip); }
+.result.p60 { background: var(--accent); color: #2b1a00; }
 .result.crashed, .result.no-join { text-decoration: line-through; }
 .void { opacity: 0.5; }
-.button { display: inline-block; padding: 0.3em 0.8em; border: 1px solid var(--accent); border-radius: 4px; text-decoration: none; margin-right: 0.5em; }
-.filter input { padding: 0.2em 0.4em; }
-footer { max-width: 1100px; margin: 0 auto; padding: 1em 1.5em 2em; color: var(--dim); font-size: 0.85em; border-top: 1px solid var(--line); }
+.button { display: inline-block; padding: 0.4em 1em; border-radius: 999px; background: var(--accent); color: #2b1a00; font-weight: 600; text-decoration: none; margin-right: 0.5em; }
+.button:hover { box-shadow: var(--glow); }
+.filter input { padding: 0.3em 0.6em; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--fg); }
+footer { max-width: 1080px; margin: 0 auto; padding: 1em 1.5em 2em; color: var(--dim); font-size: 0.85em; }
 
-/* Charts. Series colors are validated for both surfaces (CVD-safe as a set
-   of three); text never takes a series color. */
-:root { --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --context: #c9c3b3; --grid: #ece6d6; }
-@media (prefers-color-scheme: dark) {
-	:root { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --context: #4d493f; --grid: #2e2b25; }
-}
-.chart { margin: 0.5em 0 1.5em; }
+/* Charts */
+.chart { display: block; padding: 1em 1.2em 0.6em; overflow: visible; }
 .chart-frame { position: relative; outline-offset: 4px; }
 .chart svg { display: block; overflow: visible; }
 .chart .grid line { stroke: var(--grid); stroke-width: 1; }
 .chart .grid text { fill: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
 .chart .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-.chart .dot { stroke: var(--bg); stroke-width: 2; }
+.chart .dot { stroke: var(--card); stroke-width: 2; }
 .chart .series-1 .line { stroke: var(--series-1); } .chart .series-1 .dot { fill: var(--series-1); }
 .chart .series-2 .line { stroke: var(--series-2); } .chart .series-2 .dot { fill: var(--series-2); }
 .chart .series-3 .line { stroke: var(--series-3); } .chart .series-3 .dot { fill: var(--series-3); }
@@ -66,7 +126,7 @@ footer { max-width: 1100px; margin: 0 auto; padding: 1em 1.5em 2em; color: var(-
 .chart-legend { display: flex; flex-wrap: wrap; gap: 0.3em 1.2em; font-size: 0.85em; color: var(--dim); margin-bottom: 0.4em; }
 .key { display: inline-block; width: 14px; height: 2px; border-radius: 1px; vertical-align: middle; margin-right: 0.45em; background: var(--context); }
 .key.series-1 { background: var(--series-1); } .key.series-2 { background: var(--series-2); } .key.series-3 { background: var(--series-3); }
-.chart-tooltip { position: absolute; pointer-events: none; background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+.chart-tooltip { position: absolute; pointer-events: none; background: var(--card); border: 1px solid var(--line); border-radius: 10px;
 	padding: 0.4em 0.6em; font-size: 0.82em; box-shadow: 0 2px 8px rgb(0 0 0 / 0.12); white-space: nowrap; z-index: 1; }
 .chart-tooltip .when { color: var(--dim); margin-bottom: 0.2em; }
 .chart-tooltip b { display: inline-block; min-width: 2.8em; text-align: right; margin-right: 0.5em; font-variant-numeric: tabular-nums; }

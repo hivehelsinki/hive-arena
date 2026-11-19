@@ -22,7 +22,7 @@
 {{define "ladder"}}
 <table class="standings">
 <thead><tr>
-	<th>#</th><th>Team</th><th class="num">Rating</th><th class="num">μ ± σ</th><th class="num">Matches</th>
+	<th>#</th><th>Team</th><th class="num">Rating</th><th class="num"><span class="nocase">μ ± σ</span></th><th class="num">Matches</th>
 	{{range .Ladder.Formats}}<th class="num" title="Rating in {{.}}">{{.Map}} <span class="dim">{{.Players}}p</span></th>{{end}}
 	<th class="num" title="Mean points per match over the last {{days .Ladder.StatsPeriod}}: 60 for first place, 0 for last">Points</th>
 	<th>Version</th>
