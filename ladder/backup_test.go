@@ -14,7 +14,7 @@ import (
 
 func TestBackup(t *testing.T) {
 	store := newTestStore(t)
-	config := &Config{Schedule: Schedule{Timezone: "UTC"}}
+	config := &Config{Timezone: "UTC"}
 	config.Web.BackupToken = "secret"
 
 	a, b := Bot{Name: "a"}, Bot{Name: "b"}
@@ -93,7 +93,7 @@ func TestBackup(t *testing.T) {
 
 func TestBackupDisabledWithoutToken(t *testing.T) {
 	store := newTestStore(t)
-	web, _ := NewWeb(&Config{Schedule: Schedule{Timezone: "UTC"}}, store)
+	web, _ := NewWeb(&Config{Timezone: "UTC"}, store)
 	server := httptest.NewServer(web.Handler())
 	defer server.Close()
 

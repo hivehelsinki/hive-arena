@@ -12,12 +12,11 @@ import (
 
 func TestStatusAndHealth(t *testing.T) {
 	store := newTestStore(t)
-	config := &Config{DataDir: store.dir, Schedule: Schedule{Times: []string{"08:00"}, Timezone: "UTC"}}
+	config := &Config{DataDir: store.dir, Timezone: "UTC", Ladder: testSettings(Format{"m", 2}, Format{"m", 3})}
+	config.Runner.MatchTimeout = Duration{30 * time.Minute}
 
 	a, b := Bot{Name: "a"}, Bot{Name: "b"}
-	run, _ := store.CreateRun("ladder", nil, []Bot{a, b})
-	store.RecordMatch(MatchInfo{Kind: LadderMatch, RunID: run}, fakeResult("m", []Bot{a, b}, []uint{1, 0}, []BotStatus{Finished, Finished}))
-	store.FinishRun(run, RunComplete)
+	store.RecordMatch(MatchInfo{Kind: LadderMatch}, fakeResult("m", []Bot{a, b}, []uint{1, 0}, []BotStatus{Finished, Finished}))
 	store.SavePoolState(&PoolState{Teams: []TeamState{{Team: Team{Name: "a"}, Bot: &a}, {Team: Team{Name: "b"}, Error: "build-failed"}}})
 
 	web, err := NewWeb(config, store)
@@ -50,7 +49,8 @@ func TestStatusAndHealth(t *testing.T) {
 	if err := json.Unmarshal([]byte(body), &status); err != nil {
 		t.Fatal(err)
 	}
-	if !status.Healthy || status.Database.Matches != 1 || status.LastRun == nil || status.LastRun.ID != run ||
+	// One team plays: no format can be played
+	if !status.Healthy || status.Database.Matches != 1 || status.Matchmaker.Last24h.Matches != 1 || status.Matchmaker.Demand != 0 ||
 		status.Teams.Registered != 2 || status.Teams.Playing != 1 || len(status.Teams.Errors) != 1 || status.Disk.Total == 0 {
 		t.Errorf("unexpected status: %s", body)
 	}
@@ -63,11 +63,23 @@ func TestStatusAndHealth(t *testing.T) {
 	}
 	config.MinFreeDiskGB = 0
 
-	// Failed run
-	failed, _ := store.CreateRun("ladder", nil, nil)
-	store.FinishRun(failed, RunFailed)
+	// A stuck matchmaker
+	heartbeat.Store(time.Now().Add(-time.Hour))
+	defer heartbeat.Store(time.Time{})
 	code, body = get("/health")
-	if code != 503 || !strings.Contains(body, "failed") {
-		t.Errorf("expected a failed run warning, got %d: %s", code, body)
+	if code != 503 || !strings.Contains(body, "stuck") {
+		t.Errorf("expected a stuck matchmaker warning, got %d: %s", code, body)
+	}
+}
+
+func TestDemand(t *testing.T) {
+	settings := testSettings(Format{"a", 2}, Format{"b", 4}, Format{"a", 2}, Format{"c", 6})
+	settings.Quota = 20
+	// 10 teams: 100 matches of 2 players, 50 of 4, 33 of 6
+	if d := demand(settings, 10); d != 183 {
+		t.Errorf("expected 183 matches per day, got %d", d)
+	}
+	if d := demand(settings, 4); d != 60 {
+		t.Errorf("expected 60 matches per day without the 6-player format, got %d", d)
 	}
 }

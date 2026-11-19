@@ -3,9 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -41,16 +44,69 @@ func (f Format) Key() string {
 	return fmt.Sprintf("%s:%d", f.Map, f.Players)
 }
 
-// The schedule of the ladder runs. It is published on the website as is.
-type Schedule struct {
-	Times    []string `json:"times"`    // daily run start times, "15:04"
-	Timezone string   `json:"timezone"` // e.g. Europe/Helsinki
-	Formats  []Format `json:"formats"`  // each run plays a full round-robin of each format
-	Repeats  int      `json:"repeats"`  // times each lineup is played in a run
-	Window   int      `json:"window"`   // number of recent runs the leaderboard is computed on
+// The settings of the ladder, re-read from the configuration file before
+// every match, so that they can be tuned while the ladder runs
+type LadderSettings struct {
+	Formats []Format `json:"formats"`
+	// Matches each team plays in each format per 24 hours (a rolling window).
+	// Every match counts, whether the team challenged or was challenged.
+	Quota int `json:"quota"`
+	// Opponents are drawn among this many teams ranked just above the
+	// challenger (at least players - 1)
+	Window int `json:"window"`
+	// Share of the matches whose opponents are drawn among all the teams
+	RandomShare float64 `json:"randomShare"`
 	// Bots that fail (crash or don't join) in this many matches in a row with
-	// the same commit are left out of the next runs, until they change commit
+	// the same commit are left out, until they change commit (0: never)
 	MaxFailures int `json:"maxFailures"`
+	// Each team keeps the report and logs of its last matches (the results
+	// are kept forever)
+	KeepMatchFiles int `json:"keepMatchFiles"`
+	// Head-to-head results and mean points are computed over this period
+	StatsPeriod Duration `json:"statsPeriod"`
+	// No match is started while paused (e.g. while staff run a tournament)
+	Paused bool         `json:"paused"`
+	Rating RatingParams `json:"rating"`
+}
+
+func DefaultLadderSettings() LadderSettings {
+	return LadderSettings{
+		Quota:          20,
+		Window:         4,
+		RandomShare:    0.1,
+		MaxFailures:    5,
+		KeepMatchFiles: 100,
+		StatsPeriod:    Duration{7 * 24 * time.Hour},
+		Rating:         DefaultRatingParams(),
+	}
+}
+
+func (s *LadderSettings) validate(c *Config) error {
+	if len(s.Formats) == 0 {
+		return fmt.Errorf("no formats configured")
+	}
+	for _, f := range s.Formats {
+		if f.Players < 2 || f.Players > 6 {
+			return fmt.Errorf("invalid format %s", f)
+		}
+		if err := c.checkMap(f.Map); err != nil {
+			return err
+		}
+	}
+	if s.Quota < 1 || s.Window < 1 || s.KeepMatchFiles < 1 || s.MaxFailures < 0 {
+		return fmt.Errorf("ladder: quota, window and keepMatchFiles must be at least 1, maxFailures not negative")
+	}
+	if s.RandomShare < 0 || s.RandomShare > 1 {
+		return fmt.Errorf("ladder: randomShare must be between 0 and 1")
+	}
+	if s.StatsPeriod.Duration <= 0 {
+		return fmt.Errorf("ladder: statsPeriod must be positive")
+	}
+	r := s.Rating
+	if r.Sigma <= 0 || r.Beta <= 0 || r.Tau < 0 || r.VersionSigma < 0 {
+		return fmt.Errorf("ladder.rating: sigma and beta must be positive, tau and versionSigma not negative")
+	}
+	return nil
 }
 
 type Config struct {
@@ -60,9 +116,10 @@ type Config struct {
 	// A warning is logged, and /health reports a problem, below this free space
 	MinFreeDiskGB float64 `json:"minFreeDiskGB"`
 
-	Schedule Schedule `json:"schedule"`
-	// Margin between the deadline of a run and the start of the next one
-	DeadlineMargin Duration `json:"deadlineMargin"`
+	// Time zone of the times shown on the website, e.g. Europe/Helsinki
+	Timezone string `json:"timezone"`
+
+	Ladder LadderSettings `json:"ladder"`
 
 	Runner struct {
 		ServerImage  string   `json:"serverImage"`
@@ -83,8 +140,7 @@ type Config struct {
 		SmokeMap   string   `json:"smokeMap"`   // map of the 1-player smoke test
 		MaxImageMB int64    `json:"maxImageMB"` // larger images fail their build (0: no limit)
 		CacheLimit string   `json:"cacheLimit"` // size the docker build cache is kept under, e.g. "10GB" (empty: no limit)
-		// Between runs, new versions are built this often, so that teams
-		// soon know whether their new tag builds (0: only at the start of runs)
+		// New versions are built this often, between matches
 		Interval Duration `json:"interval"`
 	} `json:"build"`
 
@@ -105,16 +161,10 @@ func LoadConfig(path string) (*Config, error) {
 
 	defaults := DefaultRunnerConfig()
 	config := &Config{
-		DataDir:        "data",
-		MapsDir:        "maps",
-		DeadlineMargin: Duration{10 * time.Minute},
-		Schedule: Schedule{
-			Times:       []string{"08:00", "16:00"},
-			Timezone:    "Europe/Helsinki",
-			Repeats:     1,
-			Window:      4,
-			MaxFailures: 5,
-		},
+		DataDir:  "data",
+		MapsDir:  "maps",
+		Timezone: "Europe/Helsinki",
+		Ladder:   DefaultLadderSettings(),
 	}
 	config.MinFreeDiskGB = 5
 	config.Web.Listen = ":8080"
@@ -145,30 +195,11 @@ func (c *Config) validate() error {
 	if _, err := c.Location(); err != nil {
 		return err
 	}
-	if len(c.Schedule.Times) == 0 {
-		return fmt.Errorf("no run times configured")
-	}
-	for _, t := range c.Schedule.Times {
-		if _, err := time.Parse("15:04", t); err != nil {
-			return fmt.Errorf("invalid run time %q", t)
-		}
-	}
-	if len(c.Schedule.Formats) == 0 {
-		return fmt.Errorf("no formats configured")
-	}
-	for _, f := range c.Schedule.Formats {
-		if f.Players < 2 || f.Players > 6 {
-			return fmt.Errorf("invalid format %s", f)
-		}
-		if err := c.checkMap(f.Map); err != nil {
-			return err
-		}
+	if err := c.Ladder.validate(c); err != nil {
+		return err
 	}
 	if err := c.checkMap(c.Build.SmokeMap); err != nil {
 		return err
-	}
-	if c.Schedule.Repeats < 1 || c.Schedule.Window < 1 {
-		return fmt.Errorf("repeats and window must be at least 1")
 	}
 	if c.Registry.URL == "" && c.Registry.Path == "" {
 		return fmt.Errorf("no registry configured (registry.url or registry.path)")
@@ -178,11 +209,8 @@ func (c *Config) validate() error {
 	if r.ServerImage == "" || r.Memory == "" || r.ServerMemory == "" || r.Cores <= 0 || r.Pids <= 0 || r.JoinTimeout.Duration <= 0 || r.MatchTimeout.Duration <= 0 {
 		return fmt.Errorf("runner: serverImage and memory must be set, and cores, pids, joinTimeout and matchTimeout positive")
 	}
-	if c.Build.Timeout.Duration <= 0 || c.Build.KeepImages < 1 || c.Build.MaxImageMB < 0 || c.Build.Interval.Duration < 0 {
-		return fmt.Errorf("build: timeout must be positive, and keepImages at least 1")
-	}
-	if c.DeadlineMargin.Duration < 0 {
-		return fmt.Errorf("deadlineMargin must not be negative")
+	if c.Build.Timeout.Duration <= 0 || c.Build.KeepImages < 1 || c.Build.MaxImageMB < 0 || c.Build.Interval.Duration <= 0 {
+		return fmt.Errorf("build: timeout and interval must be positive, and keepImages at least 1")
 	}
 	return nil
 }
@@ -199,7 +227,7 @@ func (c *Config) checkMap(name string) error {
 }
 
 func (c *Config) Location() (*time.Location, error) {
-	return time.LoadLocation(c.Schedule.Timezone)
+	return time.LoadLocation(c.Timezone)
 }
 
 func (c *Config) RunnerConfig() RunnerConfig {
@@ -214,30 +242,66 @@ func (c *Config) RunnerConfig() RunnerConfig {
 	return config
 }
 
-// LastDue returns the last scheduled run time that is not after now,
-// starting from a scheduled time that is
-func (s *Schedule) LastDue(scheduled time.Time, now time.Time, loc *time.Location) time.Time {
-	for {
-		next := s.NextRunTime(scheduled, loc)
-		if next.After(now) {
-			return scheduled
-		}
-		scheduled = next
-	}
+// LiveSettings holds the ladder settings, reloaded from the configuration
+// file when it changes. The other settings need a restart.
+type LiveSettings struct {
+	path     string
+	mutex    sync.Mutex
+	settings LadderSettings
+	modTime  time.Time
+	warning  string
 }
 
-// NextRunTime returns the first scheduled run time strictly after `after`
-func (s *Schedule) NextRunTime(after time.Time, loc *time.Location) time.Time {
-	local := after.In(loc)
-	var next time.Time
-	for day := 0; day <= 1; day++ {
-		for _, t := range s.Times {
-			hm, _ := time.Parse("15:04", t)
-			candidate := time.Date(local.Year(), local.Month(), local.Day()+day, hm.Hour(), hm.Minute(), 0, 0, loc)
-			if candidate.After(after) && (next.IsZero() || candidate.Before(next)) {
-				next = candidate
-			}
-		}
+// NewLiveSettings starts with the given settings, read from path (empty:
+// never reloaded)
+func NewLiveSettings(path string, settings LadderSettings) *LiveSettings {
+	live := &LiveSettings{path: path, settings: settings}
+	if info, err := os.Stat(path); path != "" && err == nil {
+		live.modTime = info.ModTime()
 	}
-	return next
+	return live
+}
+
+func (l *LiveSettings) Get() LadderSettings {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	return l.settings
+}
+
+// Warning is why the configuration file could not be applied, or ""
+func (l *LiveSettings) Warning() string {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	return l.warning
+}
+
+// Reload re-reads the configuration file if it changed, and returns whether
+// the settings changed. An invalid file keeps the previous settings, with a
+// warning.
+func (l *LiveSettings) Reload() bool {
+	if l.path == "" {
+		return false
+	}
+	info, err := os.Stat(l.path)
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	if err != nil {
+		l.warning = fmt.Sprintf("cannot read the configuration: %s", err)
+		return false
+	}
+	if info.ModTime().Equal(l.modTime) {
+		return false
+	}
+
+	config, err := LoadConfig(l.path)
+	if err != nil {
+		l.warning = fmt.Sprintf("the configuration was not applied, the previous ladder settings are kept: %s", err)
+		log.Printf("WARNING: %s", l.warning)
+		return false
+	}
+	l.modTime = info.ModTime()
+	l.warning = ""
+	changed := !reflect.DeepEqual(config.Ladder, l.settings)
+	l.settings = config.Ladder
+	return changed
 }

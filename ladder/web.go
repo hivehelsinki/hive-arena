@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -23,7 +22,9 @@ var webFiles embed.FS
 
 // The public website: read-only views of the store
 type Web struct {
-	Config    *Config
+	Config *Config
+	// The ladder settings, shared with the matchmaker when it runs
+	Settings  *LiveSettings
 	Store     *Store
 	templates map[string]*template.Template
 	docker    dockerCheck
@@ -93,6 +94,28 @@ func NewWeb(config *Config, store *Store) (*Web, error) {
 			}
 			return ""
 		},
+		"rating": func(t TeamRating) string {
+			if t.Games == 0 {
+				return ""
+			}
+			return fmt.Sprintf("%.1f", t.Rating.Ordinal())
+		},
+		"musigma": func(t TeamRating) string {
+			if t.Games == 0 {
+				return ""
+			}
+			return fmt.Sprintf("%.1f ± %.1f", t.Rating.Mu, t.Rating.Sigma)
+		},
+		"days": func(d Duration) string {
+			if days := d.Hours() / 24; days == float64(int(days)) {
+				if days == 1 {
+					return "day"
+				}
+				return fmt.Sprintf("%d days", int(days))
+			}
+			return d.String()
+		},
+		"percent":    func(f float64) string { return fmt.Sprintf("%.0f%%", 100*f) },
 		"add":        func(a, b int) int { return a + b },
 		"trimPrefix": strings.TrimPrefix,
 		"runName": func(run Run) string {
@@ -109,7 +132,7 @@ func NewWeb(config *Config, store *Store) (*Web, error) {
 	if err != nil {
 		return nil, err
 	}
-	web := &Web{Config: config, Store: store, templates: make(map[string]*template.Template)}
+	web := &Web{Config: config, Settings: NewLiveSettings("", config.Ladder), Store: store, templates: make(map[string]*template.Template)}
 	for _, page := range pages {
 		if page == "web/layout.html" {
 			continue
@@ -175,7 +198,7 @@ func viewerHandler(dir string) http.Handler {
 }
 
 func (web *Web) render(w http.ResponseWriter, page string, data map[string]any) {
-	data["Schedule"] = web.Config.Schedule
+	data["Settings"] = web.Settings.Get()
 	data["Revision"] = gitRevision()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := web.templates[page].ExecuteTemplate(w, "layout", data); err != nil {
@@ -199,40 +222,33 @@ func pathID(r *http.Request) (int64, bool) {
 	return id, err == nil
 }
 
-// Map columns of the leaderboard: the maps of the schedule, in order
-// formats returns the formats of the schedule, for the per-format scores
+// formats returns the formats of the ladder, for the per-format scores
 func (web *Web) formats() []Format {
-	var formats []Format
-	for _, f := range web.Config.Schedule.Formats {
-		if !slices.Contains(formats, f) {
-			formats = append(formats, f)
-		}
-	}
-	return formats
+	return distinctFormats(web.Settings.Get().Formats)
 }
 
 func (web *Web) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
-	board, runs, err := web.Store.Leaderboard(web.Config.Schedule.Window)
+	view, err := web.Store.Ladder(web.Settings.Get(), time.Now())
 	if err != nil {
 		serverError(w, err)
 		return
 	}
-	var teams []string
-	for _, s := range board.Standings {
-		teams = append(teams, s.Team)
+	played, err := web.Store.PlayedSince(time.Now().Add(-24 * time.Hour))
+	if err != nil {
+		serverError(w, err)
+		return
 	}
-	loc, _ := web.Config.Location()
 	web.render(w, "leaderboard", map[string]any{
-		"Board":   board,
-		"Teams":   teams,
-		"Runs":    runs,
-		"Formats": web.formats(),
-		"NextRun": web.Config.Schedule.NextRunTime(time.Now(), loc),
+		"Ladder":   view,
+		"Board":    view.Stats,
+		"Teams":    view.Teams,
+		"Played":   played,
+		"Activity": Activity(),
 	})
 }
 
 func (web *Web) handleRuns(w http.ResponseWriter, r *http.Request) {
-	runs, err := web.Store.Runs("", 100)
+	runs, err := web.Store.Runs("tournament", 100)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -280,7 +296,7 @@ func matchFilter(r *http.Request) MatchFilter {
 	if err != nil || limit < 1 || limit > 200 {
 		limit = 50
 	}
-	return MatchFilter{Team: q.Get("team"), Map: q.Get("map"), RunID: run, Before: before, Limit: limit}
+	return MatchFilter{Kind: q.Get("kind"), Team: q.Get("team"), Map: q.Get("map"), RunID: run, Before: before, Limit: limit}
 }
 
 func (web *Web) handleMatches(w http.ResponseWriter, r *http.Request) {
@@ -305,6 +321,12 @@ func (web *Web) handleMatch(w http.ResponseWriter, r *http.Request) {
 	if !ok || match == nil || err != nil {
 		http.NotFound(w, r)
 		return
+	}
+	// Files missing without being deleted by the ladder (e.g. after restoring a backup)
+	if !match.FilesDeleted && match.Turns > 0 {
+		if _, err := os.Stat(web.Store.ReportPath(id)); os.IsNotExist(err) {
+			match.FilesDeleted = true
+		}
 	}
 	logs := make(map[string]bool)
 	for _, bot := range match.Bots {
@@ -405,16 +427,16 @@ func (web *Web) handleTeam(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	board, _, err := web.Store.Leaderboard(web.Config.Schedule.Window)
+	settings := web.Settings.Get()
+	view, err := web.Store.Ladder(settings, time.Now())
 	if err != nil {
 		serverError(w, err)
 		return
 	}
-	var standing *Standing
-	for i := range board.Standings {
-		if board.Standings[i].Team == name {
-			standing = &board.Standings[i]
-		}
+	counts, err := web.Store.MatchCounts(time.Now().Add(-24 * time.Hour))
+	if err != nil {
+		serverError(w, err)
+		return
 	}
 
 	if state == nil && len(builds) == 0 && len(matches) == 0 {
@@ -423,21 +445,22 @@ func (web *Web) handleTeam(w http.ResponseWriter, r *http.Request) {
 	}
 	web.render(w, "team", map[string]any{
 		"Name": name, "State": state, "Builds": builds, "Matches": matches,
-		"Standing": standing, "Formats": web.formats(), "H2H": board.HeadToHead[name],
+		"Row": view.Row(name), "Formats": view.Formats, "H2H": view.Stats.HeadToHead[name],
+		"StatsPeriod": view.StatsPeriod, "Counts": counts[name], "Quota": settings.Quota,
 	})
 }
 
 func (web *Web) apiLeaderboard(w http.ResponseWriter, r *http.Request) {
-	board, runs, err := web.Store.Leaderboard(web.Config.Schedule.Window)
+	view, err := web.Store.Ladder(web.Settings.Get(), time.Now())
 	if err != nil {
 		serverError(w, err)
 		return
 	}
-	writeJSON(w, map[string]any{"leaderboard": board, "runs": runs, "schedule": web.Config.Schedule})
+	writeJSON(w, view)
 }
 
 func (web *Web) apiRuns(w http.ResponseWriter, r *http.Request) {
-	runs, err := web.Store.Runs("", 100)
+	runs, err := web.Store.Runs(r.URL.Query().Get("kind"), 100)
 	if err != nil {
 		serverError(w, err)
 		return

@@ -12,8 +12,9 @@
 #   - installs and (re)starts the systemd service, and checks that it runs
 #     the commit that was just pulled
 #
-# --force: update and restart even if a ladder run is in progress (it is then
-# marked incomplete, and its recorded matches are kept).
+# --force: update and restart even if a tournament is in progress (it is then
+# marked incomplete, and its recorded matches are kept). A ladder match in
+# progress is simply lost: the ladder resumes after the restart.
 
 set -eu
 
@@ -87,21 +88,21 @@ status_base() {
 	echo "http://$host:${listen##*:}"
 }
 
-# Fails (or asks, on a terminal) if the running ladder is playing a run, or
-# preparing one: restarting would interrupt it
+# Fails (or asks, on a terminal) if the running ladder is playing a
+# tournament: restarting would interrupt it
 check_not_busy() {
 	[ "$FORCE" = 1 ] && return
 	systemctl is-active --quiet "$SERVICE" || return 0
 	[ -x "$LADDER" ] && [ -f "$CONFIG" ] || return 0
 	base=$(status_base "$("$LADDER" check -config "$CONFIG" 2>/dev/null)")
 	status=$(curl -fsS "$base/api/status" 2>/dev/null) || return 0
-	if echo "$status" | grep -q -e '"currentRun"' -e '"activity":"building the pool"'; then
+	if echo "$status" | grep -q '"currentTournament"'; then
 		if [ -t 0 ]; then
-			printf "A ladder run is in progress. Update and restart anyway (it will be marked incomplete)? [y/N] "
+			printf "A tournament is in progress. Update and restart anyway (it will be marked incomplete)? [y/N] "
 			read -r answer
-			[ "$answer" = y ] || [ "$answer" = Y ] || fail "nothing done: run this script again after the run, or with --force"
+			[ "$answer" = y ] || [ "$answer" = Y ] || fail "nothing done: run this script again after the tournament, or with --force"
 		else
-			fail "a ladder run is in progress: run this script again after it, or with --force"
+			fail "a tournament is in progress: run this script again after it, or with --force"
 		fi
 	fi
 }
@@ -140,7 +141,7 @@ docker info >/dev/null 2>&1 || fail "docker is installed but not running"
 echo "git, go ($(go env GOVERSION)), docker ($(docker version --format '{{.Server.Version}}'), buildx): ok"
 
 if [ -z "${SETUP_UPDATED:-}" ]; then
-	# Before changing anything: the pull and the builds would affect a run
+	# Before changing anything: the pull and the builds would affect a tournament
 	check_not_busy
 
 	step "Update"
@@ -184,7 +185,7 @@ if [ ! -f "$CONFIG" ]; then
 	chown "root:$SERVICE_USER" "$CONFIG"
 	chmod 640 "$CONFIG"
 	echo "Created $CONFIG, with a random backup token."
-	echo "Edit it (at least registry.url, and the schedule), then run this script again."
+	echo "Edit it (at least registry.url, and the ladder formats and quota), then run this script again."
 	exit 1
 fi
 checked=$("$LADDER" check -config "$CONFIG") || fail "invalid configuration in $CONFIG"
@@ -251,4 +252,5 @@ echo "Health:         $health"
 
 printf '\n\033[1;32mThe ladder is up to date and running.\033[0m\n'
 echo "Logs: journalctl -u $SERVICE -f"
-echo "Start a run now: systemctl kill -s USR1 $SERVICE"
+echo "Settings: the \"ladder\" section of $CONFIG applies at the next match, without a restart."
+echo "Build new versions now: systemctl kill -s USR1 $SERVICE"

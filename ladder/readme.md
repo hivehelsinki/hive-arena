@@ -6,15 +6,16 @@ To deploy it on a VM, or update it there: `sudo ladder/deploy/setup.sh` from the
 
 ## Running the ladder
 
-Copy [ladder.example.json](ladder.example.json) to `ladder.json` and adjust it, then run `go run ./ladder` (or `ladder -config path/to/ladder.json`) from the repository root (it reads the maps from `maps/`). It plays the runs at the scheduled times, builds new versions between runs, and serves the website. Send `SIGUSR1` to the process to start a run right away.
+Copy [ladder.example.json](ladder.example.json) to `ladder.json` and adjust it, then run `go run ./ladder` (or `ladder -config path/to/ladder.json`) from the repository root (it reads the maps from `maps/`). It plays ladder matches one at a time until every team has played its quota (see below), builds new versions every `build.interval`, and serves the website. The `ladder` section of the configuration is re-read before every match, so the quota, formats, ratings or `paused` can change while it runs. Send `SIGUSR1` to the process to build new versions right away.
 
-The other commands are for debugging and testing (`ladder help` lists them). `run`, `tournament` and `build` play matches or build images: they take a lock on the data directory, and refuse to start while the ladder service runs.
+Everything is derived from the recorded matches and the configuration: after a restart, the ladder resumes where it left off (the match being played when it stopped is lost).
+
+The other commands are for debugging and testing (`ladder help` lists them). `tournament` and `build` play matches or build images: they take a lock on the data directory, and refuse to start while the ladder service runs.
 
 - `go run ./ladder web`: runs the website only
-- `go run ./ladder leaderboard`: prints the leaderboard
-- `go run ./ladder run`: plays one run now and exits
-- `go run ./ladder tournament -formats balanced:4,tiny:2 [-repeats N] [-teams a,b,c] [-name "Lunch cup"]`: plays a one-off round-robin now, with its own formats, among the current bots (all of them, or the given teams). It appears with the runs on the website, and does not count for the leaderboard.
-- `go run ./ladder build`: fetches the registered teams, builds and smoke-tests their new versions (also done at the start of each run)
+- `go run ./ladder leaderboard`: prints the global ladder
+- `go run ./ladder tournament -formats balanced:4,tiny:2 [-repeats N] [-teams a,b,c] [-name "Lunch cup"]`: plays a one-off round-robin now, with its own formats, among the current bots (all of them, or the given teams). It appears with the tournaments on the website, and is not rated.
+- `go run ./ladder build`: fetches the registered teams, builds and smoke-tests their new versions (also done every `build.interval` by the ladder)
 - `go run ./ladder rebuild <team>`: forgets the failed build of a team's current version, so that it is built again (for instance after a network failure during the build)
 - `go run ./ladder match`: plays one match with the given images, without recording anything (see below)
 
@@ -22,17 +23,21 @@ Configuration (`ladder.json`):
 
 - `dataDir`: where the database, reports and logs are kept
 - `mapsDir`: the arena's maps (default `maps`), to check the formats
-- `schedule`: published as is with each run.
-  - `times`, `timezone`: daily start times of the runs
-  - `formats`: each run plays every lineup of the pool for each format (map and number of players)
-  - `repeats`: how many times each lineup is played in a run
-  - `window`: the leaderboard is computed over this many recent runs
-  - `maxFailures`: a bot that fails (crashes or doesn't join) this many matches in a row with the same commit is left out of the next runs, until its commit changes
-- `deadlineMargin`: a run stops this long before the next scheduled run, even if not all matches were played (it is then marked incomplete)
+- `timezone`: of the times shown on the website
+- `ladder`: re-read before every match.
+  - `formats`: the formats played (map and number of players), each with its own ladder
+  - `quota`: matches each team plays per 24 hours (a rolling window) in each format; every match counts, challenged or challenging
+  - `window`: opponents are drawn among this many teams ranked just above the challenger (at least players − 1; below, for the teams at the top)
+  - `randomShare`: share of the matches against random opponents instead
+  - `maxFailures`: a bot that fails (crashes or doesn't join) this many matches in a row with the same commit is left out, until its commit changes
+  - `keepMatchFiles`: each team keeps the report and logs of its last matches; older ones are deleted (results are kept forever)
+  - `statsPeriod`: head-to-head results and mean points are computed over this period
+  - `paused`: no match is started (e.g. while staff run a tournament)
+  - `rating`: parameters of the ratings (see below); changing them recomputes every rating
 - `runner`: server image, CPU cores split between the bots of a match, per-bot memory and process limits, memory of the match server (`serverMemory`: it keeps the whole game in memory), timeouts
 - `registry`: where teams are registered: a git repository (`url`, `branch`, `file`), or a local file (`path`)
-- `build`: build timeout, number of successful images kept per team, map of the smoke test, image size limit (`maxImageMB`), size of the docker build cache (`cacheLimit`), how often new versions are built between runs (`interval`)
-- `minFreeDiskGB`: below this free space in `dataDir`, a warning is logged and `/health` reports a problem
+- `build`: build timeout, number of successful images kept per team, map of the smoke test, image size limit (`maxImageMB`), size of the docker build cache (`cacheLimit`), how often new versions are built (`interval`, between matches)
+- `minFreeDiskGB`: below this free space in `dataDir`, the report and logs of the oldest matches are deleted, a warning is logged and `/health` reports a problem
 - `web.listen`: address of the website
 - `web.backupToken`: enables the backup route (`/backup?token=`), see [deploy/setup.md](deploy/setup.md)
 
@@ -48,11 +53,17 @@ The registry file lists the teams:
 
 Optional fields: `ref` (a tag, branch or commit to use instead of the latest tag on `main`), `context` and `dockerfile` (paths from the repository root: the build context, default the root, and the Dockerfile, inside the context, default the `Dockerfile` at the top of the context).
 
-At the start of each run, and every `build.interval` between runs, for each team, the ladder updates a mirror of its repository, takes the most recent tag on `main`, and builds it if it is new (`git archive | docker build -`, no checkout). A new image must pass a smoke test: a 1-player game, played to the end. Builds and their logs are recorded; a failed build is not retried (see `rebuild`), and the team's last good image keeps playing. Failures that are not the team's (interrupted build, docker or network problems) are not recorded, and the build is tried again.
+Every `build.interval`, between matches, for each team, the ladder updates a mirror of its repository, takes the most recent tag on `main`, and builds it if it is new (`git archive | docker build -`, no checkout). A new image must pass a smoke test: a 1-player game, played to the end. Builds and their logs are recorded; a failed build is not retried (see `rebuild`), and the team's last good image keeps playing. Failures that are not the team's (interrupted build, docker or network problems) are not recorded, and the build is tried again.
 
 In a registry fetched from git, teams must use `https://` repositories, and invalid entries are left out without affecting the others (see `registryProblems` in `/api/status`). When the registry cannot be fetched or is invalid, its last valid version is used. A local registry file (`registry.path`) accepts any repository.
 
-A team whose bot failed (crashed or did not join) its last `maxFailures` matches with the same commit is left out of the runs until it pushes a new tag; its page says so.
+A team whose bot failed (crashed or did not join) its last `maxFailures` matches with the same commit is left out of the ladder until it pushes a new tag; its page says so.
+
+## Matchmaking and ratings
+
+Before every match, the matchmaker picks the team and format furthest below the quota (matches in the last 24 hours), and draws its opponents among the teams just above it in that format's ladder (or, for `randomShare` of the matches, among all teams). When every team has played its quota, it waits, and looks again every minute.
+
+Ratings follow OpenSkill's Plackett-Luce model (TrueSkill-style: a skill estimate μ and an uncertainty σ per team), with ties, globally and per format. Teams are ranked by μ − 3σ, so a new team starts at 0. `rating.tau` adds uncertainty before every match, so that ratings follow teams that improve; when a team's version changes, its σ is raised to at least `rating.versionSigma`. Ratings are recomputed from all the valid ladder matches every time, so they can be computed at any past time. See [LADDER.md](../LADDER.md) for the reasons.
 
 Matches are played one at a time. Each bot joins through the private ID of its own seat, so it always plays under its team's name. A crashed bot's seat is forfeited (the server stops waiting for its orders), so it does not slow the game down. A match that fails (timeout, server error) is recorded as void, with the error and the bots' output.
 
@@ -81,7 +92,7 @@ Containers and networks are always removed at the end. All of them have the `hiv
 
 ## Website
 
-Read-only, no accounts: leaderboard (with scores per format and the head-to-head table) over the window of recent runs, runs, matches (filterable by team and map), team pages with builds and their logs, match pages with bot outputs and report downloads. The same data is available as JSON under `/api/` (`leaderboard`, `runs`, `matches`, `teams`).
+Read-only, no accounts: the global ladder and one per format, the head-to-head table, tournaments, matches (filterable by team and map), team pages with their ratings, their matches in the last 24 hours against the quota, builds and their logs, match pages with bot outputs and report downloads (until they expire). The same data is available as JSON under `/api/` (`leaderboard`, `runs`, `matches`, `teams`).
 
 `/screen` is meant for a big screen: the leaderboard, and the replays of the latest matches, one after the other.
 
@@ -90,5 +101,5 @@ Replays open in the browser version of the viewer, served at `/viewer/` from `we
 ## Status and backups
 
 - `/health`: `ok`, or the list of problems with status 503 (for monitoring)
-- `/api/status`: disk space, Docker, database, what the ladder is doing (`activity`), current, last and next run, teams with problems, registry problems
-- `/backup?token=`: a tar archive named after the time, with a consistent snapshot of the database and all reports and logs, to be fetched by a backup system elsewhere. See [deploy/setup.md](deploy/setup.md).
+- `/api/status`: disk space, Docker, database, what the ladder is doing (`activity`), the matchmaker (paused, last error, matches in the last 24 hours against the quotas' demand, configuration warnings), teams with problems, registry problems
+- `/backup?token=`: a tar archive named after the time, with a consistent snapshot of the database and the build logs (not the match reports and logs, which expire), to be fetched by a backup system elsewhere. See [deploy/setup.md](deploy/setup.md).

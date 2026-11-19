@@ -1,20 +1,36 @@
 {{define "content"}}
-<h1>Leaderboard</h1>
+<h1>Ladder</h1>
 <p class="dim">
-	Average points per match over the last {{.Schedule.Window}} runs{{with .Runs}} ({{range $i, $r := .}}{{if $i}}, {{end}}<a href="/runs/{{$r.ID}}">#{{$r.ID}}</a>{{end}}){{end}}.
-	60 points for first place, 0 for last. The ± column is the standard error: teams closer than that are statistically tied.
-	Next run: {{time .NextRun}}.
+	Teams are ranked by their rating: a cautious estimate of their skill (μ − 3σ, where μ is the estimated skill and σ its uncertainty), from {{.Ladder.Rated}} matches.
+	Last 24 hours: {{.Played.Matches}} matches{{with .Played.Void}}, {{.}} failed{{end}}. {{with .Activity}}Now: {{.}}.{{end}}
 </p>
-{{template "standings" .}}
+{{template "ladder" .}}
+
+{{range .Ladder.Tables}}
+<h2>{{.Format.Map}}, {{.Format.Players}} players</h2>
+<table class="standings">
+<thead><tr><th>#</th><th>Team</th><th class="num">Rating</th><th class="num">μ ± σ</th><th class="num">Matches</th></tr></thead>
+<tbody>
+{{range $i, $t := .Teams}}
+<tr><td>{{add $i 1}}</td><td><a href="/teams/{{$t.Team}}">{{$t.Team}}</a></td><td class="num strong">{{rating $t}}</td><td class="num dim">{{musigma $t}}</td><td class="num">{{$t.Games}}</td></tr>
+{{else}}
+<tr><td colspan="5" class="dim">No matches yet.</td></tr>
+{{end}}
+</tbody>
+</table>
+{{end}}
 
 <h2>Head to head</h2>
+<p class="dim">Over the last {{days .Ladder.StatsPeriod}}.</p>
 {{template "h2h" .}}
 
 <h2>Format</h2>
 <ul>
-	<li>Runs start every day at {{range $i, $t := .Schedule.Times}}{{if $i}} and {{end}}{{$t}}{{end}} ({{.Schedule.Timezone}}), with the latest tag on the <code>main</code> branch of each team's repository.</li>
-	<li>Each run plays every possible lineup of bots, {{.Schedule.Repeats}} time(s) each, in these formats: {{range $i, $f := .Schedule.Formats}}{{if $i}}, {{end}}{{$f.Map}} ({{$f.Players}} players){{end}}.</li>
-	<li>Seats are random. In each match, points go from 60 (first) to 0 (last), equal flowers share the points of the places they span. A bot that crashes or doesn't join is last.</li>
-	<li>Bots that fail {{.Schedule.MaxFailures}} matches in a row are left out until their next version.</li>
+	<li>The latest tag on the <code>main</code> branch of each team's repository plays, from its first match after it is built (new tags are checked every few minutes).</li>
+	<li>Matches are played one at a time, all day. Each team plays {{.Settings.Quota}} matches per 24 hours in each format: {{range $i, $f := .Ladder.Formats}}{{if $i}}, {{end}}{{$f.Map}} ({{$f.Players}} players){{end}}.</li>
+	<li>Matches are challenges: a team challenges teams drawn among the {{.Settings.Window}} ranked just above it in that format ({{percent .Settings.RandomShare}} of the matches are against random teams instead). Seats are random.</li>
+	<li>Ratings move after every match, more for teams with few matches (a new team starts at 0). A new version makes its team's rating more uncertain again, so that it can move quickly.</li>
+	<li>Bots are ranked by flowers; a bot that crashes or doesn't join is last. Points per match go from 60 (first) to 0 (last), equal flowers share the points of the places they span.</li>
+	{{with .Settings.MaxFailures}}<li>Bots that fail {{.}} matches in a row are left out until their next version.</li>{{end}}
 </ul>
 {{end}}

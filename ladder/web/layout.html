@@ -9,7 +9,7 @@
 <body>
 <header>
 	<a class="title" href="/">Hive Arena ladder</a>
-	<nav><a href="/">Leaderboard</a> <a href="/runs">Runs</a> <a href="/matches">Matches</a> <a href="/screen">Big screen</a></nav>
+	<nav><a href="/">Ladder</a> <a href="/runs">Tournaments</a> <a href="/matches">Matches</a> <a href="/screen">Big screen</a></nav>
 </header>
 <main>
 {{template "content" .}}
@@ -35,6 +35,33 @@
 	<td class="num">{{$s.Score.Games}}</td>
 	{{range $.Formats}}<td class="num">{{score (index $s.PerFormat .Key)}}</td>{{end}}
 	<td class="mono">{{short $s.Commit}}</td>
+</tr>
+{{else}}
+<tr><td colspan="99" class="dim">No results yet.</td></tr>
+{{end}}
+</tbody>
+</table>
+{{end}}
+
+{{define "ladder"}}
+<table class="standings">
+<thead><tr>
+	<th>#</th><th>Team</th><th class="num">Rating</th><th class="num">μ ± σ</th><th class="num">Matches</th>
+	{{range .Ladder.Formats}}<th class="num" title="Rating in {{.}}">{{.Map}} <span class="dim">{{.Players}}p</span></th>{{end}}
+	<th class="num" title="Mean points per match over the last {{days .Ladder.StatsPeriod}}: 60 for first place, 0 for last">Points</th>
+	<th>Version</th>
+</tr></thead>
+<tbody>
+{{range $i, $r := .Ladder.Rows}}
+<tr{{if not $r.Playing}} class="dim" title="Not playing at the moment"{{end}}>
+	<td>{{add $i 1}}</td>
+	<td><a href="/teams/{{$r.Team}}">{{$r.Team}}</a></td>
+	<td class="num strong">{{rating $r.Global}}</td>
+	<td class="num dim">{{musigma $r.Global}}</td>
+	<td class="num">{{$r.Global.Games}}</td>
+	{{range $.Ladder.Formats}}<td class="num">{{rating (index $r.PerFormat .Key)}}</td>{{end}}
+	<td class="num">{{with $r.Stats}}{{score .Score}}{{end}}</td>
+	<td class="mono">{{short $r.Global.Commit}}</td>
 </tr>
 {{else}}
 <tr><td colspan="99" class="dim">No results yet.</td></tr>
@@ -70,7 +97,7 @@
 <tr{{if .Void}} class="void"{{end}}>
 	<td><a href="/matches/{{.ID}}">{{.ID}}</a></td>
 	<td>{{time .StartedAt}}</td>
-	<td>{{.Map}}</td>
+	<td>{{.Map}}{{if eq .Kind "tournament"}} <span class="dim">(tournament)</span>{{end}}</td>
 	<td>{{range .Bots}}<span class="result p{{.Points}} {{.Status}}" title="{{.Status}}, {{.Flowers}} flowers">{{.Team}} {{.Points}}</span> {{end}}</td>
 	<td class="num">{{if .Error}}<span class="error" title="{{.Error}}">failed</span>{{else}}{{.Turns}}{{end}}</td>
 </tr>

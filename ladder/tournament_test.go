@@ -68,25 +68,6 @@ func TestPlanRunSmallPool(t *testing.T) {
 	}
 }
 
-func TestNextRunTime(t *testing.T) {
-	loc, _ := time.LoadLocation("Europe/Helsinki")
-	schedule := Schedule{Times: []string{"16:00", "08:00"}}
-
-	cases := []struct{ now, want string }{
-		{"2026-11-17 07:00", "2026-11-17 08:00"},
-		{"2026-11-17 08:00", "2026-11-17 16:00"},
-		{"2026-11-17 12:00", "2026-11-17 16:00"},
-		{"2026-11-17 23:00", "2026-11-18 08:00"},
-	}
-	for _, c := range cases {
-		now, _ := time.ParseInLocation("2006-01-02 15:04", c.now, loc)
-		want, _ := time.ParseInLocation("2006-01-02 15:04", c.want, loc)
-		if got := schedule.NextRunTime(now, loc); !got.Equal(want) {
-			t.Errorf("after %s: expected %s, got %s", c.now, want, got)
-		}
-	}
-}
-
 // A match player that makes the first bot win, and fails some bots
 type fakePlayer struct {
 	played  int
@@ -112,28 +93,34 @@ func (p *fakePlayer) Run(ctx context.Context, match Match) (*MatchResult, error)
 }
 
 func newTestLadder(t *testing.T, teams []Bot, player MatchPlayer) *Ladder {
-	config := &Config{
-		Schedule: Schedule{
-			Formats:     []Format{{"m", 2}},
-			Repeats:     2,
-			Window:      2,
-			MaxFailures: 2,
-		},
-	}
+	config := &Config{}
+	config.Build.Interval = Duration{time.Hour}
+	config.Runner.MatchTimeout = Duration{time.Hour}
+	settings := DefaultLadderSettings()
+	settings.Formats = []Format{{"m", 2}}
+	settings.Quota = 2
+	settings.Window = 2
+	settings.RandomShare = 0
+	settings.MaxFailures = 2
 	return &Ladder{
-		Config: config,
-		Store:  newTestStore(t),
-		Player: player,
-		Pool:   func(ctx context.Context) ([]Bot, error) { return teams, nil },
-		Rand:   rand.New(rand.NewSource(1)),
+		Config:   config,
+		Settings: NewLiveSettings("", settings),
+		Store:    newTestStore(t),
+		Player:   player,
+		Pool:     func(ctx context.Context) ([]Bot, error) { return teams, nil },
+		Rand:     rand.New(rand.NewSource(1)),
 	}
 }
 
-func TestRunOnce(t *testing.T) {
-	player := &fakePlayer{}
-	ladder := newTestLadder(t, testBots(3), player)
+func playTournament(ladder *Ladder, pool []Bot, deadline time.Time) (int64, error) {
+	return ladder.Play(context.Background(), "tournament", TournamentConfig{Name: "test"}, pool, []Format{{"m", 2}}, 2, deadline)
+}
 
-	runID, err := ladder.RunOnce(context.Background(), time.Now().Add(time.Hour))
+func TestTournament(t *testing.T) {
+	player := &fakePlayer{}
+	ladder := newTestLadder(t, nil, player)
+
+	runID, err := playTournament(ladder, testBots(3), time.Now().Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,17 +133,24 @@ func TestRunOnce(t *testing.T) {
 	if run.Status != RunComplete || len(run.Bots) != 3 {
 		t.Errorf("unexpected run: %+v", run)
 	}
-	board, _, _ := ladder.Store.Leaderboard(2)
-	if len(board.Standings) != 3 || board.Standings[0].Score.Games != 4 {
-		t.Errorf("unexpected leaderboard: %+v", board.Standings)
+	results, _ := ladder.Store.Results([]int64{runID})
+	if board := NewLeaderboard(results); len(board.Standings) != 3 || board.Standings[0].Score.Games != 4 {
+		t.Errorf("unexpected standings: %+v", board.Standings)
+	}
+	// Not rated
+	if rated, _ := ladder.Store.RatedMatches(time.Time{}); len(rated) != 0 {
+		t.Errorf("tournament matches should not be rated: %d", len(rated))
+	}
+	if matches, _ := ladder.Store.Matches(MatchFilter{RunID: runID}); len(matches) != 6 || matches[0].Kind != TournamentMatch {
+		t.Errorf("unexpected matches: %+v", matches)
 	}
 }
 
-func TestRunOnceDeadline(t *testing.T) {
+func TestTournamentDeadline(t *testing.T) {
 	player := &fakePlayer{delay: 20 * time.Millisecond}
-	ladder := newTestLadder(t, testBots(3), player)
+	ladder := newTestLadder(t, nil, player)
 
-	runID, err := ladder.RunOnce(context.Background(), time.Now().Add(50*time.Millisecond))
+	runID, err := playTournament(ladder, testBots(3), time.Now().Add(50*time.Millisecond))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,13 +161,14 @@ func TestRunOnceDeadline(t *testing.T) {
 }
 
 func TestLeaveOutFailing(t *testing.T) {
-	player := &fakePlayer{failing: map[string]bool{"bot1": true}}
-	bots := testBots(3)
-	ladder := newTestLadder(t, bots, player)
-	ladder.RunOnce(context.Background(), time.Now().Add(time.Hour))
+	store := newTestStore(t)
+	bots := testBots(2)
+	for range 2 {
+		store.RecordMatch(MatchInfo{Kind: LadderMatch}, fakeResult("m", bots, []uint{2, 1}, []BotStatus{Finished, Crashed}))
+	}
 
 	states := []TeamState{{Team: Team{Name: "bot0"}, Bot: &bots[0]}, {Team: Team{Name: "bot1"}, Bot: &bots[1]}}
-	pool, err := leaveOutFailing(ladder.Store, 2, states)
+	pool, err := leaveOutFailing(store, 2, states)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,24 +187,21 @@ func (p *errorPlayer) Run(ctx context.Context, match Match) (*MatchResult, error
 	return nil, fmt.Errorf("docker is broken")
 }
 
-func TestRunOnceAbortsOnRunnerErrors(t *testing.T) {
+func TestTournamentAbortsOnRunnerErrors(t *testing.T) {
 	player := &errorPlayer{}
-	ladder := newTestLadder(t, testBots(3), player)
+	ladder := newTestLadder(t, nil, player)
 
-	runID, _ := ladder.RunOnce(context.Background(), time.Now().Add(time.Hour))
+	runID, _ := playTournament(ladder, testBots(3), time.Now().Add(time.Hour))
 	run, _ := ladder.Store.Run(runID)
 	if run.Status != RunFailed || player.played != maxRunnerErrors {
 		t.Errorf("expected the run to fail after %d errors, got %s after %d", maxRunnerErrors, run.Status, player.played)
 	}
 }
 
-func TestEmptyRunsAreNotCreated(t *testing.T) {
-	ladder := newTestLadder(t, testBots(1), &fakePlayer{})
-	if _, err := ladder.RunOnce(context.Background(), time.Now().Add(time.Hour)); err == nil {
-		t.Error("a run without matches should not be played")
-	}
-	if _, err := ladder.RunOnce(context.Background(), time.Now().Add(-time.Minute)); err == nil {
-		t.Error("a run past its deadline should not be played")
+func TestEmptyTournamentsAreNotCreated(t *testing.T) {
+	ladder := newTestLadder(t, nil, &fakePlayer{})
+	if _, err := playTournament(ladder, testBots(1), time.Now().Add(time.Hour)); err == nil {
+		t.Error("a tournament without matches should not be played")
 	}
 	if runs, _ := ladder.Store.Runs("", 10); len(runs) != 0 {
 		t.Errorf("no run should have been recorded: %+v", runs)
@@ -229,15 +221,15 @@ func (p *failAfter) Run(ctx context.Context, match Match) (*MatchResult, error) 
 	return p.fakePlayer.Run(ctx, match)
 }
 
-func TestAbortedRunKeepsItsMatches(t *testing.T) {
-	ladder := newTestLadder(t, testBots(4), &failAfter{n: 2})
-	runID, _ := ladder.RunOnce(context.Background(), time.Now().Add(time.Hour))
+func TestAbortedTournamentKeepsItsMatches(t *testing.T) {
+	ladder := newTestLadder(t, nil, &failAfter{n: 2})
+	runID, _ := playTournament(ladder, testBots(4), time.Now().Add(time.Hour))
 	run, _ := ladder.Store.Run(runID)
 	if run.Status != RunIncomplete {
 		t.Errorf("a run aborted after playing matches should be incomplete, got %s", run.Status)
 	}
-	if board, runs, _ := ladder.Store.Leaderboard(2); len(runs) != 1 || len(board.Standings) == 0 {
-		t.Errorf("its matches should count: %+v", board)
+	if matches, _ := ladder.Store.Matches(MatchFilter{RunID: runID}); len(matches) != 2 {
+		t.Errorf("its matches should be kept: %d", len(matches))
 	}
 }
 
@@ -257,47 +249,5 @@ func TestPlanRunSamplesLargePools(t *testing.T) {
 	}
 	if binomial(6, 2) != 15 || binomial(40, 6) != 3838380 {
 		t.Error("wrong binomial")
-	}
-}
-
-func TestLastDue(t *testing.T) {
-	loc, _ := time.LoadLocation("Europe/Helsinki")
-	schedule := Schedule{Times: []string{"08:00", "16:00"}}
-	at := func(day, hour int) time.Time { return time.Date(2026, 3, day, hour, 0, 0, 0, loc) }
-
-	// A run due at 8:00 ended at 17:00: the 16:00 run is due
-	if got := schedule.LastDue(at(2, 8), at(2, 17), loc); !got.Equal(at(2, 16)) {
-		t.Errorf("expected 16:00, got %s", got)
-	}
-	// Ended at 9:00: the 8:00 run itself
-	if got := schedule.LastDue(at(2, 8), at(2, 9), loc); !got.Equal(at(2, 8)) {
-		t.Errorf("expected 8:00, got %s", got)
-	}
-	// Several missed: the last one only
-	if got := schedule.LastDue(at(2, 8), at(4, 7), loc); !got.Equal(at(3, 16)) {
-		t.Errorf("expected the day before at 16:00, got %s", got)
-	}
-}
-
-func TestServeBuildsBetweenRuns(t *testing.T) {
-	ladder := newTestLadder(t, testBots(2), &fakePlayer{})
-	ladder.Config.Schedule.Times = []string{time.Now().UTC().Add(12 * time.Hour).Format("15:04")}
-	ladder.Config.Build.Interval = Duration{20 * time.Millisecond}
-	resolutions := 0
-	ladder.Pool = func(ctx context.Context) ([]Bot, error) {
-		resolutions++
-		return testBots(2), nil
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	defer cancel()
-	if err := ladder.Serve(ctx, nil); err != nil {
-		t.Fatal(err)
-	}
-	if resolutions < 3 {
-		t.Errorf("expected new versions to be built regularly, got %d resolutions", resolutions)
-	}
-	if runs, _ := ladder.Store.Runs("", 10); len(runs) != 0 {
-		t.Errorf("building between runs should not play: %+v", runs)
 	}
 }

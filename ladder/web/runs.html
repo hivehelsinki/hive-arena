@@ -1,12 +1,13 @@
 {{define "content"}}
-<h1>Runs</h1>
+<h1>Tournaments</h1>
+<p class="dim">One-off tournaments run by staff, for live events. They are not counted in the ladder.</p>
 <table>
-<thead><tr><th>Run</th><th>Kind</th><th>Started</th><th>Ended</th><th>Status</th><th class="num">Bots</th></tr></thead>
+<thead><tr><th>Tournament</th><th>Started</th><th>Ended</th><th>Status</th><th class="num">Bots</th></tr></thead>
 <tbody>
 {{range .Runs}}
-<tr><td><a href="/runs/{{.ID}}">{{runName .}}</a></td><td>{{.Kind}}</td><td>{{time .StartedAt}}</td><td>{{timeptr .EndedAt}}</td><td class="status-{{.Status}}">{{.Status}}</td><td class="num">{{len .Bots}}</td></tr>
+<tr><td><a href="/runs/{{.ID}}">{{runName .}}</a></td><td>{{time .StartedAt}}</td><td>{{timeptr .EndedAt}}</td><td class="status-{{.Status}}">{{.Status}}</td><td class="num">{{len .Bots}}</td></tr>
 {{else}}
-<tr><td colspan="6" class="dim">No runs yet.</td></tr>
+<tr><td colspan="5" class="dim">No tournaments yet.</td></tr>
 {{end}}
 </tbody>
 </table>

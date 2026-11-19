@@ -21,11 +21,13 @@ import (
 func usage() {
 	fmt.Fprintln(os.Stderr, `Usage:
   ladder [-config ladder.json]
-      Run the ladder: runs at the scheduled times, and the website.
-      Send SIGUSR1 to the process to start a run now.
+      Run the ladder: matches, one at a time, until every team has played
+      its quota, and the website. The "ladder" settings of the
+      configuration are re-read before every match. Send SIGUSR1 to the
+      process to rebuild the pool now.
 
 Other commands, for debugging and testing. Except leaderboard and web,
-they play matches or build images: do not use them while the ladder runs.
+they play matches or build images: they refuse to run while the ladder does.
 
   ladder version
       Print the git commit the ladder was built from
@@ -35,9 +37,7 @@ they play matches or build images: do not use them while the ladder runs.
   ladder web [-config ladder.json]
       Run the website only
   ladder leaderboard [-config ladder.json]
-      Print the current leaderboard
-  ladder run [-config ladder.json]
-      Play one ladder run now, and exit
+      Print the current global ladder
   ladder tournament [-config ladder.json] -formats <map:players,...> [-repeats N] [-teams a,b,...] [-name NAME]
       Play a one-off round-robin now with its own formats, among the
       current bots (all of them, or the given teams). It is shown with the
@@ -71,8 +71,6 @@ func main() {
 		cmdWeb(ctx, os.Args[2:])
 	case "leaderboard":
 		cmdLeaderboard(os.Args[2:])
-	case "run":
-		cmdRun(ctx, os.Args[2:])
 	case "tournament":
 		cmdTournament(ctx, os.Args[2:])
 	case "build":
@@ -193,19 +191,24 @@ func openLadderWithFlags(flags *flag.FlagSet, args []string) (*Ladder, *flag.Fla
 	}
 
 	ladder := &Ladder{
-		Config: config,
-		Store:  store,
-		Player: &Runner{Config: runnerConfig},
-		Rand:   rand.New(rand.NewSource(time.Now().UnixNano())),
+		Config:   config,
+		Settings: NewLiveSettings(*path, config.Ladder),
+		Store:    store,
+		Player:   &Runner{Config: runnerConfig},
+		Rand:     rand.New(rand.NewSource(time.Now().UnixNano())),
+		// Only one ladder process plays at a time (see mustLock)
+		RemoveLeftovers: RemoveLeftovers,
 	}
 	pool := &PoolResolver{
-		Registry:    config.Registry,
-		DataDir:     config.DataDir,
-		MaxFailures: config.Schedule.MaxFailures,
-		Store:       store,
-		Builder:     builder,
+		Registry: config.Registry,
+		DataDir:  config.DataDir,
+		Store:    store,
+		Builder:  builder,
 	}
-	ladder.Pool = pool.Resolve
+	ladder.Pool = func(ctx context.Context) ([]Bot, error) {
+		pool.MaxFailures = ladder.Settings.Get().MaxFailures
+		return pool.Resolve(ctx)
+	}
 	return ladder, flags
 }
 
@@ -214,17 +217,13 @@ func cmdServe(ctx context.Context, args []string) {
 	defer ladder.Store.Close()
 	mustLock(ladder)
 
-	if err := RemoveLeftovers(ctx); err != nil {
-		log.Fatal(err)
-	}
-
-	trigger := make(chan struct{}, 1)
+	wake := make(chan struct{}, 1)
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGUSR1)
 	go func() {
 		for range signals {
 			select {
-			case trigger <- struct{}{}:
+			case wake <- struct{}{}:
 			default:
 			}
 		}
@@ -232,7 +231,7 @@ func cmdServe(ctx context.Context, args []string) {
 
 	go serveWeb(ladder)
 
-	if err := ladder.Serve(ctx, trigger); err != nil {
+	if err := ladder.Serve(ctx, wake); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -242,6 +241,7 @@ func serveWeb(ladder *Ladder) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	web.Settings = ladder.Settings
 	log.Printf("Website on %s", ladder.Config.Web.Listen)
 	// No write timeout: backups and reports can take a while to download
 	server := &http.Server{
@@ -261,23 +261,6 @@ func cmdWeb(ctx context.Context, args []string) {
 	<-ctx.Done()
 }
 
-func cmdRun(ctx context.Context, args []string) {
-	ladder, _ := openLadder("run", args)
-	defer ladder.Store.Close()
-	mustLock(ladder)
-
-	if err := RemoveLeftovers(ctx); err != nil {
-		log.Fatal(err)
-	}
-	loc, _ := ladder.Config.Location()
-	deadline := ladder.Config.Schedule.NextRunTime(time.Now(), loc).Add(-ladder.Config.DeadlineMargin.Duration)
-
-	if _, err := ladder.RunOnce(ctx, deadline); err != nil {
-		log.Fatal(err)
-	}
-	printLeaderboard(ladder)
-}
-
 func cmdLeaderboard(args []string) {
 	ladder, _ := openLadder("leaderboard", args)
 	defer ladder.Store.Close()
@@ -285,19 +268,16 @@ func cmdLeaderboard(args []string) {
 }
 
 func printLeaderboard(ladder *Ladder) {
-	board, runs, err := ladder.Store.Leaderboard(ladder.Config.Schedule.Window)
+	matches, err := ladder.Store.RatedMatches(time.Time{})
 	if err != nil {
 		log.Fatal(err)
 	}
+	ratings := ComputeRatings(ladder.Settings.Get().Rating, matches)
 
-	var ids []string
-	for _, run := range runs {
-		ids = append(ids, fmt.Sprint(run.ID))
-	}
-	fmt.Printf("Leaderboard over runs %s\n\n", strings.Join(ids, ", "))
-	fmt.Printf("%-4s %-24s %8s %8s %6s  %s\n", "#", "team", "score", "± err", "games", "commit")
-	for i, s := range board.Standings {
-		fmt.Printf("%-4d %-24s %8.1f %8.1f %6d  %s\n", i+1, s.Team, s.Score.Mean, s.Score.StdErr, s.Score.Games, s.Commit)
+	fmt.Printf("Global ladder, over %d matches\n\n", len(matches))
+	fmt.Printf("%-4s %-24s %8s %8s %8s %8s  %s\n", "#", "team", "rating", "mu", "sigma", "matches", "commit")
+	for i, t := range ratings.Global.Standings() {
+		fmt.Printf("%-4d %-24s %8.2f %8.2f %8.2f %8d  %s\n", i+1, t.Team, t.Rating.Ordinal(), t.Rating.Mu, t.Rating.Sigma, t.Games, t.Commit)
 	}
 }
 
@@ -332,7 +312,7 @@ func cmdRebuild(args []string) {
 	if err := ladder.Store.DeleteBuild(builds[0].ID); err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("Forgot build %d (%s, %s): it will be built again at the next run\n", builds[0].ID, builds[0].Tag, builds[0].Status)
+	fmt.Printf("Forgot build %d (%s, %s): it will be built again at the next build check\n", builds[0].ID, builds[0].Tag, builds[0].Status)
 }
 
 // Tournament configuration, recorded with the run

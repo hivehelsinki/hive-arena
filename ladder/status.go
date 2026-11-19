@@ -100,14 +100,23 @@ type Status struct {
 		Builds  int   `json:"builds"`
 	} `json:"database"`
 
-	// What the ladder is doing (empty when waiting for the next run), and
-	// why the last run could not be played, if it could not
-	Activity     string `json:"activity"`
-	LastRunError string `json:"lastRunError,omitempty"`
-
-	CurrentRun *Run      `json:"currentRun,omitempty"`
-	LastRun    *Run      `json:"lastRun,omitempty"`
-	NextRun    time.Time `json:"nextRun"`
+	// What the ladder is doing, e.g. playing a match, idle or paused
+	Activity   string `json:"activity"`
+	Matchmaker struct {
+		// When it last looked for a match; zero if it does not run in this
+		// process (ladder web)
+		Heartbeat time.Time `json:"heartbeat"`
+		Paused    bool      `json:"paused"`
+		// Why it could not play, if it could not
+		LastError string `json:"lastError,omitempty"`
+		// Why the configuration file was not applied, if it was not
+		SettingsWarning string `json:"settingsWarning,omitempty"`
+		// What was played in the last 24 hours, against what the quotas
+		// need per day with the current teams
+		Last24h Played `json:"last24h"`
+		Demand  int    `json:"demand"`
+	} `json:"matchmaker"`
+	CurrentTournament *Run `json:"currentTournament,omitempty"`
 
 	Teams struct {
 		Registered int       `json:"registered"`
@@ -121,8 +130,16 @@ type Status struct {
 	RegistryProblems []string `json:"registryProblems"`
 }
 
-// A run longer ago than this means the scheduler is not running
-const maxTimeWithoutRun = 25 * time.Hour
+// demand returns how many matches per day the quotas need, with `teams` teams
+func demand(settings LadderSettings, teams int) int {
+	total := 0.0
+	for _, f := range distinctFormats(settings.Formats) {
+		if f.Players <= teams {
+			total += float64(teams*settings.Quota) / float64(f.Players)
+		}
+	}
+	return int(total + 0.5)
+}
 
 func (web *Web) status() Status {
 	var status Status
@@ -155,32 +172,31 @@ func (web *Web) status() Status {
 	}
 	status.Database.Runs, status.Database.Matches, status.Database.Builds = counts[0], counts[1], counts[2]
 
-	runs, err := web.Store.Runs("ladder", 2)
-	if err == nil {
-		for i := range runs {
-			run := runs[i]
-			run.Bots = nil
-			if run.Status == RunRunning {
-				status.CurrentRun = &run
-			} else if status.LastRun == nil {
-				status.LastRun = &run
-			}
-		}
-	}
-	status.Activity = Activity()
-	if err, _ := lastRunError.Load().(string); err != "" {
-		status.LastRunError = err
-		warn("the last run could not be played: %s", err)
-	}
-	if status.LastRun != nil && status.LastRun.Status == RunFailed {
-		warn("the last run (#%d) failed", status.LastRun.ID)
-	}
-	if len(runs) > 0 && time.Since(runs[0].StartedAt) > maxTimeWithoutRun {
-		warn("no run since %s: is the scheduler running?", runs[0].StartedAt.Format(time.DateTime))
+	if runs, err := web.Store.Runs("tournament", 1); err == nil && len(runs) > 0 && runs[0].Status == RunRunning {
+		run := runs[0]
+		run.Bots = nil
+		status.CurrentTournament = &run
 	}
 
-	if loc, err := web.Config.Location(); err == nil {
-		status.NextRun = web.Config.Schedule.NextRunTime(time.Now(), loc)
+	settings := web.Settings.Get()
+	m := &status.Matchmaker
+	status.Activity = Activity()
+	m.Heartbeat = Heartbeat()
+	m.Paused = settings.Paused
+	m.LastError = LastError()
+	m.SettingsWarning = web.Settings.Warning()
+	if m.LastError != "" {
+		warn("the matchmaker could not play: %s", m.LastError)
+	}
+	if m.SettingsWarning != "" {
+		warn("%s", m.SettingsWarning)
+	}
+	// A match lasts at most the match timeout; beyond, the matchmaker is stuck
+	if limit := web.Config.Runner.MatchTimeout.Duration + 10*time.Minute; !m.Heartbeat.IsZero() && time.Since(m.Heartbeat) > limit {
+		warn("the matchmaker has not looked for a match since %s: is it stuck?", m.Heartbeat.Format(time.DateTime))
+	}
+	if played, err := web.Store.PlayedSince(time.Now().Add(-24 * time.Hour)); err == nil {
+		m.Last24h = played
 	}
 
 	pool, _ := web.Store.PoolState()
@@ -199,6 +215,7 @@ func (web *Web) status() Status {
 			status.Teams.LeftOut = append(status.Teams.LeftOut, state.Team.Name)
 		}
 	}
+	m.Demand = demand(settings, status.Teams.Playing)
 	status.RegistryProblems = pool.Problems
 	if status.RegistryProblems == nil {
 		status.RegistryProblems = []string{}

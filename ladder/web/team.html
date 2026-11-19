@@ -13,17 +13,23 @@
 {{with .Error}}<p class="error">The latest version is not playing: {{.}}</p>{{end}}
 {{end}}
 
-{{with .Standing}}
-<h2>Current score</h2>
-<p><span class="big">{{score .Score}}</span> <span class="dim">{{stderr .Score}}</span> over {{.Score.Games}} games.</p>
-<table>
-<thead><tr>{{range $.Formats}}<th class="num" title="{{.}}">{{.Map}} <span class="dim">{{.Players}}p</span></th>{{end}}</tr></thead>
-<tbody><tr>{{range $.Formats}}<td class="num">{{score (index $.Standing.PerFormat .Key)}}</td>{{end}}</tr></tbody>
-</table>
+{{with .Row}}
+<h2>Rating</h2>
+<p><span class="big">{{rating .Global}}</span> <span class="dim">(μ ± σ: {{musigma .Global}})</span> over {{.Global.Games}} matches{{with .Stats}}; {{score .Score}} points per match over the last {{days $.StatsPeriod}}{{end}}.
+{{if not .Global.Since.IsZero}}Version <span class="mono">{{short .Global.Commit}}</span> playing since {{time .Global.Since}}.{{end}}</p>
 {{end}}
+<table>
+<thead><tr><th>Format</th><th class="num">Rating</th><th class="num">μ ± σ</th><th class="num">Matches</th><th class="num">Last 24 hours</th></tr></thead>
+<tbody>
+{{range .Formats}}{{$r := index $.Row.PerFormat .Key}}
+<tr><td>{{.Map}}, {{.Players}} players</td><td class="num strong">{{rating $r}}</td><td class="num dim">{{musigma $r}}</td><td class="num">{{$r.Games}}</td><td class="num">{{index $.Counts .Key}} / {{$.Quota}}</td></tr>
+{{end}}
+</tbody>
+</table>
 
 {{with .H2H}}
 <h2>Against the other teams</h2>
+<p class="dim">Over the last {{days $.StatsPeriod}}.</p>
 <table>
 <thead><tr><th>Opponent</th><th class="num">Finished ahead</th><th class="num">Matches together</th></tr></thead>
 <tbody>{{range $team, $h := .}}<tr><td><a href="/teams/{{$team}}">{{$team}}</a></td><td class="num {{h2hclass $h}}">{{h2h $h}}</td><td class="num">{{$h.Games}}</td></tr>{{end}}</tbody>

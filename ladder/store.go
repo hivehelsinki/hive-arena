@@ -761,6 +761,30 @@ func (s *Store) RatedMatches(before time.Time) ([]RatedMatch, error) {
 	return matches, rows.Err()
 }
 
+// ResultsSince returns the results of the valid ladder matches that ended
+// since a time, ordered by match, for statistics
+func (s *Store) ResultsSince(since time.Time) ([]BotResult, error) {
+	rows, err := s.db.Query(`
+		SELECT m.id, COALESCE(m.run_id, 0), m.map, m.players, b.team, b.commit_id, b.points, b.status
+		FROM matches m JOIN match_bots b ON b.match_id = m.id
+		WHERE m.kind = 'ladder' AND m.void = 0 AND m.ended_at >= ?
+		ORDER BY m.id, b.seat`, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []BotResult
+	for rows.Next() {
+		var r BotResult
+		if err := rows.Scan(&r.MatchID, &r.RunID, &r.Map, &r.Players, &r.Team, &r.Commit, &r.Points, &r.Status); err != nil {
+			return nil, err
+		}
+		results = append(results, r)
+	}
+	return results, rows.Err()
+}
+
 // MatchCounts returns how many valid ladder matches each team played in each
 // format (see Format.Key) since a time
 func (s *Store) MatchCounts(since time.Time) (map[string]map[string]int, error) {
@@ -791,9 +815,9 @@ func (s *Store) MatchCounts(since time.Time) (map[string]map[string]int, error) 
 
 // Played is what the ladder played over a period
 type Played struct {
-	Matches int           `json:"matches"`
-	Void    int           `json:"void"`
-	Busy    time.Duration `json:"busy"` // total duration of the matches
+	Matches int      `json:"matches"`
+	Void    int      `json:"void"`
+	Busy    Duration `json:"busy"` // total duration of the matches
 }
 
 // PlayedSince returns what the ladder played since a time
@@ -815,7 +839,7 @@ func (s *Store) PlayedSince(since time.Time) (Played, error) {
 		} else {
 			a.Matches++
 		}
-		a.Busy += ended.Sub(started)
+		a.Busy.Duration += ended.Sub(started)
 	}
 	return a, rows.Err()
 }

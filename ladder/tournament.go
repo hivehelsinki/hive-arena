@@ -22,9 +22,6 @@ func Activity() string {
 	return what
 }
 
-// Why the last run could not be played, if it could not
-var lastRunError atomic.Value
-
 // Lineups returns every combination of n bots from the pool, in a stable order
 func Lineups(pool []Bot, n int) [][]Bot {
 	var lineups [][]Bot
@@ -123,40 +120,25 @@ type MatchPlayer interface {
 
 type Ladder struct {
 	Config *Config
-	Store  *Store
-	Player MatchPlayer
-	// Returns the current bot of each registered team
+	// The ladder settings, reloaded before every match
+	Settings *LiveSettings
+	Store    *Store
+	Player   MatchPlayer
+	// Returns the current bot of each registered team, building new versions
 	Pool func(ctx context.Context) ([]Bot, error)
 	Rand *rand.Rand
+	// Removes the containers and networks left by a previous process (nil:
+	// none, as in tests, which must not touch the real ones)
+	RemoveLeftovers func(ctx context.Context) error
 }
 
-// After this many runner errors in a row (not bot failures), a run is aborted
+// After this many runner errors in a row (not bot failures), a run is
+// aborted, and the matchmaker waits before trying again
 const maxRunnerErrors = 3
 
-// RunOnce plays a complete ladder run, until its deadline
-func (l *Ladder) RunOnce(ctx context.Context, deadline time.Time) (int64, error) {
-	LogDiskWarning(l.Config)
-	if time.Now().After(deadline) {
-		return 0, fmt.Errorf("too close to the next scheduled run")
-	}
-
-	// Containers and networks left by failed cleanups
-	if err := RemoveLeftovers(ctx); err != nil {
-		log.Printf("Could not remove leftover containers: %s", err)
-	}
-
-	SetActivity("building the pool")
-	defer SetActivity("")
-	pool, err := l.Pool(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("getting the pool: %w", err)
-	}
-
-	return l.Play(ctx, "ladder", l.Config.Schedule, pool, l.Config.Schedule.Formats, l.Config.Schedule.Repeats, deadline)
-}
-
-// Play records and plays a run: every lineup of the pool for each format,
-// `repeats` times, until the deadline. `config` is recorded with the run.
+// Play records and plays a run (a tournament): every lineup of the pool for
+// each format, `repeats` times, until the deadline. `config` is recorded
+// with the run.
 func (l *Ladder) Play(ctx context.Context, kind string, config any, pool []Bot, formats []Format, repeats int, deadline time.Time) (int64, error) {
 	matches := PlanRun(pool, formats, repeats, l.Rand)
 	if len(matches) == 0 {
@@ -180,9 +162,7 @@ func (l *Ladder) Play(ctx context.Context, kind string, config any, pool []Bot, 
 	}
 	defer SetActivity("")
 
-	// No match may go past the margin after the deadline (the start of the
-	// next scheduled run)
-	matchCtx, cancel := context.WithDeadline(ctx, deadline.Add(l.Config.DeadlineMargin.Duration))
+	matchCtx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 
 	status := RunComplete
@@ -267,67 +247,4 @@ func botNames(bots []Bot) string {
 		names = append(names, bot.Name)
 	}
 	return strings.Join(names, ", ")
-}
-
-// Serve runs the ladder at the scheduled times, and when `trigger` receives
-// a value, until the context is cancelled. A scheduled time that passes
-// during a run is not skipped: its run starts right after.
-func (l *Ladder) Serve(ctx context.Context, trigger <-chan struct{}) error {
-	loc, err := l.Config.Location()
-	if err != nil {
-		return err
-	}
-	if err := l.Store.MarkInterruptedRuns(); err != nil {
-		return err
-	}
-
-	schedule := &l.Config.Schedule
-	next := schedule.NextRunTime(time.Now(), loc)
-	interval := l.Config.Build.Interval.Duration
-	for {
-		// Scheduled times missed during the previous run: only the last one is played
-		if time.Now().After(next) {
-			next = schedule.LastDue(next, time.Now(), loc)
-			log.Printf("The run of %s was due during the previous run: starting it now", next.Format(time.DateTime))
-		} else {
-			log.Printf("Next run at %s", next.Format(time.DateTime))
-		}
-
-		scheduled, triggered := false, false
-		for !scheduled && !triggered {
-			// Between runs, new versions are built regularly, unless the next
-			// run is close (it builds them anyway)
-			var refresh <-chan time.Time
-			if interval > 0 && time.Until(next) > interval {
-				refresh = time.After(interval)
-			}
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-time.After(time.Until(next)):
-				scheduled = true
-			case <-trigger:
-				log.Print("Run triggered manually")
-				triggered = true
-			case <-refresh:
-				SetActivity("building new versions")
-				if _, err := l.Pool(ctx); err != nil {
-					log.Printf("Building new versions: %s", err)
-				}
-				SetActivity("")
-			}
-		}
-
-		// The run must end before the next one
-		deadline := schedule.NextRunTime(time.Now(), loc).Add(-l.Config.DeadlineMargin.Duration)
-		if _, err := l.RunOnce(ctx, deadline); err != nil {
-			log.Printf("Run failed: %s", err)
-			lastRunError.Store(err.Error())
-		} else {
-			lastRunError.Store("")
-		}
-		if scheduled {
-			next = schedule.NextRunTime(next, loc)
-		}
-	}
 }

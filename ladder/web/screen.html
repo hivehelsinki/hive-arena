@@ -42,9 +42,9 @@ function escape(s) {
 async function updateBoard() {
 	try {
 		const data = await (await fetch("/api/leaderboard")).json();
-		const rows = (data.leaderboard.standings || []).map((s, i) =>
-			`<tr><td>${i + 1}</td><td>${escape(s.team)}</td><td class="num score">${s.score.mean.toFixed(1)}</td>` +
-			`<td class="num dim">${s.score.games > 1 ? "± " + s.score.stdErr.toFixed(1) : ""}</td></tr>`);
+		const rows = (data.ladder || []).filter(r => r.playing).map((r, i) =>
+			`<tr><td>${i + 1}</td><td>${escape(r.team)}</td><td class="num score">${(r.global.rating.mu - 3 * r.global.rating.sigma).toFixed(1)}</td>` +
+			`<td class="num dim">${r.global.games} matches</td></tr>`);
 		document.getElementById("standings").innerHTML = rows.join("") || "<tr><td class='dim'>No results yet.</td></tr>";
 	} catch (e) {
 		console.log(e);
@@ -56,7 +56,7 @@ let lastShown = 0;
 async function nextReplay() {
 	let delay = 10;
 	try {
-		const matches = ((await (await fetch("/api/matches?limit=20")).json()) || []).filter(m => !m.void);
+		const matches = ((await (await fetch("/api/matches?limit=20")).json()) || []).filter(m => !m.void && !m.filesDeleted);
 		if (matches && matches.length > 0) {
 			// The most recent match not shown yet, or else a random recent one
 			let match = matches.find(m => m.id > lastShown) || matches[Math.floor(Math.random() * matches.length)];

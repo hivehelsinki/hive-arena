@@ -1,20 +1,29 @@
 {
 	"dataDir": "data",
 	"minFreeDiskGB": 5,
-	"schedule": {
-		"times": ["08:00", "16:00"],
-		"timezone": "Europe/Helsinki",
+	"timezone": "Europe/Helsinki",
+	"ladder": {
 		"formats": [
 			{"map": "balanced", "players": 4},
 			{"map": "pure3", "players": 3},
 			{"map": "tiny", "players": 2},
 			{"map": "balanced", "players": 6}
 		],
-		"repeats": 3,
+		"quota": 20,
 		"window": 4,
-		"maxFailures": 5
+		"randomShare": 0.1,
+		"maxFailures": 5,
+		"keepMatchFiles": 100,
+		"statsPeriod": "168h",
+		"paused": false,
+		"rating": {
+			"mu": 25,
+			"sigma": 8.333333333333334,
+			"beta": 4.166666666666667,
+			"tau": 0.08333333333333333,
+			"versionSigma": 4.166666666666667
+		}
 	},
-	"deadlineMargin": "10m",
 	"runner": {
 		"serverImage": "hive-arena-server",
 		"cores": 2,

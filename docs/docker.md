@@ -5,7 +5,7 @@ The ladder builds and runs every team's agent with Docker. Your repository must 
 ## What the ladder does
 
 - Registers your repository through the public registry (see the ladder page). The repository must be public, with an `https://` URL.
-- Takes the most recent tag on the `main` branch of your repository, and builds it with `docker build` from the repository root, using the `Dockerfile` at the root (another context and Dockerfile can be registered). New tags are built within about 15 minutes, and at the start of each run: the result and the build log are on your team's page.
+- Takes the most recent tag on the `main` branch of your repository, and builds it with `docker build` from the repository root, using the `Dockerfile` at the root (another context and Dockerfile can be registered). New tags are built within about 15 minutes, and play from the next match: the result and the build log are on your team's page.
 - Before a new version plays, it must pass a smoke test: a 1-player game on `tiny`, played until the end.
 - For each match, starts a fresh game server and one container per agent, on a private network.
 
