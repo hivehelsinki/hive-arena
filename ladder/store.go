@@ -347,6 +347,7 @@ type MatchSummary struct {
 	ID        int64      `json:"id"`
 	GameID    string     `json:"gameId"`
 	Map       string     `json:"map"`
+	Players   int        `json:"players"`
 	StartedAt time.Time  `json:"startedAt"`
 	EndedAt   time.Time  `json:"endedAt"`
 	Turns     int        `json:"turns"`
@@ -360,8 +361,8 @@ type MatchSummary struct {
 }
 
 type MatchFilter struct {
-	Team   string
-	Map    string
+	Team    string
+	Players int // 0: any number
 	Before int64 // only matches with a smaller ID, for paging
 	Limit  int
 }
@@ -374,15 +375,15 @@ func (s *Store) Matches(filter MatchFilter) ([]MatchSummary, error) {
 		where = append(where, "EXISTS (SELECT 1 FROM match_bots t WHERE t.match_id = m.id AND t.team = ?)")
 		args = append(args, filter.Team)
 	}
-	if filter.Map != "" {
-		where = append(where, "m.map = ?")
-		args = append(args, filter.Map)
+	if filter.Players != 0 {
+		where = append(where, "m.players = ?")
+		args = append(args, filter.Players)
 	}
 	if filter.Before != 0 {
 		where = append(where, "m.id < ?")
 		args = append(args, filter.Before)
 	}
-	query := `SELECT m.id, m.game_id, m.map, m.started_at, m.ended_at, m.turns, m.void, m.error,
+	query := `SELECT m.id, m.game_id, m.map, m.players, m.started_at, m.ended_at, m.turns, m.void, m.error,
 		m.files_deleted, m.server_image, m.ladder_revision FROM matches m`
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
@@ -399,7 +400,7 @@ func (s *Store) Matches(filter MatchFilter) ([]MatchSummary, error) {
 	var matches []MatchSummary
 	for rows.Next() {
 		var m MatchSummary
-		if err := rows.Scan(&m.ID, &m.GameID, &m.Map, &m.StartedAt, &m.EndedAt, &m.Turns, &m.Void, &m.Error,
+		if err := rows.Scan(&m.ID, &m.GameID, &m.Map, &m.Players, &m.StartedAt, &m.EndedAt, &m.Turns, &m.Void, &m.Error,
 			&m.FilesDeleted, &m.ServerImage, &m.LadderRevision); err != nil {
 			rows.Close()
 			return nil, err

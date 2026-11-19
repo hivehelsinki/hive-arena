@@ -1,8 +1,11 @@
 {{define "content"}}
-<h1>Matches{{with .Filter.Team}} of {{.}}{{end}}{{with .Filter.Map}} on {{.}}{{end}}</h1>
+<h1>Matches{{with .Filter.Team}} of {{.}}{{end}}{{with .Filter.Players}}, {{.}} players{{end}}</h1>
 <form class="filter" method="get">
 	<input name="team" placeholder="Team" value="{{.Filter.Team}}">
-	<input name="map" placeholder="Map" value="{{.Filter.Map}}">
+	<select name="players">
+		<option value="">Any number of players</option>
+		{{range .Formats}}<option value="{{.Players}}"{{if eq .Players $.Filter.Players}} selected{{end}}>{{.Players}} players</option>{{end}}
+	</select>
 	<button>Filter</button>
 </form>
 {{template "matchrows" .Matches}}

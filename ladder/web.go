@@ -249,7 +249,8 @@ func matchFilter(r *http.Request) MatchFilter {
 	if err != nil || limit < 1 || limit > 200 {
 		limit = 50
 	}
-	return MatchFilter{Team: q.Get("team"), Map: q.Get("map"), Before: before, Limit: limit}
+	players, _ := strconv.Atoi(q.Get("players"))
+	return MatchFilter{Team: q.Get("team"), Players: players, Before: before, Limit: limit}
 }
 
 func (web *Web) handleMatches(w http.ResponseWriter, r *http.Request) {
@@ -265,7 +266,7 @@ func (web *Web) handleMatches(w http.ResponseWriter, r *http.Request) {
 		q.Set("before", fmt.Sprint(matches[len(matches)-1].ID))
 		next = "/matches?" + q.Encode()
 	}
-	web.render(w, "matches", map[string]any{"Matches": matches, "Filter": filter, "Next": next})
+	web.render(w, "matches", map[string]any{"Matches": matches, "Filter": filter, "Next": next, "Formats": web.formats()})
 }
 
 func (web *Web) handleMatch(w http.ResponseWriter, r *http.Request) {

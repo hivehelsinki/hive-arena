@@ -32,7 +32,7 @@ document.addEventListener("DOMContentLoaded", () => {
 <thead><tr><th>Format</th><th class="num">Rating</th><th class="num"><span class="nocase">μ ± σ</span></th><th class="num">Matches</th><th class="num">Last 24 hours</th></tr></thead>
 <tbody>
 {{range .Formats}}{{$r := index $.Row.PerFormat .Key}}
-<tr><td>{{.Map}}, {{.Players}} players</td><td class="num strong">{{rating $r}}</td><td class="num dim">{{musigma $r}}</td><td class="num">{{$r.Games}}</td><td class="num">{{index $.Counts .Key}} / {{$.Quota}}</td></tr>
+<tr><td>{{.Players}} players</td><td class="num strong">{{rating $r}}</td><td class="num dim">{{musigma $r}}</td><td class="num">{{$r.Games}}</td><td class="num">{{index $.Counts .Key}} / {{$.Quota}}</td></tr>
 {{end}}
 </tbody>
 </table>

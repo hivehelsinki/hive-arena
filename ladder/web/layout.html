@@ -37,7 +37,7 @@
 <table class="standings">
 <thead><tr>
 	<th>#</th><th>Team</th><th class="num">Rating</th><th class="num"><span class="nocase">μ ± σ</span></th><th class="num">Matches</th>
-	{{range .Ladder.Formats}}<th class="num" title="Rating in {{.}}">{{.Map}} <span class="dim">{{.Players}}p</span></th>{{end}}
+	{{range .Ladder.Formats}}<th class="num" title="Rating in {{.Players}}-player matches">{{.Players}} players</th>{{end}}
 	<th>Version</th>
 </tr></thead>
 <tbody>
@@ -79,13 +79,13 @@
 
 {{define "matchrows"}}
 <table class="matches">
-<thead><tr><th>#</th><th>Date</th><th>Map</th><th>Results</th><th class="num">Turns</th></tr></thead>
+<thead><tr><th>#</th><th>Date</th><th class="num">Players</th><th>Results</th><th class="num">Turns</th></tr></thead>
 <tbody>
 {{range .}}
 <tr{{if .Void}} class="void"{{end}}>
 	<td><a href="/matches/{{.ID}}">{{.ID}}</a></td>
 	<td>{{time .StartedAt}}</td>
-	<td>{{.Map}}</td>
+	<td class="num">{{.Players}}</td>
 	<td>{{range .ByPlace}}<span class="result place{{.Place}} {{.Status}}" title="{{place .Place}}, {{.Flowers}} flowers, {{.Status}}">{{with place .Place}}<span class="place">{{.}}</span> {{end}}{{.Team}}</span> {{end}}</td>
 	<td class="num">{{if .Error}}<span class="error" title="{{.Error}}">failed</span>{{else}}{{.Turns}}{{end}}</td>
 </tr>

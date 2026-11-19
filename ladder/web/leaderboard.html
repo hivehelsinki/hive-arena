@@ -19,7 +19,7 @@ document.addEventListener("DOMContentLoaded", () => {
 {{end}}
 
 {{range .Ladder.Tables}}
-<h2>{{.Format.Map}}, {{.Format.Players}} players</h2>
+<h2>{{.Format.Players}} players</h2>
 <table class="standings">
 <thead><tr><th>#</th><th>Team</th><th class="num">Rating</th><th class="num"><span class="nocase">μ ± σ</span></th><th class="num">Matches</th></tr></thead>
 <tbody>
@@ -39,7 +39,7 @@ document.addEventListener("DOMContentLoaded", () => {
 <h2>Format</h2>
 <ul>
 	<li>The latest tag on the <code>main</code> branch of each team's repository plays, from its first match after it is built (new tags are checked every few minutes).</li>
-	<li>Matches are played one at a time, all day. Each team plays {{.Settings.Quota}} matches per 24 hours in each format: {{range $i, $f := .Ladder.Formats}}{{if $i}}, {{end}}{{$f.Map}} ({{$f.Players}} players){{end}}.</li>
+	<li>Matches are played one at a time, all day. Each team plays {{.Settings.Quota}} matches per 24 hours in each format: {{range $i, $f := .Ladder.Formats}}{{if $i}}, {{end}}{{$f.Players}} players{{end}}, each match on a new random map.</li>
 	<li>Matches are challenges: a team challenges teams drawn among the {{.Settings.Window}} ranked just above it in that format ({{percent .Settings.RandomShare}} of the matches are against random teams instead). Seats are random.</li>
 	<li>Ratings move after every match, more for teams with few matches (a new team starts at 0). A new version makes its team's rating more uncertain again, so that it can move quickly.</li>
 	<li>In a match, bots are ranked by flowers, and equal flowers are tied; a bot that crashes or doesn't join is last.</li>

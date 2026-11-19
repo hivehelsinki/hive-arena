@@ -86,8 +86,11 @@ func TestStoreMatches(t *testing.T) {
 	}
 
 	// Filters
-	if matches, _ := store.Matches(MatchFilter{Map: "other"}); len(matches) != 0 {
-		t.Errorf("expected no match on another map, got %d", len(matches))
+	if matches, _ := store.Matches(MatchFilter{Players: 2}); len(matches) != 0 {
+		t.Errorf("expected no 2-player match, got %d", len(matches))
+	}
+	if matches, _ := store.Matches(MatchFilter{Players: 3}); len(matches) != 2 || matches[0].Players != 3 {
+		t.Errorf("expected the two 3-player matches, got %+v", matches)
 	}
 	if matches, _ := store.Matches(MatchFilter{Team: "a", Limit: 1}); len(matches) != 1 || matches[0].ID != m2 {
 		t.Errorf("expected the most recent match, got %+v", matches)
