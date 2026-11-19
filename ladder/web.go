@@ -168,6 +168,7 @@ func (web *Web) Handler() http.Handler {
 	mux.HandleFunc("GET /api/status", web.handleStatus)
 	mux.HandleFunc("GET /api/leaderboard", web.apiLeaderboard)
 	mux.HandleFunc("GET /api/matches", web.apiMatches)
+	mux.HandleFunc("GET /api/matches/{id}", web.apiMatch)
 	mux.HandleFunc("GET /api/teams", web.apiTeams)
 
 	return mux
@@ -250,7 +251,12 @@ func matchFilter(r *http.Request) MatchFilter {
 		limit = 50
 	}
 	players, _ := strconv.Atoi(q.Get("players"))
-	return MatchFilter{Team: q.Get("team"), Players: players, Before: before, Limit: limit}
+	filter := MatchFilter{Team: q.Get("team"), Players: players, Before: before, Limit: limit}
+	if q.Has("after") {
+		after, _ := strconv.ParseInt(q.Get("after"), 10, 64)
+		filter.After = &after
+	}
+	return filter
 }
 
 func (web *Web) handleMatches(w http.ResponseWriter, r *http.Request) {
@@ -419,7 +425,24 @@ func (web *Web) apiMatches(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
+	if matches == nil {
+		matches = []MatchSummary{} // [], not null
+	}
 	writeJSON(w, matches)
+}
+
+func (web *Web) apiMatch(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	match, err := web.Store.Match(id)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	if !ok || match == nil {
+		http.NotFound(w, r)
+		return
+	}
+	writeJSON(w, match)
 }
 
 func (web *Web) apiTeams(w http.ResponseWriter, r *http.Request) {

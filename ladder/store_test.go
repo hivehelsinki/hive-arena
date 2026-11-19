@@ -92,7 +92,18 @@ func TestStoreMatches(t *testing.T) {
 	if matches, _ := store.Matches(MatchFilter{Players: 3}); len(matches) != 2 || matches[0].Players != 3 {
 		t.Errorf("expected the two 3-player matches, got %+v", matches)
 	}
-	if matches, _ := store.Matches(MatchFilter{Team: "a", Limit: 1}); len(matches) != 1 || matches[0].ID != m2 {
+	after := func(id int64) *int64 { return &id }
+	if matches, _ := store.Matches(MatchFilter{After: after(m1)}); len(matches) != 1 || matches[0].ID != m2 {
+		t.Errorf("expected the match after the first one, got %+v", matches)
+	}
+	m3, _ := store.RecordMatch(MatchInfo{}, fakeResult("m", []Bot{a, b}, []uint{1, 2}, []BotStatus{Finished, Finished}))
+	if matches, _ := store.Matches(MatchFilter{After: after(m1), Limit: 2}); len(matches) != 2 || matches[0].ID != m2 || matches[1].ID != m3 {
+		t.Errorf("matches after one should come oldest first, got %+v", matches)
+	}
+	if matches, _ := store.Matches(MatchFilter{After: after(0), Limit: 2}); len(matches) != 2 || matches[0].ID != m1 {
+		t.Errorf("after 0 should start from the first match, got %+v", matches)
+	}
+	if matches, _ := store.Matches(MatchFilter{Team: "c", Limit: 1}); len(matches) != 1 || matches[0].ID != m2 {
 		t.Errorf("expected the most recent match, got %+v", matches)
 	}
 }

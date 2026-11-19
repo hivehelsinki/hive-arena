@@ -35,7 +35,7 @@ That allows you to focus on the logic of your agent instead of the implementatio
 
 See readme files in each relevant directory.
 
-To take part in the ladder, an agent must come with a Dockerfile following the conventions in [docs/docker.md](docs/docker.md). Both templates provide one.
+To take part in the ladder, an agent must come with a Dockerfile following the conventions in [docs/docker.md](docs/docker.md). Both templates provide one. The ladder's website and data (results, replays, a script to download your matches): [docs/ladder.md](docs/ladder.md).
 
 ## Developing agents in other languages
 

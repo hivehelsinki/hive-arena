@@ -90,7 +90,7 @@ Containers and networks are always removed at the end. All of them have the `hiv
 
 ## Website
 
-Read-only, no accounts: the global ladder and one per format, the head-to-head table, matches (filterable by team and map), team pages with their ratings, their matches in the last 24 hours against the quota, builds and their logs, match pages with bot outputs and report downloads (until they expire). The same data is available as JSON under `/api/` (`leaderboard`, `matches`, `teams`).
+Read-only, no accounts: the global ladder and one per format, the head-to-head table, matches (filterable by team and number of players), team pages with their ratings, their matches in the last 24 hours against the quota, builds and their logs, match pages with bot outputs and report downloads (until they expire). The same data is available as JSON under `/api/` (`leaderboard`, `matches`, `matches/<id>`, `teams`), documented for players in [docs/ladder.md](../docs/ladder.md), with a script that downloads a team's matches.
 
 `/screen` is meant for a big screen: the leaderboard, and the replays of the latest matches, one after the other.
 

@@ -1,6 +1,6 @@
 # Running your agent in Docker (ladder bot contract)
 
-The ladder builds and runs every team's agent with Docker. Your repository must provide a `Dockerfile` that follows the conventions below. The organizers only build and run it: if it works on your machine with the commands at the end of this page, it works on the ladder.
+The ladder builds and runs every team's agent with Docker (its website and data: [ladder.md](ladder.md)). Your repository must provide a `Dockerfile` that follows the conventions below. The organizers only build and run it: if it works on your machine with the commands at the end of this page, it works on the ladder.
 
 ## What the ladder does
 

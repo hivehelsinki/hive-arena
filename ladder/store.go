@@ -363,11 +363,14 @@ type MatchSummary struct {
 type MatchFilter struct {
 	Team    string
 	Players int   // 0: any number
-	Before  int64 // only matches with a smaller ID, for paging
-	Limit   int
+	Before  int64 // only matches with a smaller ID, for paging back
+	// Only matches with a larger ID than *After, oldest first: to fetch the
+	// matches played since a known one (0: from the first one)
+	After *int64
+	Limit int
 }
 
-// Matches returns matches, most recent first
+// Matches returns matches, most recent first (oldest first with After)
 func (s *Store) Matches(filter MatchFilter) ([]MatchSummary, error) {
 	var where []string
 	var args []any
@@ -383,12 +386,18 @@ func (s *Store) Matches(filter MatchFilter) ([]MatchSummary, error) {
 		where = append(where, "m.id < ?")
 		args = append(args, filter.Before)
 	}
+	order := "DESC"
+	if filter.After != nil {
+		where = append(where, "m.id > ?")
+		args = append(args, *filter.After)
+		order = "ASC"
+	}
 	query := `SELECT m.id, m.game_id, m.map, m.players, m.started_at, m.ended_at, m.turns, m.void, m.error,
 		m.files_deleted, m.server_image, m.ladder_revision FROM matches m`
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
-	query += " ORDER BY m.id DESC"
+	query += " ORDER BY m.id " + order
 	if filter.Limit > 0 {
 		query += fmt.Sprintf(" LIMIT %d", filter.Limit)
 	}
