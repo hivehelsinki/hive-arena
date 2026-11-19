@@ -97,7 +97,6 @@ func NewScore(points []int) Score {
 // One bot's result in one match, as stored
 type BotResult struct {
 	MatchID int64
-	RunID   int64
 	Map     string
 	Players int
 	Team    string

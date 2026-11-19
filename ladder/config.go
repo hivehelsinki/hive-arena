@@ -64,7 +64,7 @@ type LadderSettings struct {
 	KeepMatchFiles int `json:"keepMatchFiles"`
 	// Head-to-head results and mean points are computed over this period
 	StatsPeriod Duration `json:"statsPeriod"`
-	// No match is started while paused (e.g. while staff run a tournament)
+	// No match is started while paused
 	Paused bool         `json:"paused"`
 	Rating RatingParams `json:"rating"`
 }

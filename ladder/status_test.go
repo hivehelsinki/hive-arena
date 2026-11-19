@@ -16,7 +16,7 @@ func TestStatusAndHealth(t *testing.T) {
 	config.Runner.MatchTimeout = Duration{30 * time.Minute}
 
 	a, b := Bot{Name: "a"}, Bot{Name: "b"}
-	store.RecordMatch(MatchInfo{Kind: LadderMatch}, fakeResult("m", []Bot{a, b}, []uint{1, 0}, []BotStatus{Finished, Finished}))
+	store.RecordMatch(MatchInfo{}, fakeResult("m", []Bot{a, b}, []uint{1, 0}, []BotStatus{Finished, Finished}))
 	store.SavePoolState(&PoolState{Teams: []TeamState{{Team: Team{Name: "a"}, Bot: &a}, {Team: Team{Name: "b"}, Error: "build-failed"}}})
 
 	web, err := NewWeb(config, store)

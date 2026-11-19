@@ -10,11 +10,10 @@ Copy [ladder.example.json](ladder.example.json) to `ladder.json` and adjust it, 
 
 Everything is derived from the recorded matches and the configuration: after a restart, the ladder resumes where it left off (the match being played when it stopped is lost).
 
-The other commands are for debugging and testing (`ladder help` lists them), except `tournament`. `build` builds images: it takes a lock on the data directory, and refuses to start while the ladder service runs.
+The other commands are for debugging and testing (`ladder help` lists them). `build` builds images: it takes a lock on the data directory, and refuses to start while the ladder service runs.
 
 - `go run ./ladder web`: runs the website only
-- `go run ./ladder leaderboard`: prints the global ladder
-- `go run ./ladder tournament -formats balanced:4,tiny:2 [-repeats N] [-name "Lunch cup"] [-teams a,b,c | -top N [-at "2026-12-04 16:00"]]`: plays a one-off round-robin with its own formats, among the current bots (all of them, or the given teams), or among the first N teams of the global ladder (now, or at the given time in the configured `timezone`), each with the version of its last match before then. When the ladder service runs, it plays the tournament after its current match (the request waits in `tournament-request.json` in the data directory), even when paused; otherwise the command plays it. It appears with the tournaments on the website, and is not rated.
+- `go run ./ladder leaderboard [-at "2026-12-04 16:00"]`: prints the global ladder, now or at a given time (in the configured `timezone`), with the version each team had then
 - `go run ./ladder build`: fetches the registered teams, builds and smoke-tests their new versions (also done every `build.interval` by the ladder)
 - `go run ./ladder rebuild <team>`: forgets the failed build of a team's current version, so that it is built again (for instance after a network failure during the build)
 - `go run ./ladder match`: plays one match with the given images, without recording anything (see below)
@@ -32,7 +31,7 @@ Configuration (`ladder.json`):
   - `maxFailures`: a bot that fails (crashes or doesn't join) this many matches in a row with the same commit is left out, until its commit changes
   - `keepMatchFiles`: each team keeps the report and logs of its last matches; older ones are deleted (results are kept forever)
   - `statsPeriod`: head-to-head results and mean points are computed over this period
-  - `paused`: no match is started (e.g. while staff run a tournament)
+  - `paused`: no match is started
   - `rating`: parameters of the ratings (see below); changing them recomputes every rating
 - `runner`: server image, CPU cores split between the bots of a match, per-bot memory and process limits, memory of the match server (`serverMemory`: it keeps the whole game in memory), timeouts
 - `registry`: where teams are registered: a git repository (`url`, `branch`, `file`), or a local file (`path`)
@@ -92,7 +91,7 @@ Containers and networks are always removed at the end. All of them have the `hiv
 
 ## Website
 
-Read-only, no accounts: the global ladder and one per format, the head-to-head table, tournaments, matches (filterable by team and map), team pages with their ratings, their matches in the last 24 hours against the quota, builds and their logs, match pages with bot outputs and report downloads (until they expire). The same data is available as JSON under `/api/` (`leaderboard`, `runs`, `matches`, `teams`).
+Read-only, no accounts: the global ladder and one per format, the head-to-head table, matches (filterable by team and map), team pages with their ratings, their matches in the last 24 hours against the quota, builds and their logs, match pages with bot outputs and report downloads (until they expire). The same data is available as JSON under `/api/` (`leaderboard`, `matches`, `teams`).
 
 `/screen` is meant for a big screen: the leaderboard, and the replays of the latest matches, one after the other.
 

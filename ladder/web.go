@@ -118,14 +118,6 @@ func NewWeb(config *Config, store *Store) (*Web, error) {
 		"percent":    func(f float64) string { return fmt.Sprintf("%.0f%%", 100*f) },
 		"add":        func(a, b int) int { return a + b },
 		"trimPrefix": strings.TrimPrefix,
-		"runName": func(run Run) string {
-			var config struct{ Name string }
-			json.Unmarshal(run.Config, &config)
-			if run.Kind == "tournament" && config.Name != "" {
-				return config.Name
-			}
-			return fmt.Sprintf("Run #%d", run.ID)
-		},
 	}
 
 	pages, err := fs.Glob(webFiles, "web/*.html")
@@ -156,8 +148,6 @@ func (web *Web) Handler() http.Handler {
 		mux.Handle("GET /viewer/", http.StripPrefix("/viewer/", viewerHandler(web.Config.Web.ViewerDir)))
 	}
 	mux.HandleFunc("GET /{$}", web.handleLeaderboard)
-	mux.HandleFunc("GET /runs", web.handleRuns)
-	mux.HandleFunc("GET /runs/{id}", web.handleRun)
 	mux.HandleFunc("GET /matches", web.handleMatches)
 	mux.HandleFunc("GET /matches/{id}", web.handleMatch)
 	mux.HandleFunc("GET /matches/{id}/report.json", web.handleReport)
@@ -171,7 +161,6 @@ func (web *Web) Handler() http.Handler {
 	mux.HandleFunc("GET /health", web.handleHealth)
 	mux.HandleFunc("GET /api/status", web.handleStatus)
 	mux.HandleFunc("GET /api/leaderboard", web.apiLeaderboard)
-	mux.HandleFunc("GET /api/runs", web.apiRuns)
 	mux.HandleFunc("GET /api/matches", web.apiMatches)
 	mux.HandleFunc("GET /api/teams", web.apiTeams)
 
@@ -247,56 +236,14 @@ func (web *Web) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (web *Web) handleRuns(w http.ResponseWriter, r *http.Request) {
-	runs, err := web.Store.Runs("tournament", 100)
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	web.render(w, "runs", map[string]any{"Runs": runs})
-}
-
-func (web *Web) handleRun(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(r)
-	run, err := web.Store.Run(id)
-	if !ok || run == nil || err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	results, err := web.Store.Results([]int64{id})
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	matches, err := web.Store.Matches(MatchFilter{RunID: id, Limit: runPageMatches + 1})
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	more := len(matches) > runPageMatches
-	if more {
-		matches = matches[:runPageMatches]
-	}
-	board := NewLeaderboard(results)
-	var teams []string
-	for _, s := range board.Standings {
-		teams = append(teams, s.Team)
-	}
-	web.render(w, "run", map[string]any{"Run": run, "Board": board, "Teams": teams, "Formats": web.formats(), "Matches": matches, "More": more})
-}
-
-// Matches shown on a run's page, the others are on /matches?run=
-const runPageMatches = 100
-
 func matchFilter(r *http.Request) MatchFilter {
 	q := r.URL.Query()
 	before, _ := strconv.ParseInt(q.Get("before"), 10, 64)
-	run, _ := strconv.ParseInt(q.Get("run"), 10, 64)
 	limit, err := strconv.Atoi(q.Get("limit"))
 	if err != nil || limit < 1 || limit > 200 {
 		limit = 50
 	}
-	return MatchFilter{Kind: q.Get("kind"), Team: q.Get("team"), Map: q.Get("map"), RunID: run, Before: before, Limit: limit}
+	return MatchFilter{Team: q.Get("team"), Map: q.Get("map"), Before: before, Limit: limit}
 }
 
 func (web *Web) handleMatches(w http.ResponseWriter, r *http.Request) {
@@ -457,15 +404,6 @@ func (web *Web) apiLeaderboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, view)
-}
-
-func (web *Web) apiRuns(w http.ResponseWriter, r *http.Request) {
-	runs, err := web.Store.Runs(r.URL.Query().Get("kind"), 100)
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	writeJSON(w, runs)
 }
 
 func (web *Web) apiMatches(w http.ResponseWriter, r *http.Request) {

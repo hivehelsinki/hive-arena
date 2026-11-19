@@ -2,7 +2,7 @@
 {{with .Match}}
 <h1>Match #{{.ID}}</h1>
 <p>
-	{{.Map}}, {{len .Bots}} players, {{.Turns}} turns. Played {{time .StartedAt}} in {{duration .StartedAt .EndedAt}}{{if .RunID}}, in <a href="/runs/{{.RunID}}">{{if eq .Kind "tournament"}}a tournament{{else}}run #{{.RunID}}{{end}}</a>{{end}}.{{if eq .Kind "manual"}} Played by hand: not rated.{{end}}
+	{{.Map}}, {{len .Bots}} players, {{.Turns}} turns. Played {{time .StartedAt}} in {{duration .StartedAt .EndedAt}}.
 	{{if .Void}}<strong>Void: not counted.</strong>{{end}}
 </p>
 {{if .Error}}<p class="error">This match failed: {{.Error}}</p>{{end}}

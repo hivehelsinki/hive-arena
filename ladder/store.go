@@ -182,144 +182,12 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-type RunStatus string
-
-const (
-	RunRunning    RunStatus = "running"
-	RunComplete   RunStatus = "complete"
-	RunIncomplete RunStatus = "incomplete" // stopped at its deadline
-	RunFailed     RunStatus = "failed"
-)
-
-type Run struct {
-	ID        int64           `json:"id"`
-	Kind      string          `json:"kind"`
-	StartedAt time.Time       `json:"startedAt"`
-	EndedAt   *time.Time      `json:"endedAt,omitempty"`
-	Status    RunStatus       `json:"status"`
-	Config    json.RawMessage `json:"config"`
-	Bots      []Bot           `json:"bots"`
-	// What played the run: the arena server image, and the ladder's revision
-	ServerImage    string `json:"serverImage,omitempty"`
-	LadderRevision string `json:"ladderRevision,omitempty"`
-}
-
-// SetRunVersions records what played a run
-func (s *Store) SetRunVersions(id int64, serverImage string, ladderRevision string) error {
-	_, err := s.db.Exec(`UPDATE runs SET server_image = ?, ladder_revision = ? WHERE id = ?`, serverImage, ladderRevision, id)
-	return err
-}
-
-// CreateRun records the start of a run, with its frozen pool of bots
-func (s *Store) CreateRun(kind string, config any, bots []Bot) (int64, error) {
-	configJSON, err := json.Marshal(config)
-	if err != nil {
-		return 0, err
-	}
-
-	tx, err := s.db.Begin()
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-
-	res, err := tx.Exec(`INSERT INTO runs (kind, started_at, status, config) VALUES (?, ?, ?, ?)`,
-		kind, time.Now(), RunRunning, string(configJSON))
-	if err != nil {
-		return 0, err
-	}
-	id, _ := res.LastInsertId()
-
-	for _, bot := range bots {
-		if _, err := tx.Exec(`INSERT INTO run_bots (run_id, team, image, commit_id) VALUES (?, ?, ?, ?)`,
-			id, bot.Name, bot.Image, bot.Commit); err != nil {
-			return 0, err
-		}
-	}
-	return id, tx.Commit()
-}
-
-func (s *Store) FinishRun(id int64, status RunStatus) error {
-	_, err := s.db.Exec(`UPDATE runs SET ended_at = ?, status = ? WHERE id = ?`, time.Now(), status, id)
-	return err
-}
-
-// MarkInterruptedRuns marks runs left running (e.g. by a restart of the ladder) as incomplete
-func (s *Store) MarkInterruptedRuns() error {
-	_, err := s.db.Exec(`UPDATE runs SET ended_at = ?, status = ? WHERE status = ?`, time.Now(), RunIncomplete, RunRunning)
-	return err
-}
-
-func (s *Store) scanRuns(query string, args ...any) ([]Run, error) {
-	rows, err := s.db.Query(`SELECT id, kind, started_at, ended_at, status, config, server_image, ladder_revision FROM runs `+query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var runs []Run
-	for rows.Next() {
-		var run Run
-		var ended sql.NullTime
-		var config string
-		if err := rows.Scan(&run.ID, &run.Kind, &run.StartedAt, &ended, &run.Status, &config, &run.ServerImage, &run.LadderRevision); err != nil {
-			return nil, err
-		}
-		if ended.Valid {
-			run.EndedAt = &ended.Time
-		}
-		run.Config = json.RawMessage(config)
-		runs = append(runs, run)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	for i := range runs {
-		bots, err := s.db.Query(`SELECT team, image, commit_id FROM run_bots WHERE run_id = ? ORDER BY team`, runs[i].ID)
-		if err != nil {
-			return nil, err
-		}
-		for bots.Next() {
-			var bot Bot
-			if err := bots.Scan(&bot.Name, &bot.Image, &bot.Commit); err != nil {
-				bots.Close()
-				return nil, err
-			}
-			runs[i].Bots = append(runs[i].Bots, bot)
-		}
-		bots.Close()
-	}
-	return runs, nil
-}
-
-func (s *Store) Run(id int64) (*Run, error) {
-	runs, err := s.scanRuns(`WHERE id = ?`, id)
-	if err != nil || len(runs) == 0 {
-		return nil, err
-	}
-	return &runs[0], nil
-}
-
-// Runs returns the most recent runs of a kind (or of all kinds if empty), most recent first
-func (s *Store) Runs(kind string, limit int) ([]Run, error) {
-	if kind == "" {
-		return s.scanRuns(`ORDER BY id DESC LIMIT ?`, limit)
-	}
-	return s.scanRuns(`WHERE kind = ? ORDER BY id DESC LIMIT ?`, kind, limit)
-}
-
-// Kinds of matches: only ladder matches are rated
-const (
-	LadderMatch     = "ladder"
-	TournamentMatch = "tournament"
-	ManualMatch     = "manual" // played by hand, for testing
-)
+// The schema keeps the runs of the first version of the ladder (scheduled
+// runs and tournaments), and the kind of each match: only "ladder" matches
+// are shown and rated. Matches are no longer part of runs.
 
 // MatchInfo is what the store needs to know about a match besides its result
 type MatchInfo struct {
-	Kind  string
-	RunID int64 // 0 outside of runs (tournaments are runs)
 	// What played the match: the arena server image, and the ladder's revision
 	ServerImage    string
 	LadderRevision string
@@ -331,9 +199,6 @@ type MatchInfo struct {
 // A failed match (with an error, and no game result) is recorded as void:
 // it does not count, but its bots and their output are kept.
 func (s *Store) RecordMatch(info MatchInfo, result *MatchResult) (int64, error) {
-	if info.Kind == "" {
-		return 0, fmt.Errorf("the match has no kind")
-	}
 	void := result.Error != ""
 	if !void && (result.Result == nil || result.ReportFile == "") {
 		return 0, fmt.Errorf("the match has no result")
@@ -362,9 +227,9 @@ func (s *Store) RecordMatch(info MatchInfo, result *MatchResult) (int64, error) 
 	}
 	defer tx.Rollback()
 
-	res, err := tx.Exec(`INSERT INTO matches (run_id, kind, game_id, map, players, started_at, ended_at, turns, void, error, server_image, ladder_revision)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		nullID(info.RunID), info.Kind, result.GameID, result.Map, len(result.Bots), result.Started, result.Ended, turns, void, result.Error, info.ServerImage, info.LadderRevision)
+	res, err := tx.Exec(`INSERT INTO matches (kind, game_id, map, players, started_at, ended_at, turns, void, error, server_image, ladder_revision)
+		VALUES ('ladder', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		result.GameID, result.Map, len(result.Bots), result.Started, result.Ended, turns, void, result.Error, info.ServerImage, info.LadderRevision)
 	if err != nil {
 		return 0, err
 	}
@@ -417,13 +282,6 @@ func moveFileDurably(from string, to string) error {
 		return err
 	}
 	return syncDir(filepath.Dir(to))
-}
-
-func nullID(id int64) any {
-	if id == 0 {
-		return nil
-	}
-	return id
 }
 
 func (s *Store) ReportPath(matchID int64) string {
@@ -510,38 +368,6 @@ func readGzip(path string) ([]byte, error) {
 	return io.ReadAll(zip)
 }
 
-// Results returns the results of all valid matches of the given runs, ordered by match
-func (s *Store) Results(runIDs []int64) ([]BotResult, error) {
-	if len(runIDs) == 0 {
-		return nil, nil
-	}
-	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(runIDs)), ",")
-	args := make([]any, len(runIDs))
-	for i, id := range runIDs {
-		args[i] = id
-	}
-
-	rows, err := s.db.Query(`
-		SELECT m.id, m.run_id, m.map, m.players, b.team, b.commit_id, b.points, b.status
-		FROM matches m JOIN match_bots b ON b.match_id = m.id
-		WHERE m.void = 0 AND m.run_id IN (`+placeholders+`)
-		ORDER BY m.id, b.seat`, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var results []BotResult
-	for rows.Next() {
-		var r BotResult
-		if err := rows.Scan(&r.MatchID, &r.RunID, &r.Map, &r.Players, &r.Team, &r.Commit, &r.Points, &r.Status); err != nil {
-			return nil, err
-		}
-		results = append(results, r)
-	}
-	return results, rows.Err()
-}
-
 type MatchBot struct {
 	Team     string    `json:"team"`
 	Image    string    `json:"image"`
@@ -555,8 +381,6 @@ type MatchBot struct {
 
 type MatchSummary struct {
 	ID        int64      `json:"id"`
-	Kind      string     `json:"kind"`
-	RunID     int64      `json:"runId,omitempty"`
 	GameID    string     `json:"gameId"`
 	Map       string     `json:"map"`
 	StartedAt time.Time  `json:"startedAt"`
@@ -572,8 +396,6 @@ type MatchSummary struct {
 }
 
 type MatchFilter struct {
-	Kind   string
-	RunID  int64
 	Team   string
 	Map    string
 	Before int64 // only matches with a smaller ID, for paging
@@ -582,16 +404,8 @@ type MatchFilter struct {
 
 // Matches returns matches, most recent first
 func (s *Store) Matches(filter MatchFilter) ([]MatchSummary, error) {
-	var where []string
+	where := []string{"m.kind = 'ladder'"}
 	var args []any
-	if filter.Kind != "" {
-		where = append(where, "m.kind = ?")
-		args = append(args, filter.Kind)
-	}
-	if filter.RunID != 0 {
-		where = append(where, "m.run_id = ?")
-		args = append(args, filter.RunID)
-	}
 	if filter.Team != "" {
 		where = append(where, "EXISTS (SELECT 1 FROM match_bots t WHERE t.match_id = m.id AND t.team = ?)")
 		args = append(args, filter.Team)
@@ -604,11 +418,9 @@ func (s *Store) Matches(filter MatchFilter) ([]MatchSummary, error) {
 		where = append(where, "m.id < ?")
 		args = append(args, filter.Before)
 	}
-	query := `SELECT m.id, m.kind, COALESCE(m.run_id, 0), m.game_id, m.map, m.started_at, m.ended_at, m.turns, m.void, m.error,
+	query := `SELECT m.id, m.game_id, m.map, m.started_at, m.ended_at, m.turns, m.void, m.error,
 		m.files_deleted, m.server_image, m.ladder_revision FROM matches m`
-	if len(where) > 0 {
-		query += " WHERE " + strings.Join(where, " AND ")
-	}
+	query += " WHERE " + strings.Join(where, " AND ")
 	query += " ORDER BY m.id DESC"
 	if filter.Limit > 0 {
 		query += fmt.Sprintf(" LIMIT %d", filter.Limit)
@@ -621,7 +433,7 @@ func (s *Store) Matches(filter MatchFilter) ([]MatchSummary, error) {
 	var matches []MatchSummary
 	for rows.Next() {
 		var m MatchSummary
-		if err := rows.Scan(&m.ID, &m.Kind, &m.RunID, &m.GameID, &m.Map, &m.StartedAt, &m.EndedAt, &m.Turns, &m.Void, &m.Error,
+		if err := rows.Scan(&m.ID, &m.GameID, &m.Map, &m.StartedAt, &m.EndedAt, &m.Turns, &m.Void, &m.Error,
 			&m.FilesDeleted, &m.ServerImage, &m.LadderRevision); err != nil {
 			rows.Close()
 			return nil, err
@@ -743,7 +555,7 @@ func (s *Store) RatedMatches(before time.Time) ([]RatedMatch, error) {
 // since a time, ordered by match, for statistics
 func (s *Store) ResultsSince(since time.Time) ([]BotResult, error) {
 	rows, err := s.db.Query(`
-		SELECT m.id, COALESCE(m.run_id, 0), m.map, m.players, b.team, b.commit_id, b.points, b.status
+		SELECT m.id, m.map, m.players, b.team, b.commit_id, b.points, b.status
 		FROM matches m JOIN match_bots b ON b.match_id = m.id
 		WHERE m.kind = 'ladder' AND m.void = 0 AND m.ended_at >= ?
 		ORDER BY m.id, b.seat`, since)
@@ -755,7 +567,7 @@ func (s *Store) ResultsSince(since time.Time) ([]BotResult, error) {
 	var results []BotResult
 	for rows.Next() {
 		var r BotResult
-		if err := rows.Scan(&r.MatchID, &r.RunID, &r.Map, &r.Players, &r.Team, &r.Commit, &r.Points, &r.Status); err != nil {
+		if err := rows.Scan(&r.MatchID, &r.Map, &r.Players, &r.Team, &r.Commit, &r.Points, &r.Status); err != nil {
 			return nil, err
 		}
 		results = append(results, r)
@@ -824,10 +636,10 @@ func (s *Store) PlayedSince(since time.Time) (Played, error) {
 
 // PruneFiles deletes the report and logs of the matches that are not among
 // the last `keep` matches of any of their teams, and returns how many
-// matches lost their files. Tournament matches keep theirs.
+// matches lost their files
 func (s *Store) PruneFiles(keep int) (int, error) {
 	return s.deleteFiles(`SELECT m.id FROM matches m
-		WHERE m.files_deleted = 0 AND m.kind != 'tournament' AND NOT EXISTS (
+		WHERE m.files_deleted = 0 AND NOT EXISTS (
 			SELECT 1 FROM (
 				SELECT match_id, ROW_NUMBER() OVER (PARTITION BY team ORDER BY match_id DESC) AS n
 				FROM match_bots
@@ -835,10 +647,10 @@ func (s *Store) PruneFiles(keep int) (int, error) {
 }
 
 // DeleteOldestFiles deletes the report and logs of the `count` oldest
-// matches that still have them (tournaments last), when disk space is low
+// matches that still have them, when disk space is low
 func (s *Store) DeleteOldestFiles(count int) (int, error) {
 	return s.deleteFiles(`SELECT id FROM matches WHERE files_deleted = 0
-		ORDER BY kind = 'tournament', id LIMIT ?`, count)
+		ORDER BY id LIMIT ?`, count)
 }
 
 func (s *Store) deleteFiles(query string, args ...any) (int, error) {
@@ -996,10 +808,8 @@ func (s *Store) TeamStates() ([]TeamState, error) {
 	return state.Teams, err
 }
 
-// Counts returns the number of runs, matches and builds
-func (s *Store) Counts() ([3]int, error) {
-	var counts [3]int
-	err := s.db.QueryRow(`SELECT (SELECT COUNT(*) FROM runs), (SELECT COUNT(*) FROM matches), (SELECT COUNT(*) FROM builds)`).
-		Scan(&counts[0], &counts[1], &counts[2])
-	return counts, err
+// Counts returns the number of matches and builds
+func (s *Store) Counts() (matches int, builds int, err error) {
+	err = s.db.QueryRow(`SELECT (SELECT COUNT(*) FROM matches WHERE kind = 'ladder'), (SELECT COUNT(*) FROM builds)`).Scan(&matches, &builds)
+	return matches, builds, err
 }

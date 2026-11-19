@@ -50,9 +50,6 @@ const lowDiskBatch = 20
 // Serve plays ladder matches until the context is cancelled. A value on
 // `wake` rebuilds the pool and looks for a match right away.
 func (l *Ladder) Serve(ctx context.Context, wake <-chan struct{}) error {
-	if err := l.Store.MarkInterruptedRuns(); err != nil {
-		return err
-	}
 	if l.RemoveLeftovers != nil {
 		if err := l.RemoveLeftovers(ctx); err != nil {
 			log.Printf("Could not remove leftover containers: %s", err)
@@ -61,7 +58,7 @@ func (l *Ladder) Serve(ctx context.Context, wake <-chan struct{}) error {
 
 	var pool []Bot
 	var poolTime time.Time
-	info := MatchInfo{Kind: LadderMatch, LadderRevision: gitRevision()}
+	info := MatchInfo{LadderRevision: gitRevision()}
 	errors := 0
 
 	wait := func(d time.Duration) {
@@ -99,19 +96,6 @@ func (l *Ladder) Serve(ctx context.Context, wake <-chan struct{}) error {
 			l.pruneFiles(settings)
 		}
 		l.freeDisk()
-
-		// A tournament requested by staff, even when paused
-		if request, err := takeTournamentRequest(l.Config.DataDir); err != nil {
-			setLastError(fmt.Sprintf("tournament: %s", err))
-		} else if request != nil && l.TournamentBots != nil {
-			SetActivity(fmt.Sprintf("tournament %q", request.Name))
-			if id, err := l.PlayTournament(ctx, *request); err != nil {
-				setLastError(fmt.Sprintf("tournament %q: %s", request.Name, err))
-			} else {
-				log.Printf("Tournament %q played: run %d", request.Name, id)
-			}
-			continue
-		}
 
 		if settings.Paused {
 			SetActivity("paused")

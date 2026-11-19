@@ -16,7 +16,7 @@ func TestWebPages(t *testing.T) {
 	a := Bot{Name: "alpha", Image: "img", Commit: "0123456789abcdef"}
 	b := Bot{Name: "beta", Image: "img", Commit: "b"}
 	c := Bot{Name: "gamma", Image: "img", Commit: "c"}
-	match, _ := store.RecordMatch(MatchInfo{Kind: LadderMatch}, fakeResult("m", []Bot{a, b, c}, []uint{5, 3, 0}, []BotStatus{Finished, Finished, Crashed}))
+	match, _ := store.RecordMatch(MatchInfo{}, fakeResult("m", []Bot{a, b, c}, []uint{5, 3, 0}, []BotStatus{Finished, Finished, Crashed}))
 	store.RecordBuild(&Build{Team: "alpha", Tag: "v1", Commit: "0123456789abcdef", Status: BuildOK}, "build output")
 	store.SavePoolState(&PoolState{Teams: []TeamState{{Team: Team{Name: "alpha", Repo: "https://example.com/alpha", Members: []string{"x"}}, Bot: &a}}})
 
@@ -48,8 +48,7 @@ func TestWebPages(t *testing.T) {
 	id := func(i int64) string { return strconv.FormatInt(i, 10) }
 
 	get("/", 200, "alpha", "60.0", "01234567", "Head to head", "100%", "m, 3 players", "1 matches")
-	get("/runs", 200, "No tournaments yet")
-	get("/runs/999", 404)
+	get("/runs", 404)
 	get("/matches", 200, "alpha 60", "gamma 0")
 	get("/matches?team=gamma", 200, "gamma")
 	get("/matches/"+id(match), 200, "crashed", "Download the report", "/logs/alpha")
@@ -68,16 +67,8 @@ func TestWebPages(t *testing.T) {
 
 	// Expired replays
 	store.PruneFiles(1)
-	newer, _ := store.RecordMatch(MatchInfo{Kind: LadderMatch}, fakeResult("m", []Bot{a, b, c}, []uint{5, 3, 0}, []BotStatus{Finished, Finished, Finished}))
+	newer, _ := store.RecordMatch(MatchInfo{}, fakeResult("m", []Bot{a, b, c}, []uint{5, 3, 0}, []BotStatus{Finished, Finished, Finished}))
 	store.PruneFiles(1)
 	get("/matches/"+id(match), 200, "expired")
 	get("/matches/"+id(newer), 200, "Watch the replay")
-
-	// Tournaments are listed, but not counted in the ladder
-	tournament, _ := store.CreateRun("tournament", TournamentRequest{Name: "Lunch cup"}, []Bot{a, c})
-	store.RecordMatch(MatchInfo{Kind: TournamentMatch, RunID: tournament}, fakeResult("m", []Bot{a, c}, []uint{0, 9}, []BotStatus{Finished, Finished}))
-	store.FinishRun(tournament, RunComplete)
-	get("/runs", 200, "Lunch cup")
-	get("/runs/"+id(tournament), 200, "Lunch cup", "not counted")
-	get("/", 200, "100%", "2 matches")
 }

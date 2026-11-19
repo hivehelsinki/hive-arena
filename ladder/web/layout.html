@@ -9,7 +9,7 @@
 <body>
 <header>
 	<a class="title" href="/">Hive Arena ladder</a>
-	<nav><a href="/">Ladder</a> <a href="/runs">Tournaments</a> <a href="/matches">Matches</a> <a href="/screen">Big screen</a></nav>
+	<nav><a href="/">Ladder</a> <a href="/matches">Matches</a> <a href="/screen">Big screen</a></nav>
 </header>
 <main>
 {{template "content" .}}
@@ -17,31 +17,6 @@
 <footer>Hive Arena ladder, version <a href="/api/status" class="mono">{{revision .Revision}}</a></footer>
 </body>
 </html>{{end}}
-
-{{define "standings"}}
-<table class="standings">
-<thead><tr>
-	<th>#</th><th>Team</th><th class="num">Score</th><th class="num"></th><th class="num">Games</th>
-	{{range .Formats}}<th class="num" title="{{.}}">{{.Map}} <span class="dim">{{.Players}}p</span></th>{{end}}
-	<th>Version</th>
-</tr></thead>
-<tbody>
-{{range $i, $s := .Board.Standings}}
-<tr>
-	<td>{{add $i 1}}</td>
-	<td><a href="/teams/{{$s.Team}}">{{$s.Team}}</a></td>
-	<td class="num strong">{{score $s.Score}}</td>
-	<td class="num dim">{{stderr $s.Score}}</td>
-	<td class="num">{{$s.Score.Games}}</td>
-	{{range $.Formats}}<td class="num">{{score (index $s.PerFormat .Key)}}</td>{{end}}
-	<td class="mono">{{short $s.Commit}}</td>
-</tr>
-{{else}}
-<tr><td colspan="99" class="dim">No results yet.</td></tr>
-{{end}}
-</tbody>
-</table>
-{{end}}
 
 {{define "ladder"}}
 <table class="standings">
@@ -97,7 +72,7 @@
 <tr{{if .Void}} class="void"{{end}}>
 	<td><a href="/matches/{{.ID}}">{{.ID}}</a></td>
 	<td>{{time .StartedAt}}</td>
-	<td>{{.Map}}{{if eq .Kind "tournament"}} <span class="dim">(tournament)</span>{{end}}</td>
+	<td>{{.Map}}</td>
 	<td>{{range .Bots}}<span class="result p{{.Points}} {{.Status}}" title="{{.Status}}, {{.Flowers}} flowers">{{.Team}} {{.Points}}</span> {{end}}</td>
 	<td class="num">{{if .Error}}<span class="error" title="{{.Error}}">failed</span>{{else}}{{.Turns}}{{end}}</td>
 </tr>

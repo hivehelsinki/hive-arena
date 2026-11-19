@@ -19,12 +19,11 @@ The first time, the script creates `ladder.json` (from [ladder.example.json](../
 To update the ladder later, run the same script again. Every time, it:
 
 1. installs the missing tools (git, Go, Docker, curl, gzip, iptables) with apt, and creates the `ladder` user that runs the service, in the `docker` group;
-2. if a tournament is in progress, stops there, before changing anything: it asks on a terminal, and fails otherwise (`--force` updates and restarts anyway; the tournament is then marked incomplete, keeping its recorded matches). A ladder match in progress is simply lost: the ladder resumes after the restart;
-3. pulls the latest commit of the current branch (it refuses if the repository has local changes);
-4. builds the ladder, the browser viewer, and the arena server image used by every match;
-5. creates the data directory (`dataDir`, by default `data/` in the repository) and gives it to the `ladder` user;
-6. installs the systemd service `hive-ladder` and restarts it;
-7. checks that the running ladder reports the commit that was just pulled, and shows its health.
+2. pulls the latest commit of the current branch (it refuses if the repository has local changes);
+3. builds the ladder, the browser viewer, and the arena server image used by every match;
+4. creates the data directory (`dataDir`, by default `data/` in the repository) and gives it to the `ladder` user;
+5. installs the systemd service `hive-ladder` and restarts it (a ladder match in progress is lost: the ladder resumes after the restart);
+6. checks that the running ladder reports the commit that was just pulled, and shows its health.
 
 The repository must be readable by the `ladder` user (clone it in `/opt`, not in a private home directory). When a new version changes the database schema, the ladder copies the database (`ladder-v<version>-<time>.db` in the data directory) before migrating it.
 
@@ -39,7 +38,7 @@ Being in the `docker` group is equivalent to root access on the machine: the VM 
 - Build new versions now: `systemctl kill -s USR1 hive-ladder`
 - A team's build failed for a transient reason (e.g. network): `sudo -u ladder ladder/ladder rebuild -config ladder.json <team>` (safe while the service runs)
 
-- A tournament, for instance the final among the top 8 of the ladder at the deadline: `sudo -u ladder ladder/ladder tournament -config ladder.json -formats balanced:4,tiny:2 -repeats 5 -top 8 -at "2026-12-04 16:00" -name "Final"`. The service plays it after its current match (pause the ladder first, `"paused": true`, if no ladder match should follow it before you look at the results).
+- The ladder at a given time, e.g. to seed a live event: `ladder/ladder leaderboard -config ladder.json -at "2026-12-04 16:00"` (with the version each team had then)
 
 The other commands (`ladder/ladder help`) are for debugging and testing. `build` builds images: it refuses to start while the service runs (stop it first: `systemctl stop hive-ladder`). Run commands as the `ladder` user (`sudo -u ladder ...`), so that the files they write in the data directory belong to it.
 

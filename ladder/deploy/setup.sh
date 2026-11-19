@@ -1,7 +1,7 @@
 #!/bin/sh
 # Sets up the ladder on its machine, or updates it, then (re)starts the service.
 #
-#   cd /opt/hive-arena && sudo ladder/deploy/setup.sh [--force]
+#   cd /opt/hive-arena && sudo ladder/deploy/setup.sh
 #
 # Run it after the first clone, and after every update: it is safe to run
 # again at any time. It:
@@ -12,9 +12,8 @@
 #   - installs and (re)starts the systemd service, and checks that it runs
 #     the commit that was just pulled
 #
-# --force: update and restart even if a tournament is in progress (it is then
-# marked incomplete, and its recorded matches are kept). A ladder match in
-# progress is simply lost: the ladder resumes after the restart.
+# A ladder match in progress during the restart is lost: the ladder resumes
+# after it.
 
 set -eu
 
@@ -22,8 +21,6 @@ SERVICE=hive-ladder
 SERVICE_USER=ladder
 # Prefix of the network interfaces of matches (BridgePrefix in ladder/runner.go)
 BRIDGE_PREFIX=hl-
-FORCE=0
-[ "${1:-}" = "--force" ] && FORCE=1
 
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
 SCRIPT=$REPO/ladder/deploy/setup.sh
@@ -88,25 +85,6 @@ status_base() {
 	echo "http://$host:${listen##*:}"
 }
 
-# Fails (or asks, on a terminal) if the running ladder is playing a
-# tournament: restarting would interrupt it
-check_not_busy() {
-	[ "$FORCE" = 1 ] && return
-	systemctl is-active --quiet "$SERVICE" || return 0
-	[ -x "$LADDER" ] && [ -f "$CONFIG" ] || return 0
-	base=$(status_base "$("$LADDER" check -config "$CONFIG" 2>/dev/null)")
-	status=$(curl -fsS "$base/api/status" 2>/dev/null) || return 0
-	if echo "$status" | grep -q '"currentTournament"'; then
-		if [ -t 0 ]; then
-			printf "A tournament is in progress. Update and restart anyway (it will be marked incomplete)? [y/N] "
-			read -r answer
-			[ "$answer" = y ] || [ "$answer" = Y ] || fail "nothing done: run this script again after the tournament, or with --force"
-		else
-			fail "a tournament is in progress: run this script again after it, or with --force"
-		fi
-	fi
-}
-
 step "Tools"
 missing=""
 for tool in git docker curl gzip iptables; do
@@ -141,9 +119,6 @@ docker info >/dev/null 2>&1 || fail "docker is installed but not running"
 echo "git, go ($(go env GOVERSION)), docker ($(docker version --format '{{.Server.Version}}'), buildx): ok"
 
 if [ -z "${SETUP_UPDATED:-}" ]; then
-	# Before changing anything: the pull and the builds would affect a tournament
-	check_not_busy
-
 	step "Update"
 	if [ -n "$(as_owner git status --porcelain --untracked-files=no)" ]; then
 		as_owner git status --short --untracked-files=no

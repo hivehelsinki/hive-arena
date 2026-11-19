@@ -95,7 +95,6 @@ type Status struct {
 	Docker   string `json:"docker"` // "ok", or the error
 	Database struct {
 		Size    int64 `json:"size"`
-		Runs    int   `json:"runs"`
 		Matches int   `json:"matches"`
 		Builds  int   `json:"builds"`
 	} `json:"database"`
@@ -116,7 +115,6 @@ type Status struct {
 		Last24h Played `json:"last24h"`
 		Demand  int    `json:"demand"`
 	} `json:"matchmaker"`
-	CurrentTournament *Run `json:"currentTournament,omitempty"`
 
 	Teams struct {
 		Registered int       `json:"registered"`
@@ -166,16 +164,10 @@ func (web *Web) status() Status {
 			status.Database.Size += info.Size()
 		}
 	}
-	counts, err := web.Store.Counts()
+	var err error
+	status.Database.Matches, status.Database.Builds, err = web.Store.Counts()
 	if err != nil {
 		warn("cannot read the database: %s", err)
-	}
-	status.Database.Runs, status.Database.Matches, status.Database.Builds = counts[0], counts[1], counts[2]
-
-	if runs, err := web.Store.Runs("tournament", 1); err == nil && len(runs) > 0 && runs[0].Status == RunRunning {
-		run := runs[0]
-		run.Bots = nil
-		status.CurrentTournament = &run
 	}
 
 	settings := web.Settings.Get()
