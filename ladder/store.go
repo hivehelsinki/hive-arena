@@ -362,9 +362,9 @@ type MatchSummary struct {
 
 type MatchFilter struct {
 	Team    string
-	Players int // 0: any number
-	Before int64 // only matches with a smaller ID, for paging
-	Limit  int
+	Players int   // 0: any number
+	Before  int64 // only matches with a smaller ID, for paging
+	Limit   int
 }
 
 // Matches returns matches, most recent first
