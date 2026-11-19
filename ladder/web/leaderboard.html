@@ -33,7 +33,7 @@ document.addEventListener("DOMContentLoaded", () => {
 {{end}}
 
 <h2>Head to head</h2>
-<p class="dim">Over the last {{days .Ladder.StatsPeriod}}.</p>
+<p class="dim">Over the last {{days .Ladder.HeadToHeadPeriod}}.</p>
 {{template "h2h" .}}
 
 <h2>Format</h2>
@@ -42,7 +42,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	<li>Matches are played one at a time, all day. Each team plays {{.Settings.Quota}} matches per 24 hours in each format: {{range $i, $f := .Ladder.Formats}}{{if $i}}, {{end}}{{$f.Map}} ({{$f.Players}} players){{end}}.</li>
 	<li>Matches are challenges: a team challenges teams drawn among the {{.Settings.Window}} ranked just above it in that format ({{percent .Settings.RandomShare}} of the matches are against random teams instead). Seats are random.</li>
 	<li>Ratings move after every match, more for teams with few matches (a new team starts at 0). A new version makes its team's rating more uncertain again, so that it can move quickly.</li>
-	<li>Bots are ranked by flowers; a bot that crashes or doesn't join is last. Points per match go from 60 (first) to 0 (last), equal flowers share the points of the places they span.</li>
+	<li>In a match, bots are ranked by flowers, and equal flowers are tied; a bot that crashes or doesn't join is last.</li>
 	{{with .Settings.MaxFailures}}<li>Bots that fail {{.}} matches in a row are left out until their next version.</li>{{end}}
 </ul>
 {{end}}

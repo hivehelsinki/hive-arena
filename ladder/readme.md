@@ -30,7 +30,7 @@ Configuration (`ladder.json`):
   - `randomShare`: share of the matches against random opponents instead
   - `maxFailures`: a bot that fails (crashes or doesn't join) this many matches in a row with the same commit is left out, until its commit changes
   - `keepMatchFiles`: each team keeps the report and logs of its last matches; older ones are deleted (results are kept forever)
-  - `statsPeriod`: head-to-head results and mean points are computed over this period
+  - `headToHeadPeriod`: head-to-head results are computed over this period
   - `paused`: no match is started
   - `rating`: parameters of the ratings (see below); changing them recomputes every rating
 - `runner`: server image, CPU cores split between the bots of a match, per-bot memory and process limits, memory of the match server (`serverMemory`: it keeps the whole game in memory), timeouts

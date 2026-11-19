@@ -15,7 +15,7 @@
 
 {{with .Row}}
 <h2>Rating</h2>
-<p><span class="big">{{rating .Global}}</span> <span class="dim">(μ ± σ: {{musigma .Global}})</span> over {{.Global.Games}} matches{{with .Stats}}; {{score .Score}} points per match over the last {{days $.StatsPeriod}}{{end}}.
+<p><span class="big">{{rating .Global}}</span> <span class="dim">(μ ± σ: {{musigma .Global}})</span> over {{.Global.Games}} matches.
 {{if not .Global.Since.IsZero}}Version <span class="mono">{{short .Global.Commit}}</span> playing since {{time .Global.Since}}.{{end}}</p>
 {{end}}
 {{with .History}}
@@ -39,7 +39,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 {{with .H2H}}
 <h2>Against the other teams</h2>
-<p class="dim">Over the last {{days $.StatsPeriod}}.</p>
+<p class="dim">Over the last {{days $.HeadToHeadPeriod}}.</p>
 <table>
 <thead><tr><th>Opponent</th><th class="num">Finished ahead</th><th class="num">Matches together</th></tr></thead>
 <tbody>{{range $team, $h := .}}<tr><td><a href="/teams/{{$team}}">{{$team}}</a></td><td class="num {{h2hclass $h}}">{{h2h $h}}</td><td class="num">{{$h.Games}}</td></tr>{{end}}</tbody>

@@ -160,7 +160,7 @@ The model is **OpenSkill's Plackett-Luce model** (Weng and Lin, 2011): a closed-
 
 Parameters (μ₀ = 25, σ₀ = 25/3, β = 25/6, τ = 25/300, the TrueSkill defaults) are configuration. Void matches do not count.
 
-**Also shown, as statistics**: matches played, the mean points per match (`points = 60 * (n - rank) / (n - 1)`, ties averaged, the scale of the first design: 60 for the winner, 0 for the last) and the **head-to-head table**: how often A finished ahead of B (ties count half), in the matches they played together. These are computed on the matches of the last few days, and are what participants will want to look at; the ladder order is the rating.
+**Also shown**: matches played, each bot's place in each match (ties share the first place they span), and the **head-to-head table**: how often A finished ahead of B (ties count half), in the matches they played together over the last few days. The ladder order is the rating, and nothing else is a score: the mean points per match of the first design (60 for the winner, 0 for the last) were dropped, because with challenge matchmaking they depend on who a team plays (a strong team mostly meets other strong teams), and they contradicted the ladder order.
 
 Since challenges are automatic, a team cannot choose its opponents or when it plays, which was the concern with rating systems in the first design.
 
@@ -168,7 +168,7 @@ Since challenges are automatic, a team cannot choose its opponents or when it pl
 
 Every match is stored:
 
-- **In SQLite**: match id, timestamp, map, `n`, seat/player index, team and commit per seat, flowers, points, status per bot (finished, crashed, no-join), and whether the match is valid (failed matches are void, with their error, and not counted). Each match records the arena server image and the ladder revision that played it. The schema is versioned, with migrations (the database is copied before being migrated).
+- **In SQLite**: match id, timestamp, map, `n`, seat/player index, team and commit per seat, flowers, status per bot (places are computed from flowers and status) (finished, crashed, no-join), and whether the match is valid (failed matches are void, with their error, and not counted). Each match records the arena server image and the ladder revision that played it. The schema is versioned, with migrations (the database is copied before being migrated); it was reset to a single version before the ladder went live.
 - **As files**: the server's JSON report (the same format as `history/` today, so the existing viewer reads it unchanged), stored compressed, with container logs of each bot (truncated to a size limit) for debugging. Without accounts, logs are public like the rest of the site; teams should not print anything secret.
 
 Reports are large: the full state of every turn, so a long game (several thousand turns: the game has no turn limit) gives a report of 100-200 MB, 2-4 MB compressed (they are compressed as they are downloaded, never stored raw). At a few hundred matches a day this adds up, so **results are kept forever, replays are not**:
@@ -194,7 +194,7 @@ The store is the source of truth: ratings, quotas, head-to-head tables and stati
 
 Read-only, served by the same binary. No accounts.
 
-- **Ladder**: the global ladder and one per format (map and number of players), ranked by μ − 3σ, with μ, σ, matches played and mean points; the head-to-head table; a team's position over time.
+- **Ladder**: the global ladder and one per format (map and number of players), ranked by μ − 3σ, with μ, σ and matches played; the head-to-head table; each team's rating over time.
 - **Match list**, filterable by team and map, each entry linking to its replay and report.
 - **Team page**: ratings (global and per format) and their history, its matches in the last 24 hours against the quota, recent results, current commit, builds with their logs, and why the team does not play if it does not (no working build, left out for failing).
 - **Status**: what is being played, quota demand against matches played in the last 24 hours, the settings in use, and configuration warnings.
@@ -254,10 +254,12 @@ All the steps of the plan are implemented, on the `server-ladder-support` branch
 
 11. **Ratings** (`ladder/rating.go`): the Plackett-Luce update with ties, τ and the version bump, replayed over the history, globally and per format; it matches the `openskill` Python library to 1e-8.
 12. **Store**: what played each match; matches per team and format over the last 24 hours; replay retention, and the oldest files deleted when disk space is low. Backups contain the database and build logs only.
-13. **Matchmaker** (`ladder/matchmaker.go`) and **website**: quotas, challenge windows, random matches, builds every 15 minutes between matches, the `ladder` settings re-read before each match, `paused`; the global and per-format ladders, head-to-head and mean points over a period, quotas on team pages, expired replays; the status reports the matchmaker and the quotas' demand.
+13. **Matchmaker** (`ladder/matchmaker.go`) and **website**: quotas, challenge windows, random matches, builds every 15 minutes between matches, the `ladder` settings re-read before each match, `paused`; the global and per-format ladders, head-to-head results over a period, quotas on team pages, expired replays; the status reports the matchmaker and the quotas' demand.
 14. **Ladder only**: tournament mode and runs are removed (the database keeps the tables of the first version: their matches are hidden and not rated). `ladder leaderboard -at <time>` prints the ladder at a given time, with each team's version then, for seeding live events.
 
-Not done yet: a chart of each team's rating over time (the ratings at any past time can be computed); defaults tuned on measured match durations with realistic bots.
+15. **Website**: rating charts (all teams on the ladder page, each team with its versions on its page), the Honeycomb theme with a light and dark switch. Points per match are gone (see Rating), and the database schema is a single clean version again.
+
+Not done yet: defaults tuned on measured match durations with realistic bots.
 
 The game review happens after this work.
 

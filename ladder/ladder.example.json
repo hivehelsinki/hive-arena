@@ -14,7 +14,7 @@
 		"randomShare": 0.1,
 		"maxFailures": 5,
 		"keepMatchFiles": 100,
-		"statsPeriod": "168h",
+		"headToHeadPeriod": "168h",
 		"paused": false,
 		"rating": {
 			"mu": 25,

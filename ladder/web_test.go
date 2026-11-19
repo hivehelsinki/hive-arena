@@ -47,9 +47,9 @@ func TestWebPages(t *testing.T) {
 
 	id := func(i int64) string { return strconv.FormatInt(i, 10) }
 
-	get("/", 200, "alpha", "60.0", "01234567", "Head to head", "100%", "m, 3 players", "1 matches")
+	get("/", 200, "alpha", "01234567", "Head to head", "100%", "m, 3 players", "1 matches")
 	get("/runs", 404)
-	get("/matches", 200, "alpha 60", "gamma 0")
+	get("/matches", 200, "1st</span> alpha", "3rd</span> gamma")
 	get("/matches?team=gamma", 200, "gamma")
 	get("/matches/"+id(match), 200, "crashed", "Download the report", "/logs/alpha")
 	get("/matches/999", 404)

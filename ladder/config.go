@@ -62,8 +62,8 @@ type LadderSettings struct {
 	// Each team keeps the report and logs of its last matches (the results
 	// are kept forever)
 	KeepMatchFiles int `json:"keepMatchFiles"`
-	// Head-to-head results and mean points are computed over this period
-	StatsPeriod Duration `json:"statsPeriod"`
+	// Head-to-head results are computed over this period
+	HeadToHeadPeriod Duration `json:"headToHeadPeriod"`
 	// No match is started while paused
 	Paused bool         `json:"paused"`
 	Rating RatingParams `json:"rating"`
@@ -71,13 +71,13 @@ type LadderSettings struct {
 
 func DefaultLadderSettings() LadderSettings {
 	return LadderSettings{
-		Quota:          20,
-		Window:         4,
-		RandomShare:    0.1,
-		MaxFailures:    5,
-		KeepMatchFiles: 100,
-		StatsPeriod:    Duration{7 * 24 * time.Hour},
-		Rating:         DefaultRatingParams(),
+		Quota:            20,
+		Window:           4,
+		RandomShare:      0.1,
+		MaxFailures:      5,
+		KeepMatchFiles:   100,
+		HeadToHeadPeriod: Duration{7 * 24 * time.Hour},
+		Rating:           DefaultRatingParams(),
 	}
 }
 
@@ -99,8 +99,8 @@ func (s *LadderSettings) validate(c *Config) error {
 	if s.RandomShare < 0 || s.RandomShare > 1 {
 		return fmt.Errorf("ladder: randomShare must be between 0 and 1")
 	}
-	if s.StatsPeriod.Duration <= 0 {
-		return fmt.Errorf("ladder: statsPeriod must be positive")
+	if s.HeadToHeadPeriod.Duration <= 0 {
+		return fmt.Errorf("ladder: headToHeadPeriod must be positive")
 	}
 	r := s.Rating
 	if r.Sigma <= 0 || r.Beta <= 0 || r.Tau < 0 || r.VersionSigma < 0 {

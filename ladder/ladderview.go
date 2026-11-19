@@ -12,8 +12,6 @@ type LadderRow struct {
 	Global TeamRating `json:"global"`
 	// Ratings in each format the team played (see Format.Key)
 	PerFormat map[string]TeamRating `json:"perFormat"`
-	// Mean points and matches over the statistics period
-	Stats *Standing `json:"stats,omitempty"`
 	// Whether the team currently plays (a working version, not left out)
 	Playing bool `json:"playing"`
 }
@@ -27,11 +25,12 @@ type LadderView struct {
 	Rows    []LadderRow   `json:"ladder"`  // the global ladder, best first
 	Formats []Format      `json:"formats"` // the configured formats
 	Tables  []FormatTable `json:"perFormat"`
-	// Mean points and head-to-head results over the statistics period
-	Stats       Leaderboard `json:"stats"`
-	StatsPeriod Duration    `json:"statsPeriod"`
-	Teams       []string    `json:"-"` // in ladder order, for the head-to-head table
-	Rated       int         `json:"ratedMatches"`
+	// HeadToHead[a][b]: how often a finished ahead of b, in the matches they
+	// played together over the period
+	HeadToHead       map[string]map[string]HeadToHead `json:"headToHead"`
+	HeadToHeadPeriod Duration                         `json:"headToHeadPeriod"`
+	Teams            []string                         `json:"-"` // in ladder order, for the head-to-head table
+	Rated            int                              `json:"ratedMatches"`
 	// The global rating of each team over time, in ladder order, for charts
 	History []TeamHistory `json:"history"`
 }
@@ -94,7 +93,7 @@ func (s *Store) Ladder(settings LadderSettings, now time.Time) (*LadderView, err
 		return nil, err
 	}
 	ratings := ComputeRatings(settings.Rating, matches)
-	results, err := s.ResultsSince(now.Add(-settings.StatsPeriod.Duration))
+	results, err := s.ResultsSince(now.Add(-settings.HeadToHeadPeriod.Duration))
 	if err != nil {
 		return nil, err
 	}
@@ -108,14 +107,10 @@ func (s *Store) Ladder(settings LadderSettings, now time.Time) (*LadderView, err
 	}
 
 	view := &LadderView{
-		Formats:     distinctFormats(settings.Formats),
-		Stats:       NewLeaderboard(results),
-		StatsPeriod: settings.StatsPeriod,
-		Rated:       len(matches),
-	}
-	stats := make(map[string]*Standing)
-	for i := range view.Stats.Standings {
-		stats[view.Stats.Standings[i].Team] = &view.Stats.Standings[i]
+		Formats:          distinctFormats(settings.Formats),
+		HeadToHead:       HeadToHeads(results),
+		HeadToHeadPeriod: settings.HeadToHeadPeriod,
+		Rated:            len(matches),
 	}
 	var from, to time.Time
 	if len(matches) > 0 {
@@ -123,7 +118,7 @@ func (s *Store) Ladder(settings LadderSettings, now time.Time) (*LadderView, err
 	}
 	for _, t := range ratings.Global.Standings() {
 		view.History = append(view.History, TeamHistory{t.Team, chartHistory(ratings.Global.History(t.Team), from, to, chartPoints)})
-		row := LadderRow{Team: t.Team, Global: t, PerFormat: make(map[string]TeamRating), Stats: stats[t.Team], Playing: playing[t.Team]}
+		row := LadderRow{Team: t.Team, Global: t, PerFormat: make(map[string]TeamRating), Playing: playing[t.Team]}
 		for key, table := range ratings.PerFormat {
 			if r := table.Rating(t.Team); r.Games > 0 {
 				row.PerFormat[key] = r

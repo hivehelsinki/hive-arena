@@ -2,11 +2,9 @@ package main
 
 import (
 	"compress/gzip"
-	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -63,13 +61,13 @@ func TestStoreMatches(t *testing.T) {
 	if err != nil || match == nil {
 		t.Fatalf("match not found: %v", err)
 	}
-	if match.Bots[0].Points != 60 || match.Bots[1].Points != 30 || match.Bots[2].Points != 0 || match.Bots[2].Status != Crashed {
+	if match.Bots[0].Place != 1 || match.Bots[1].Place != 2 || match.Bots[2].Place != 3 || match.Bots[2].Status != Crashed {
 		t.Errorf("unexpected points: %+v", match.Bots)
 	}
 
 	// Match details and files
 	match, _ = store.Match(m1)
-	if len(match.Bots) != 3 || match.Bots[0].Points != 60 || match.Bots[0].Commit != "c1" {
+	if len(match.Bots) != 3 || match.Bots[0].Place != 1 || match.Bots[0].Commit != "c1" {
 		t.Errorf("unexpected match: %+v", match)
 	}
 	report, err := readGzip(store.ReportPath(m1))
@@ -170,52 +168,31 @@ func TestRecordMatchRejectsUnseatedBots(t *testing.T) {
 
 func TestMigrations(t *testing.T) {
 	dir := t.TempDir()
-
-	// A database of the first version, with data
-	db, err := sql.Open("sqlite", filepath.Join(dir, "ladder.db"))
+	store, err := OpenStore(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	now := time.Now()
-	for _, statement := range []string{
-		migrations[0],
-		`INSERT INTO runs (id, kind, started_at, status, config) VALUES (1, 'ladder', ?, 'complete', '{}'), (2, 'tournament', ?, 'complete', '{}')`,
-		`INSERT INTO matches (id, run_id, game_id, map, players, started_at, ended_at, turns) VALUES
-			(1, 1, 'g', 'm', 2, ?, ?, 10), (2, 2, 'g', 'm', 2, ?, ?, 10), (3, NULL, 'g', 'm', 2, ?, ?, 10)`,
-		`PRAGMA user_version = 1`,
-	} {
-		args := []any{}
-		for range strings.Count(statement, "?") {
-			args = append(args, now)
-		}
-		if _, err := db.Exec(statement, args...); err != nil {
-			t.Fatal(err)
-		}
-	}
-	db.Close()
+	store.RecordMatch(MatchInfo{}, fakeResult("m", []Bot{{Name: "a"}, {Name: "b"}}, []uint{1, 2}, []BotStatus{Finished, Finished}))
+	store.Close()
 
-	store, err := OpenStore(dir)
+	// A later version adds a column
+	defer func(original []string) { migrations = original }(migrations)
+	migrations = append(migrations, `ALTER TABLE matches ADD COLUMN note TEXT NOT NULL DEFAULT 'migrated'`)
+
+	store, err = OpenStore(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer store.Close()
 	var version int
+	var note string
 	store.db.QueryRow(`PRAGMA user_version`).Scan(&version)
-	if version != len(migrations) {
-		t.Errorf("expected version %d, got %d", len(migrations), version)
+	store.db.QueryRow(`SELECT note FROM matches`).Scan(&note)
+	if version != len(migrations) || note != "migrated" {
+		t.Errorf("expected version %d with the new column, got %d, %q", len(migrations), version, note)
 	}
 	if backups, _ := filepath.Glob(filepath.Join(dir, "ladder-v1-*.db")); len(backups) != 1 {
 		t.Errorf("expected a copy of the database before the migration, got %v", backups)
-	}
-	// Matches of ladder runs are ladder matches; those of tournaments, or
-	// played by hand, are hidden
-	if match, _ := store.Match(1); match == nil {
-		t.Error("the match of the ladder run should be kept")
-	}
-	for _, id := range []int64{2, 3} {
-		if match, _ := store.Match(id); match != nil {
-			t.Errorf("match %d should be hidden: %+v", id, match)
-		}
 	}
 
 	// A database from a newer ladder is refused

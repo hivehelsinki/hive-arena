@@ -64,17 +64,23 @@ func NewWeb(config *Config, store *Store) (*Web, error) {
 		"duration": func(a, b time.Time) string {
 			return b.Sub(a).Round(time.Second).String()
 		},
-		"score": func(s Score) string {
-			if s.Games == 0 {
+		// 1st, 2nd... (0: no place, in a void match)
+		"place": func(place int) string {
+			if place <= 0 {
 				return ""
 			}
-			return fmt.Sprintf("%.1f", s.Mean)
-		},
-		"stderr": func(s Score) string {
-			if s.Games < 2 {
-				return ""
+			suffix := "th"
+			if place%100 < 11 || place%100 > 13 {
+				switch place % 10 {
+				case 1:
+					suffix = "st"
+				case 2:
+					suffix = "nd"
+				case 3:
+					suffix = "rd"
+				}
 			}
-			return fmt.Sprintf("± %.1f", s.StdErr)
+			return fmt.Sprintf("%d%s", place, suffix)
 		},
 		"h2h": func(h HeadToHead) string {
 			if h.Games == 0 {
@@ -228,11 +234,11 @@ func (web *Web) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	web.render(w, "leaderboard", map[string]any{
-		"Ladder":   view,
-		"Board":    view.Stats,
-		"Teams":    view.Teams,
-		"Played":   played,
-		"Activity": Activity(),
+		"Ladder":     view,
+		"HeadToHead": view.HeadToHead,
+		"Teams":      view.Teams,
+		"Played":     played,
+		"Activity":   Activity(),
 	})
 }
 
@@ -392,8 +398,8 @@ func (web *Web) handleTeam(w http.ResponseWriter, r *http.Request) {
 	}
 	web.render(w, "team", map[string]any{
 		"Name": name, "State": state, "Builds": builds, "Matches": matches,
-		"Row": view.Row(name), "History": view.TeamHistory(name), "Formats": view.Formats, "H2H": view.Stats.HeadToHead[name],
-		"StatsPeriod": view.StatsPeriod, "Counts": counts[name], "Quota": settings.Quota,
+		"Row": view.Row(name), "History": view.TeamHistory(name), "Formats": view.Formats, "H2H": view.HeadToHead[name],
+		"HeadToHeadPeriod": view.HeadToHeadPeriod, "Counts": counts[name], "Quota": settings.Quota,
 	})
 }
 

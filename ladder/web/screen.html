@@ -67,7 +67,7 @@ async function nextReplay() {
 			let match = matches.find(m => m.id > lastShown) || matches[Math.floor(Math.random() * matches.length)];
 			lastShown = Math.max(lastShown, match.id);
 
-			const bots = match.bots.slice().sort((a, b) => b.points - a.points);
+			const bots = match.bots.slice().sort((a, b) => a.place - b.place);
 			document.getElementById("caption").innerHTML =
 				`Match #${match.id} <span class="dim">on ${escape(match.map)}</span> &nbsp; ` +
 				bots.map(b => `${escape(b.team)} <span class="dim">${b.flowers}</span>`).join(" &nbsp; ");

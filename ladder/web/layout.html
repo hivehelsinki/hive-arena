@@ -38,7 +38,6 @@
 <thead><tr>
 	<th>#</th><th>Team</th><th class="num">Rating</th><th class="num"><span class="nocase">μ ± σ</span></th><th class="num">Matches</th>
 	{{range .Ladder.Formats}}<th class="num" title="Rating in {{.}}">{{.Map}} <span class="dim">{{.Players}}p</span></th>{{end}}
-	<th class="num" title="Mean points per match over the last {{days .Ladder.StatsPeriod}}: 60 for first place, 0 for last">Points</th>
 	<th>Version</th>
 </tr></thead>
 <tbody>
@@ -50,7 +49,6 @@
 	<td class="num dim">{{musigma $r.Global}}</td>
 	<td class="num">{{$r.Global.Games}}</td>
 	{{range $.Ladder.Formats}}<td class="num">{{rating (index $r.PerFormat .Key)}}</td>{{end}}
-	<td class="num">{{with $r.Stats}}{{score .Score}}{{end}}</td>
 	<td class="mono">{{short $r.Global.Commit}}</td>
 </tr>
 {{else}}
@@ -69,7 +67,7 @@
 <tr>
 	<th><a href="/teams/{{$a}}">{{$a}}</a></th>
 	{{range $b := $.Teams}}
-	{{if eq $a $b}}<td class="self"></td>{{else}}{{with index (index $.Board.HeadToHead $a) $b}}<td class="{{h2hclass .}}" title="{{.Wins}} / {{.Games}}">{{h2h .}}</td>{{else}}<td></td>{{end}}{{end}}
+	{{if eq $a $b}}<td class="self"></td>{{else}}{{with index (index $.HeadToHead $a) $b}}<td class="{{h2hclass .}}" title="{{.Wins}} / {{.Games}}">{{h2h .}}</td>{{else}}<td></td>{{end}}{{end}}
 	{{end}}
 </tr>
 {{end}}
@@ -88,7 +86,7 @@
 	<td><a href="/matches/{{.ID}}">{{.ID}}</a></td>
 	<td>{{time .StartedAt}}</td>
 	<td>{{.Map}}</td>
-	<td>{{range .Bots}}<span class="result p{{.Points}} {{.Status}}" title="{{.Status}}, {{.Flowers}} flowers">{{.Team}} {{.Points}}</span> {{end}}</td>
+	<td>{{range .ByPlace}}<span class="result place{{.Place}} {{.Status}}" title="{{place .Place}}, {{.Flowers}} flowers, {{.Status}}">{{with place .Place}}<span class="place">{{.}}</span> {{end}}{{.Team}}</span> {{end}}</td>
 	<td class="num">{{if .Error}}<span class="error" title="{{.Error}}">failed</span>{{else}}{{.Turns}}{{end}}</td>
 </tr>
 {{else}}

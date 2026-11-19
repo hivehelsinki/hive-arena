@@ -16,7 +16,7 @@
 </p>
 {{end}}
 <table>
-<thead><tr><th>Seat</th><th>Team</th><th>Version</th><th class="num">Flowers</th><th class="num">Points</th><th>Status</th><th>Log</th></tr></thead>
+<thead><tr><th>Seat</th><th>Team</th><th>Version</th><th class="num">Flowers</th><th class="num">Place</th><th>Status</th><th>Log</th></tr></thead>
 <tbody>
 {{range .Bots}}
 <tr>
@@ -24,7 +24,7 @@
 	<td><a href="/teams/{{.Team}}">{{.Team}}</a></td>
 	<td class="mono">{{short .Commit}}</td>
 	<td class="num">{{.Flowers}}</td>
-	<td class="num strong">{{.Points}}</td>
+	<td class="num strong">{{place .Place}}</td>
 	<td class="status-{{.Status}}">{{.Status}}{{if ne .Status "finished"}} (exit code {{.ExitCode}}){{end}}</td>
 	<td>{{if index $.Logs .Team}}<a href="/matches/{{$.Match.ID}}/logs/{{.Team}}">output</a>{{end}}</td>
 </tr>

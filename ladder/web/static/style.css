@@ -93,7 +93,8 @@ p + table.standings tbody tr:first-child td:nth-child(2) a::after { content: " ð
 .h2h th.vertical { height: 8em; vertical-align: bottom; }
 .h2h th.vertical span { writing-mode: vertical-rl; transform: rotate(180deg); }
 .result { display: inline-block; margin-right: 0.4em; padding: 0 0.55em; border-radius: 999px; background: var(--chip); }
-.result.p60 { background: var(--accent); color: #2b1a00; }
+.result.place1 { background: var(--accent); color: #2b1a00; }
+.result .place { font-size: 0.8em; opacity: 0.7; }
 .result.crashed, .result.no-join { text-decoration: line-through; }
 .void { opacity: 0.5; }
 .button { display: inline-block; padding: 0.4em 1em; border-radius: 999px; background: var(--accent); color: #2b1a00; font-weight: 600; text-decoration: none; margin-right: 0.5em; }
