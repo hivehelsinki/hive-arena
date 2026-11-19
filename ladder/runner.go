@@ -17,14 +17,11 @@ import (
 )
 
 type RunnerConfig struct {
-	ServerImage string // image of the arena server
-	// CPU of each bot: CPUPerBot cores, or less if the bots of a match would
-	// need more than Cores in total (then Cores are split equally)
-	CPUPerBot float64
-	Cores     float64
-	Memory    string // memory limit per bot, in docker format (e.g. "256m")
-	Pids      int    // process limit per bot
-	TempDir   string // where reports are downloaded (default: the system's)
+	ServerImage string  // image of the arena server
+	CPUPerBot   float64 // CPU cores per bot (the server mostly waits while the bots think)
+	Memory      string  // memory limit per bot, in docker format (e.g. "256m")
+	Pids        int     // process limit per bot
+	TempDir     string  // where reports are downloaded (default: the system's)
 	// Memory limit of the server container, in docker format. The server
 	// keeps the whole history of the game in memory.
 	ServerMemory string
@@ -39,7 +36,6 @@ func DefaultRunnerConfig() RunnerConfig {
 	return RunnerConfig{
 		ServerImage:  "hive-arena-server",
 		CPUPerBot:    1,
-		Cores:        5.5, // a 6-core machine, keeping half a core for the server
 		Memory:       "256m",
 		Pids:         64,
 		JoinTimeout:  time.Minute,
@@ -340,14 +336,9 @@ func (run *matchRun) waitForServer(ctx context.Context) error {
 	}
 }
 
-// botCPU returns the cores each of the n bots of a match gets
-func botCPU(config RunnerConfig, n int) float64 {
-	return min(config.CPUPerBot, config.Cores/float64(n))
-}
-
 func (run *matchRun) startBot(ctx context.Context, i int) error {
 	bot := run.match.Bots[i]
-	cpus := botCPU(run.config, len(run.match.Bots))
+	cpus := run.config.CPUPerBot
 
 	_, err := docker(ctx, "run", "-d",
 		"--label="+DockerLabel,

@@ -27,7 +27,6 @@
 	"runner": {
 		"serverImage": "hive-arena-server",
 		"cpuPerBot": 1,
-		"cores": 5.5,
 		"memory": "256m",
 		"serverMemory": "512m",
 		"pids": 64,

@@ -41,7 +41,7 @@ to run while the ladder does.
       Fetch the registered teams, build and smoke-test their new versions
   ladder rebuild [-config ladder.json] <team>
       Forget the failed build of a team's current version, so it is built again
-  ladder match [-server-image IMAGE] [-cpu-per-bot N] [-cores N] [-report FILE] [-logs DIR] <map> <name>=<image>...
+  ladder match [-server-image IMAGE] [-cpu-per-bot N] [-report FILE] [-logs DIR] <map> <name>=<image>...
       Play one match in containers with the given images, and print its
       result as JSON (nothing is recorded)`)
 	os.Exit(2)
@@ -83,7 +83,6 @@ func cmdMatch(ctx context.Context, args []string) {
 	flags := flag.NewFlagSet("match", flag.ExitOnError)
 	flags.StringVar(&config.ServerImage, "server-image", config.ServerImage, "docker image of the arena server")
 	flags.Float64Var(&config.CPUPerBot, "cpu-per-bot", config.CPUPerBot, "CPU cores per bot")
-	flags.Float64Var(&config.Cores, "cores", config.Cores, "CPU cores for all the bots of the match, at most")
 	report := flags.String("report", "", "file to save the game report in")
 	logs := flags.String("logs", "", "directory to save the bot logs in")
 	flags.Parse(args)

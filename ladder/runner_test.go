@@ -228,12 +228,3 @@ func TestValidateMatch(t *testing.T) {
 		t.Error("valid match rejected")
 	}
 }
-
-func TestBotCPU(t *testing.T) {
-	config := RunnerConfig{CPUPerBot: 1, Cores: 5.5}
-	for n, want := range map[int]float64{1: 1, 2: 1, 5: 1, 6: 5.5 / 6} {
-		if got := botCPU(config, n); got != want {
-			t.Errorf("%d bots: expected %.3f cores each, got %.3f", n, want, got)
-		}
-	}
-}
