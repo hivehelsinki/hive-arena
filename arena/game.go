@@ -6,16 +6,43 @@ import (
 	"slices"
 )
 
-const (
-	INIT_FIELD_FLOWERS = 8
-	BEE_COST           = 6
-	HIVE_COST          = 12
-	WALL_COST          = 1
-	WALL_ATTACK_CHANCE = 1.0 / 6.0
-	STUN_CHANCE        = 1.0 / 2.0
-	FIELD_OF_VIEW      = 4
-	RESOURCE_TIMEOUT   = 50
-)
+// The tunable values of the game. They are part of the game state, so that
+// agents can read them.
+type Rules struct {
+	// Flowers in a field at the start, and at most
+	FieldFlowers uint `json:"fieldFlowers"`
+	// A field with flowers left regains one every this many turns, up to
+	// FieldFlowers. An emptied field stays empty. 0: fields do not regrow.
+	RegrowInterval uint `json:"regrowInterval"`
+
+	BeeCost  uint `json:"beeCost"`
+	HiveCost uint `json:"hiveCost"`
+	WallCost uint `json:"wallCost"`
+
+	// Chances that an attack destroys a wall, and stuns a bee (a stunned bee
+	// carrying a flower loses it to its attacker)
+	WallAttackChance float64 `json:"wallAttackChance"`
+	StunChance       float64 `json:"stunChance"`
+
+	// Players see the hexes this close to their hives and bees
+	FieldOfView int `json:"fieldOfView"`
+	// The game ends after this many turns (0: no limit)
+	MaxTurns uint `json:"maxTurns"`
+}
+
+func DefaultRules() Rules {
+	return Rules{
+		FieldFlowers:     8,
+		RegrowInterval:   20,
+		BeeCost:          6,
+		HiveCost:         12,
+		WallCost:         1,
+		WallAttackChance: 1.0 / 6.0,
+		StunChance:       1.0 / 2.0,
+		FieldOfView:      4,
+		MaxTurns:         1000,
+	}
+}
 
 type Entity struct {
 	Type      EntityType `json:"type"`
@@ -95,16 +122,17 @@ func (o *Order) Target() Coords {
 }
 
 type GameState struct {
-	NumPlayers         int             `json:"numPlayers"`
-	Turn               uint            `json:"turn"`
-	Hexes              map[Coords]*Hex `json:"hexes"`
-	PlayerResources    []uint          `json:"playerResources"`
-	LastResourceChange uint            `json:"lastResourceChange"`
+	NumPlayers      int             `json:"numPlayers"`
+	Turn            uint            `json:"turn"`
+	Rules           Rules           `json:"rules"`
+	Hexes           map[Coords]*Hex `json:"hexes"`
+	PlayerResources []uint          `json:"playerResources"`
 
 	Winners  []int `json:"winners,omitempty"`
 	GameOver bool  `json:"gameOver"`
 
 	stunned map[*Entity]bool
+	rng     *rand.Rand
 }
 
 var playerMappings = [][]int{
@@ -123,7 +151,14 @@ func IsValidNumPlayers(n int) bool {
 	return n >= 1 && n <= MaxPlayers
 }
 
+// NewGameState starts a game with the default rules
 func NewGameState(mapData MapData, numPlayers int) *GameState {
+	return NewGame(mapData, numPlayers, DefaultRules(), rand.Int63())
+}
+
+// NewGame starts a game. The seed decides the random outcomes of the game
+// (the order of simultaneous orders, attacks).
+func NewGame(mapData MapData, numPlayers int, rules Rules, seed int64) *GameState {
 
 	if !IsValidNumPlayers(numPlayers) {
 		return nil
@@ -131,7 +166,9 @@ func NewGameState(mapData MapData, numPlayers int) *GameState {
 
 	gs := &GameState{
 		NumPlayers: numPlayers,
+		Rules:      rules,
 		Hexes:      make(map[Coords]*Hex),
+		rng:        rand.New(rand.NewSource(seed)),
 	}
 
 	for coords, terrain := range mapData.Map {
@@ -154,7 +191,7 @@ func NewGameState(mapData MapData, numPlayers int) *GameState {
 
 	for _, hex := range gs.Hexes {
 		if hex.Terrain == FIELD {
-			hex.Resources = INIT_FIELD_FLOWERS
+			hex.Resources = rules.FieldFlowers
 		}
 	}
 
@@ -198,6 +235,11 @@ func (gs *GameState) ProcessOrders(orders [][]*Order) ([]*Order, error) {
 		}
 	}
 
+	// A state decoded from JSON has no generator yet
+	if gs.rng == nil {
+		gs.rng = rand.New(rand.NewSource(rand.Int63()))
+	}
+
 	acted := make(map[*Entity]bool)
 	gs.stunned = make(map[*Entity]bool)
 	var processed []*Order
@@ -217,7 +259,7 @@ func (gs *GameState) ProcessOrders(orders [][]*Order) ([]*Order, error) {
 
 		// Shuffle them
 
-		rand.Shuffle(len(roundOrders), func(i, j int) {
+		gs.rng.Shuffle(len(roundOrders), func(i, j int) {
 			roundOrders[i], roundOrders[j] = roundOrders[j], roundOrders[i]
 		})
 
@@ -242,6 +284,7 @@ func (gs *GameState) ProcessOrders(orders [][]*Order) ([]*Order, error) {
 	}
 
 	gs.Turn++
+	gs.regrow()
 	gs.checkEndGame()
 
 	return processed, nil
@@ -301,12 +344,19 @@ func (gs *GameState) applyAttackOrder(order *Order) {
 		return
 	}
 
-	if entity.Type == WALL && rand.Float64() < WALL_ATTACK_CHANCE {
+	if entity.Type == WALL && gs.rng.Float64() < gs.Rules.WallAttackChance {
 		gs.Hexes[order.Target()].Entity = nil
 	}
 
-	if entity.Type == BEE && rand.Float64() < STUN_CHANCE {
+	if entity.Type == BEE && gs.rng.Float64() < gs.Rules.StunChance {
 		gs.stunned[entity] = true
+		// A stunned bee loses its flower, to its attacker if it can carry it
+		if entity.HasFlower {
+			entity.HasFlower = false
+			if attacker := gs.EntityAt(order.Coords); !attacker.HasFlower {
+				attacker.HasFlower = true
+			}
+		}
 	}
 
 	order.Status = OK
@@ -316,7 +366,7 @@ func (gs *GameState) applyBuildWallOrder(order *Order) {
 	if gs.TargetIsBlocked(order) {
 		return
 	}
-	if !gs.tryToPay(order, WALL_COST) {
+	if !gs.tryToPay(order, gs.Rules.WallCost) {
 		return
 	}
 
@@ -327,7 +377,7 @@ func (gs *GameState) applyBuildWallOrder(order *Order) {
 }
 
 func (gs *GameState) applyBuildHiveOrder(order *Order) {
-	if !gs.tryToPay(order, HIVE_COST) {
+	if !gs.tryToPay(order, gs.Rules.HiveCost) {
 		return
 	}
 
@@ -345,8 +395,6 @@ func (gs *GameState) applyForageOrder(order *Order, bee *Entity) {
 			if entity != nil && entity.Type == HIVE && entity.Player == bee.Player {
 				bee.HasFlower = false
 				gs.PlayerResources[order.Player]++
-
-				gs.LastResourceChange = gs.Turn
 
 				order.Status = OK
 				return
@@ -373,7 +421,7 @@ func (gs *GameState) applySpawnOrder(order *Order) {
 	if gs.TargetIsBlocked(order) {
 		return
 	}
-	if !gs.tryToPay(order, BEE_COST) {
+	if !gs.tryToPay(order, gs.Rules.BeeCost) {
 		return
 	}
 
@@ -381,6 +429,19 @@ func (gs *GameState) applySpawnOrder(order *Order) {
 	gs.Hexes[order.Target()].Entity = bee
 
 	order.Status = OK
+}
+
+// regrow adds a flower to the fields that have flowers left, every
+// RegrowInterval turns
+func (gs *GameState) regrow() {
+	if gs.Rules.RegrowInterval == 0 || gs.Turn%gs.Rules.RegrowInterval != 0 {
+		return
+	}
+	for _, hex := range gs.Hexes {
+		if hex.Terrain == FIELD && hex.Resources > 0 && hex.Resources < gs.Rules.FieldFlowers {
+			hex.Resources++
+		}
+	}
 }
 
 func (gs *GameState) checkEndGame() {
@@ -399,9 +460,9 @@ func (gs *GameState) checkEndGame() {
 		gs.GameOver = true
 	}
 
-	// No influence change in a while
+	// Turn limit
 
-	if gs.Turn-gs.LastResourceChange > RESOURCE_TIMEOUT {
+	if gs.Rules.MaxTurns > 0 && gs.Turn >= gs.Rules.MaxTurns {
 		gs.GameOver = true
 	}
 
@@ -419,12 +480,12 @@ func (gs *GameState) checkEndGame() {
 
 func (gs *GameState) PlayerView(player int) *GameState {
 	view := &GameState{
-		NumPlayers:         gs.NumPlayers,
-		Turn:               gs.Turn,
-		Hexes:              make(map[Coords]*Hex),
-		LastResourceChange: gs.LastResourceChange,
-		Winners:            slices.Clone(gs.Winners),
-		GameOver:           gs.GameOver,
+		NumPlayers: gs.NumPlayers,
+		Turn:       gs.Turn,
+		Rules:      gs.Rules,
+		Hexes:      make(map[Coords]*Hex),
+		Winners:    slices.Clone(gs.Winners),
+		GameOver:   gs.GameOver,
 	}
 
 	var ownEntities []Coords
@@ -436,7 +497,7 @@ func (gs *GameState) PlayerView(player int) *GameState {
 
 	for coords, hex := range gs.Hexes {
 		visible := slices.ContainsFunc(ownEntities, func(entity Coords) bool {
-			return entity.Distance(coords) <= FIELD_OF_VIEW
+			return entity.Distance(coords) <= gs.Rules.FieldOfView
 		})
 		if visible {
 			view.Hexes[coords] = hex.clone()
@@ -470,12 +531,13 @@ func (gs *GameState) Clone() *GameState {
 	}
 
 	return &GameState{
-		NumPlayers:         gs.NumPlayers,
-		Turn:               gs.Turn,
-		Hexes:              hexes,
-		PlayerResources:    slices.Clone(gs.PlayerResources),
-		LastResourceChange: gs.LastResourceChange,
-		Winners:            slices.Clone(gs.Winners),
-		GameOver:           gs.GameOver,
+		NumPlayers:      gs.NumPlayers,
+		Turn:            gs.Turn,
+		Rules:           gs.Rules,
+		Hexes:           hexes,
+		PlayerResources: slices.Clone(gs.PlayerResources),
+		Winners:         slices.Clone(gs.Winners),
+		GameOver:        gs.GameOver,
+		rng:             gs.rng,
 	}
 }

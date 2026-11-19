@@ -85,8 +85,8 @@ func TestLoadMap(t *testing.T) {
 	expectEntity(t, gs, 0, 0, HIVE, 0)
 	expectEntity(t, gs, 0, 2, BEE, 0)
 
-	if gs.Hexes[Coords{0, 4}].Resources != INIT_FIELD_FLOWERS {
-		t.Errorf("expected field to start with %d flowers", INIT_FIELD_FLOWERS)
+	if gs.Hexes[Coords{0, 4}].Resources != DefaultRules().FieldFlowers {
+		t.Errorf("expected field to start with %d flowers", DefaultRules().FieldFlowers)
 	}
 }
 
@@ -261,7 +261,7 @@ func TestForageAndDrop(t *testing.T) {
 	if !gs.EntityAt(Coords{0, 4}).HasFlower {
 		t.Fatal("bee should carry a flower")
 	}
-	if gs.Hexes[Coords{0, 4}].Resources != INIT_FIELD_FLOWERS-1 {
+	if gs.Hexes[Coords{0, 4}].Resources != DefaultRules().FieldFlowers-1 {
 		t.Error("field should have lost a flower")
 	}
 
@@ -280,9 +280,6 @@ func TestForageAndDrop(t *testing.T) {
 	if gs.PlayerResources[0] != 1 {
 		t.Errorf("expected 1 flower in reserve, got %d", gs.PlayerResources[0])
 	}
-	if gs.LastResourceChange != gs.Turn-1 {
-		t.Errorf("expected last resource change on turn %d, got %d", gs.Turn-1, gs.LastResourceChange)
-	}
 }
 
 func TestSpawn(t *testing.T) {
@@ -292,7 +289,7 @@ func TestSpawn(t *testing.T) {
 	play(t, gs, tooPoor)
 	expectStatus(t, tooPoor, NOT_ENOUGH_RESOURCES)
 
-	gs.PlayerResources[0] = BEE_COST + 1
+	gs.PlayerResources[0] = DefaultRules().BeeCost + 1
 	spawn := order(SPAWN, 0, 0, SE)
 	play(t, gs, spawn)
 
@@ -310,7 +307,7 @@ func TestBuildWall(t *testing.T) {
 	play(t, gs, tooPoor)
 	expectStatus(t, tooPoor, NOT_ENOUGH_RESOURCES)
 
-	gs.PlayerResources[0] = WALL_COST
+	gs.PlayerResources[0] = DefaultRules().WallCost
 	build := order(BUILD_WALL, 0, 2, SE)
 	play(t, gs, build)
 
@@ -328,7 +325,7 @@ func TestBuildWall(t *testing.T) {
 func TestBuildHive(t *testing.T) {
 	gs := newState(t, 1, smallMap...)
 
-	gs.PlayerResources[0] = HIVE_COST
+	gs.PlayerResources[0] = DefaultRules().HiveCost
 	build := order(BUILD_HIVE, 0, 2, "")
 	play(t, gs, build)
 
@@ -377,15 +374,15 @@ func TestGameOverWhenNoFlowersLeft(t *testing.T) {
 	}
 }
 
-func TestGameOverOnResourceTimeout(t *testing.T) {
+func TestGameOverAtTheTurnLimit(t *testing.T) {
 	gs := newState(t, 2,
 		"H0  B0  F   .   .   .   B3  H3",
 	)
-
+	gs.Rules.MaxTurns = 10
 	gs.PlayerResources[0] = 3
 	gs.PlayerResources[1] = 3
 
-	for range RESOURCE_TIMEOUT {
+	for range 9 {
 		play(t, gs)
 	}
 	if gs.GameOver {
@@ -393,11 +390,106 @@ func TestGameOverOnResourceTimeout(t *testing.T) {
 	}
 
 	play(t, gs)
-	if !gs.GameOver {
-		t.Fatal("game should be over")
+	if !gs.GameOver || gs.Turn != 10 {
+		t.Fatalf("game should be over after 10 turns, at turn %d", gs.Turn)
 	}
 	if !slices.Equal(gs.Winners, []int{0, 1}) {
 		t.Errorf("expected both players to win, got %v", gs.Winners)
+	}
+}
+
+func TestFieldsRegrow(t *testing.T) {
+	gs := newState(t, 1,
+		"H0  B0  F   F   F   R",
+	)
+	gs.Rules.RegrowInterval = 5
+	full, partial, empty := Coords{0, 4}, Coords{0, 6}, Coords{0, 8}
+	gs.Hexes[partial].Resources = 3
+	gs.Hexes[empty].Resources = 0
+
+	for range 4 {
+		play(t, gs)
+	}
+	if gs.Hexes[partial].Resources != 3 {
+		t.Fatal("fields regrow every 5 turns only")
+	}
+	play(t, gs)
+	if gs.Hexes[partial].Resources != 4 {
+		t.Errorf("a field with flowers left should regrow, got %d", gs.Hexes[partial].Resources)
+	}
+	if gs.Hexes[full].Resources != gs.Rules.FieldFlowers {
+		t.Errorf("a full field stays full, got %d", gs.Hexes[full].Resources)
+	}
+	if gs.Hexes[empty].Resources != 0 {
+		t.Errorf("an emptied field should stay empty, got %d", gs.Hexes[empty].Resources)
+	}
+}
+
+func TestAttacksStealFlowers(t *testing.T) {
+	gs := newState(t, 2,
+		"H0  B0  B3  H3  F",
+	)
+	gs.Rules.StunChance = 1
+	victim := gs.EntityAt(Coords{0, 4})
+	attacker := gs.EntityAt(Coords{0, 2})
+
+	victim.HasFlower = true
+	attack := order(ATTACK, 0, 2, E)
+	play(t, gs, attack)
+	expectStatus(t, attack, OK)
+	if victim.HasFlower || !attacker.HasFlower {
+		t.Error("the attacker should take the flower")
+	}
+
+	// An attacker that already carries a flower makes the victim lose its own
+	victim.HasFlower = true
+	play(t, gs, order(ATTACK, 0, 2, E))
+	if victim.HasFlower || !attacker.HasFlower {
+		t.Error("the victim should lose its flower")
+	}
+
+	// A failed attack takes nothing
+	gs.Rules.StunChance = 0
+	attacker.HasFlower = false
+	victim.HasFlower = true
+	play(t, gs, order(ATTACK, 0, 2, E))
+	if !victim.HasFlower || attacker.HasFlower {
+		t.Error("a failed attack should take nothing")
+	}
+}
+
+func TestSeededGamesAreReproducible(t *testing.T) {
+	mapdata, err := LoadMap("../maps/tiny.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := func(seed int64) []OrderStatus {
+		gs := NewGame(mapdata, 2, DefaultRules(), seed)
+		var statuses []OrderStatus
+		for range 20 {
+			// Every bee tries every move: the shuffled order of the orders decides which succeed
+			var orders [][]*Order
+			for player := range 2 {
+				var mine []*Order
+				for coords, hex := range gs.Hexes {
+					if hex.Entity != nil && hex.Entity.Type == BEE && hex.Entity.Player == player {
+						for _, dir := range []Direction{E, W, NE, NW, SE, SW} {
+							mine = append(mine, &Order{Type: MOVE, Coords: coords, Direction: dir})
+						}
+					}
+				}
+				slices.SortFunc(mine, func(a, b *Order) int { return strings.Compare(a.Coords.String()+string(a.Direction), b.Coords.String()+string(b.Direction)) })
+				orders = append(orders, mine)
+			}
+			processed, _ := gs.ProcessOrders(orders)
+			for _, o := range processed {
+				statuses = append(statuses, o.Status)
+			}
+		}
+		return statuses
+	}
+	if !slices.Equal(run(1), run(1)) {
+		t.Error("the same seed should give the same game")
 	}
 }
 
@@ -435,7 +527,7 @@ func TestClone(t *testing.T) {
 	clone.EntityAt(Coords{0, 2}).HasFlower = true
 	clone.PlayerResources[0] = 10
 
-	if gs.Hexes[Coords{0, 4}].Resources != INIT_FIELD_FLOWERS ||
+	if gs.Hexes[Coords{0, 4}].Resources != DefaultRules().FieldFlowers ||
 		gs.EntityAt(Coords{0, 2}).HasFlower ||
 		gs.PlayerResources[0] != 0 {
 		t.Error("modifying a clone should not modify the original")
