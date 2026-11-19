@@ -1,6 +1,6 @@
 # Hive Arena ladder
 
-The ladder service: plays registered bots against each other in Docker containers, records the results, and publishes them. See [LADDER.md](../LADDER.md) for the design.
+The ladder service: plays registered bots against each other in Docker containers, records the results, and publishes them. For players: [docs/ladder.md](../docs/ladder.md) (taking part, the website and its data) and [docs/docker.md](../docs/docker.md) (the bot contract). The reasons behind its design are at the end of this page.
 
 To deploy it on a VM, or update it there: `sudo ladder/deploy/setup.sh` from the repository (see [deploy/setup.md](deploy/setup.md)).
 
@@ -61,7 +61,7 @@ A team whose bot failed (crashed or did not join) its last `maxFailures` matches
 
 Before every match, the matchmaker picks the team and format furthest below the quota (matches in the last 24 hours), and draws its opponents among the teams just above it in that format's ladder (or, for `randomShare` of the matches, among all teams). When every team has played its quota, it waits, and looks again every minute.
 
-Ratings follow OpenSkill's Plackett-Luce model (TrueSkill-style: a skill estimate μ and an uncertainty σ per team), with ties, globally and per format. Teams are ranked by μ − 3σ, so a new team starts at 0. `rating.tau` adds uncertainty before every match, so that ratings follow teams that improve; when a team's version changes, its σ is raised to at least `rating.versionSigma`. Ratings are recomputed from all the valid ladder matches every time, so they can be computed at any past time. See [LADDER.md](../LADDER.md) for the reasons.
+Ratings follow OpenSkill's Plackett-Luce model (TrueSkill-style: a skill estimate μ and an uncertainty σ per team), with ties, globally and per format. Teams are ranked by μ − 3σ, so a new team starts at 0. `rating.tau` adds uncertainty before every match, so that ratings follow teams that improve; when a team's version changes, its σ is raised to at least `rating.versionSigma`. Ratings are recomputed from all the valid ladder matches every time, so they can be computed at any past time. See "Design" below for the reasons.
 
 Matches are played one at a time. Each bot joins through the private ID of its own seat, so it always plays under its team's name. A crashed bot's seat is forfeited (the server stops waiting for its orders), so it does not slow the game down. A match that fails (timeout, server error) is recorded as void, with the error and the bots' output.
 
@@ -101,3 +101,32 @@ Replays open in the browser version of the viewer, served at `/viewer/` from `we
 - `/health`: `ok`, or the list of problems with status 503 (for monitoring)
 - `/api/status`: disk space, Docker, database, what the ladder is doing (`activity`), the matchmaker (paused, last error, matches in the last 24 hours against the quotas' demand, configuration warnings), teams with problems, registry problems
 - `/backup?token=`: a tar archive named after the time, with a consistent snapshot of the database and the build logs (not the match reports and logs, which expire), to be fetched by a backup system elsewhere. See [deploy/setup.md](deploy/setup.md).
+
+## Code
+
+One Go binary, in package `main`:
+
+- `main.go`: the commands; `config.go`: the configuration, and the `ladder` settings reloaded before every match
+- `registry.go`, `git.go`: the team registry, repository mirrors, the tag that plays; `builder.go`, `pool.go`: building and smoke-testing images, the pool of bots that play
+- `matchmaker.go`: choosing and playing matches; `ladder.go`: what it shares with the commands
+- `runner.go`, `arenaclient.go`, `docker.go`: playing one match in containers, talking to its arena server
+- `store.go`: the SQLite database and the match files; `rating.go`, `scoring.go`: ratings, places and head-to-head results; `ladderview.go`: the ladders as the website shows them
+- `web.go`, `web/`: the website and the API; `status.go`: `/health` and `/api/status`; `backup.go`: `/backup`
+- `lock_*.go`, `disk_*.go`: the data directory lock and free disk space, per platform
+
+## Design
+
+Why the ladder is the way it is.
+
+- **Teams provide a Dockerfile; staff only build and run it.** When organizers built and ran bots themselves (2019), language versions and environments were a mess; when teams ran their own bots (2025), matches needed someone present and teams typing in game names. A Dockerfile keeps environments in the teams' hands, and lets the ladder play without anyone.
+- **Staff run, read-only to the public.** No accounts, no uploads, no write routes: registration is a pull request on the registry repository, reviewed by staff. Repositories are public. Security is at "friendly competition" level: equal resources, no network beyond the match, the website restricted to the campus network; cheating is handled by people, not code.
+- **Separate from the arena server.** Every match gets a fresh arena server container and one container per bot, on a private network that cannot reach the host or the outside. The long-running public server is untouched and stays the one used for live events.
+- **One match at a time.** The machine has 2 cores, and matches run as fast as the bots answer (`--dev`): nothing else competes for the CPU, and the cores are split equally between the bots of a match (`--cpus = cores / n`). The share differs between formats but is the same for every bot of a match, which is what fairness needs. If the quotas get too big for the machine, the answer is a bigger machine or smaller quotas, never unequal shares.
+- **A continuous ladder, not scheduled rounds.** The first version played full round-robins twice a day: the number of lineups grows combinatorially with the teams (10 teams: 585 lineups per round over four formats), and teams waited up to 12 hours to see a new version play. Now matches are challenges near each team's position, within a daily quota per format. Every match a team plays counts in its quota, whether it challenged or was challenged: top teams are challenged more, so they start fewer challenges themselves, and every team plays about the same number of matches. Since challenges are automatic, no team chooses its opponents or when it plays.
+- **Nothing kept in memory.** Every decision comes from the match history and the configuration file, both read before each match: a restart resumes where the ladder left off, and the settings can change while it runs.
+- **Ratings: OpenSkill's Plackett-Luce model**, a closed-form TrueSkill-style update for free-for-all matches of any number of players, with ties (TrueSkill itself needs an iterative approximation beyond 2 players). Among OpenSkill's models, it was the most accurate in a simulation of 10 teams with noisy results: 94-96% of the pairs of teams in the right order after 20 matches per team, 97-99% after 50, all of them after 200. The "full" pairwise models let a newcomer reach the top faster, but by overreacting: one 6-player match could drop a rating's uncertainty from 8 to 0.1 and freeze it. Teams are ranked by μ − 3σ, so a new team starts at the bottom and a strong one climbs within 25-45 matches. Bots change in jumps, not gradually, hence the uncertainty raised when a version changes.
+- **No points.** The first version scored mean points per match (60 for first place, 0 for last). With challenge matchmaking, points depend on who a team plays (a strong team mostly meets strong teams), and they contradicted the ladder order: only ratings rank, places and head-to-head results are shown as they are.
+- **Results forever, replays for a while.** Reports hold every turn's full state, so they are large. Results are tiny and kept forever; each team keeps the replays and outputs of its last 100 matches, which bounds the disk by the number of teams while every team always has recent replays to study. Backups hold the database, not the replays.
+- **Durability.** A match is recorded in one transaction as soon as it ends, its files synced to disk before the transaction that refers to them; SQLite runs in WAL mode with full synchronization. A crash, a restart or a power loss loses at most the match being played.
+- **Live events are separate.** The ladder plays nothing but ladder matches. Live events and the final are run by staff on the regular arena server, seeded with `ladder leaderboard -at <time>`.
+

@@ -31,6 +31,12 @@ The version is also shown at the bottom of every page of the website, and by `la
 
 Being in the `docker` group is equivalent to root access on the machine: the VM should be dedicated to the ladder.
 
+## Before opening registration
+
+- Check with the campus IT that the VM may run Docker, that the website is restricted to the campus network, and under which address it will be reachable.
+- Dry run with the example agents and a few volunteer bots.
+- Measure how long real matches take (`/api/status` shows the matches of the last 24 hours and the time they took, against what the quotas need), and adjust the quota: 20 matches per format per day is a starting guess. For 10 teams, matches of 15 seconds to 2 minutes make 1 to 7 hours of play a day.
+
 ## Day to day
 
 - Logs: `journalctl -u hive-ladder -f`

@@ -4,6 +4,19 @@ The ladder plays the registered bots against each other all day, on random maps,
 
 How bots are built and run: [docker.md](docker.md). The rules of the game: [rules.md](rules.md).
 
+## Taking part
+
+- **Register with a pull request** on the registry repository, adding your team to its `teams.json`:
+
+  ```json
+  { "name": "SuperTeam", "repo": "https://github.com/someone/superteam-bot", "members": ["alice", "bob"] }
+  ```
+
+  Staff review and merge it; the ladder picks it up within about 15 minutes. Teams have at most 5 members. Repositories are public, with an `https://` URL: everyone can read everyone's bot.
+- **Submit a version by pushing a tag** on a commit of your `main` branch: the most recent tag (by commit date) among those on `main` plays. Tags elsewhere are ignored, and moving or deleting a tag changes nothing once its commit is built.
+- **A new team starts at the bottom** of the ladder, and climbs as it wins. Matches are automatic: teams are challenged by, and challenge, the teams near them on the ladder, every day. A new version keeps the team's rating, but makes it more uncertain, so that it can move quickly.
+- **A version that keeps failing** (crashing or not joining) in its last matches is left out until you push a new tag. A version that does not build or does not pass the smoke test never plays: your previous version keeps playing, and your team's page shows why.
+
 ## What is kept
 
 - **Results are kept forever**: every match, its players, their places and flowers.
@@ -53,7 +66,7 @@ All routes are `GET`, and answer JSON unless said otherwise.
 ### Replays and outputs
 
 - `/matches/<id>/report.json`: the replay, in the same format as the reports of the arena server: the full state at every turn, the orders, and the result. Open it with the viewer: `go run ./viewer --file report.json`. Large: ask for it compressed (`Accept-Encoding: gzip`, as browsers and `curl --compressed` do).
-- `/matches/<id>/logs/<team>`: what the team's bot printed during the match (text, the last MB at most).
+- `/matches/<id>/logs/<team>`: what the team's bot printed during the match (text, the last 256 kB at most).
 
 ### The ladder
 
