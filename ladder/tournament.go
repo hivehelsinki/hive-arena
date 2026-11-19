@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"fmt"
 	"log"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"runtime/debug"
 	"slices"
 	"strings"

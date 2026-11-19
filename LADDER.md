@@ -206,7 +206,7 @@ Access is restricted to the campus network at the network level, as for the aren
 
 ## Live events and the big screen
 
-The ladder runs continuously during the competition week. For the end-of-week live event, the existing flow is kept: matches are played game by game on the regular server, with the teams' own bots, for show. The ladder helps with it: a **tournament mode** (`ladder tournament`) plays a one-off round-robin among chosen teams with its own formats, on the ladder machine, spawning matches the same way. It is recorded as a tournament, shown on the website, and not counted in the ratings. It runs inside the service (staff pause the ladder from the configuration, and start the tournament), so the two never compete for the machine. **The final tournament is run by staff with the top N of the global ladder at a given time** (`--top 8 --at "2026-12-04 16:00"`): ratings at a past time are those of the matches played before it, and the versions that played them are pinned for the tournament.
+The ladder runs continuously during the competition week. For the end-of-week live event, the existing flow is kept: matches are played game by game on the regular server, with the teams' own bots, for show. The ladder helps with it: a **tournament mode** (`ladder tournament`) plays a one-off round-robin among chosen teams with its own formats, on the ladder machine, spawning matches the same way. It is recorded as a tournament, shown on the website, and not counted in the ratings. The service plays it between two ladder matches (the command leaves the request in the data directory), so the two never compete for the machine; staff can pause the ladder from the configuration around it. **The final tournament is run by staff with the top N of the global ladder at a given time** (`-top 8 -at "2026-12-04 16:00"`): ratings at a past time are those of the matches played before it, and each team plays with the version of its last match before then.
 
 The **big-screen page** (`/screen`) shows the leaderboard next to the replays of the latest matches, autoplayed one after the other; a lunchtime tournament fills it with fresh matches. A true live view would need the ladder to relay the state of its private match servers to browsers; replays of matches that just ended are much simpler and look the same on a screen.
 
@@ -252,14 +252,14 @@ All the steps of the plan are implemented, on the `server-ladder-support` branch
 9. **Deployment**: `ladder/deploy/setup.sh` sets up or updates everything and restarts the service, then checks that it runs the pulled commit (see [ladder/deploy/setup.md](ladder/deploy/setup.md)). To do on the VM: dry run with the example bots and a few volunteer bots, then open registration.
 10. **Hardening**, after a review of security, reliability and maintainability: reserved seats, bounded logs, void matches, retried infrastructure failures, registry fallbacks, scheduler fixes, schema migrations, isolation of bots from the host, builds between runs. See the commit history for details.
 
-**Next: the continuous ladder** (this plan's Matchmaking and Rating sections replace the scheduled runs), one commit per step:
+**The continuous ladder** (the Matchmaking and Rating sections replace the scheduled runs of the first version), one commit per step:
 
-11. **Ratings** (`ladder/rating.go`): the Plackett-Luce update with ties, τ and the version bump, replay over the history, global and per format; tested against reference values from the `openskill` Python library.
-12. **Store**: matches outside runs, with the server image and ladder revision; counts per team and format over the last 24 hours; replay retention and pruning when disk is low. Runs stay only for tournaments.
-13. **Matchmaker** (replaces `ladder/scheduler.go`): quotas, challenge windows, random matches, builds every 15 minutes between matches, the configuration re-read before each match, `paused`.
-14. **Website and status**: the ladders, rating history, quota and capacity, expired replays.
-15. **Tournament from the ladder**: `--top N --at <time>`, run inside the service while paused.
-16. **Cleanup**: remove run windows and schedules from the configuration, the code, the docs and the setup script. Defaults are tuned after measuring match durations with realistic bots.
+11. **Ratings** (`ladder/rating.go`): the Plackett-Luce update with ties, τ and the version bump, replayed over the history, globally and per format; it matches the `openskill` Python library to 1e-8.
+12. **Store**: match kinds (ladder, tournament, manual) and what played each match; matches per team and format over the last 24 hours; replay retention, and the oldest files deleted when disk space is low. Backups contain the database and build logs only.
+13. **Matchmaker** (`ladder/matchmaker.go`) and **website**: quotas, challenge windows, random matches, builds every 15 minutes between matches, the `ladder` settings re-read before each match, `paused`; the global and per-format ladders, head-to-head and mean points over a period, quotas on team pages, expired replays, tournaments; the status reports the matchmaker and the quotas' demand.
+14. **Tournaments from the ladder**: `ladder tournament -top N -at <time>`, with the versions the teams had then. While the service runs, the command queues the tournament, and the service plays it after its current match. Runs remain only for tournaments.
+
+Not done yet: a chart of each team's rating over time (the ratings at any past time can be computed); defaults tuned on measured match durations with realistic bots.
 
 The game review happens after this work.
 
@@ -269,6 +269,7 @@ The game review happens after this work.
 - **Pacing.** Ladder servers run with `--dev`, with the standard turn timeout for all agents.
 - **Tags.** The latest tag on the `main` branch of a team's repo.
 - **Retention.** Results are kept forever; replays and logs for the last 100 matches of each team (see "Recording").
+- **Lock.** Only one process plays matches with a data directory (the service, or a debugging command), through a lock held for the life of the process.
 - **Hosting.** A campus VM with 2 virtual cores; see Running a match: matches run one at a time, never in parallel, so every bot gets the same CPU.
 - **Scale.** About 10 teams. With N = 20 matches per format per day, about 210 matches a day.
 - **Ranking.** TrueSkill-style ratings (OpenSkill Plackett-Luce), ranked by μ − 3σ, σ partly reset on a new version; the final is a tournament among the top N, run by staff.
