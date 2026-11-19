@@ -100,6 +100,19 @@ func (l *Ladder) Serve(ctx context.Context, wake <-chan struct{}) error {
 		}
 		l.freeDisk()
 
+		// A tournament requested by staff, even when paused
+		if request, err := takeTournamentRequest(l.Config.DataDir); err != nil {
+			setLastError(fmt.Sprintf("tournament: %s", err))
+		} else if request != nil && l.TournamentBots != nil {
+			SetActivity(fmt.Sprintf("tournament %q", request.Name))
+			if id, err := l.PlayTournament(ctx, *request); err != nil {
+				setLastError(fmt.Sprintf("tournament %q: %s", request.Name, err))
+			} else {
+				log.Printf("Tournament %q played: run %d", request.Name, id)
+			}
+			continue
+		}
+
 		if settings.Paused {
 			SetActivity("paused")
 			wait(idleWait)

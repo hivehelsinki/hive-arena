@@ -74,7 +74,7 @@ func TestWebPages(t *testing.T) {
 	get("/matches/"+id(newer), 200, "Watch the replay")
 
 	// Tournaments are listed, but not counted in the ladder
-	tournament, _ := store.CreateRun("tournament", TournamentConfig{Name: "Lunch cup"}, []Bot{a, c})
+	tournament, _ := store.CreateRun("tournament", TournamentRequest{Name: "Lunch cup"}, []Bot{a, c})
 	store.RecordMatch(MatchInfo{Kind: TournamentMatch, RunID: tournament}, fakeResult("m", []Bot{a, c}, []uint{0, 9}, []BotStatus{Finished, Finished}))
 	store.FinishRun(tournament, RunComplete)
 	get("/runs", 200, "Lunch cup")

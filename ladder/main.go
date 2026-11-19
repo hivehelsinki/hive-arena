@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -38,10 +37,15 @@ they play matches or build images: they refuse to run while the ladder does.
       Run the website only
   ladder leaderboard [-config ladder.json]
       Print the current global ladder
-  ladder tournament [-config ladder.json] -formats <map:players,...> [-repeats N] [-teams a,b,...] [-name NAME]
-      Play a one-off round-robin now with its own formats, among the
-      current bots (all of them, or the given teams). It is shown with the
-      runs on the website, and does not count for the leaderboard.
+  ladder tournament [-config ladder.json] -formats <map:players,...> [-repeats N] [-name NAME]
+                    [-teams a,b,... | -top N [-at "2006-01-02 15:04"]]
+      Play a one-off round-robin with its own formats, among the current
+      bots (all of them, or the given teams), or among the top N teams of
+      the global ladder (now, or at the given time in the configured time
+      zone) with the versions they had then. When the ladder service runs,
+      it plays the tournament after its current match; otherwise, this
+      command plays it. It is shown with the tournaments on the website,
+      and is not rated.
   ladder build [-config ladder.json]
       Fetch the registered teams, build and smoke-test their new versions
   ladder rebuild [-config ladder.json] <team>
@@ -209,6 +213,11 @@ func openLadderWithFlags(flags *flag.FlagSet, args []string) (*Ladder, *flag.Fla
 		pool.MaxFailures = ladder.Settings.Get().MaxFailures
 		return pool.Resolve(ctx)
 	}
+	ladder.TournamentBots = func(ctx context.Context, request TournamentRequest) ([]Bot, error) {
+		settings := ladder.Settings.Get()
+		pool.MaxFailures = settings.MaxFailures
+		return pool.TournamentBots(ctx, request, settings.Rating)
+	}
 	return ladder, flags
 }
 
@@ -315,13 +324,6 @@ func cmdRebuild(args []string) {
 	fmt.Printf("Forgot build %d (%s, %s): it will be built again at the next build check\n", builds[0].ID, builds[0].Tag, builds[0].Status)
 }
 
-// Tournament configuration, recorded with the run
-type TournamentConfig struct {
-	Name    string   `json:"name"`
-	Formats []Format `json:"formats"`
-	Repeats int      `json:"repeats"`
-}
-
 func parseFormats(s string) ([]Format, error) {
 	var formats []Format
 	for _, part := range strings.Split(s, ",") {
@@ -340,39 +342,50 @@ func cmdTournament(ctx context.Context, args []string) {
 	formatsFlag := flags.String("formats", "", "formats, as map:players separated by commas")
 	repeats := flags.Int("repeats", 1, "times each lineup is played")
 	teamsFlag := flags.String("teams", "", "teams taking part, separated by commas (default: all current bots)")
+	top := flags.Int("top", 0, "the first N teams of the global ladder take part, with the version they had (see -at)")
+	at := flags.String("at", "", `with -top: the ladder at this time ("2006-01-02 15:04", default: now)`)
 	name := flags.String("name", "Tournament", "name of the tournament")
 
 	ladder, _ := openLadderWithFlags(flags, args)
-	mustLock(ladder)
 	defer ladder.Store.Close()
 
 	formats, err := parseFormats(*formatsFlag)
-	if err != nil || *repeats < 1 {
-		log.Fatalf("invalid formats or repeats: %v", err)
-	}
-	if err := RemoveLeftovers(ctx); err != nil {
-		log.Fatal(err)
-	}
-
-	bots, err := ladder.Pool(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
-	pool := bots
+	request := TournamentRequest{Name: *name, Formats: formats, Repeats: *repeats, Top: *top}
 	if *teamsFlag != "" {
-		var selected []Bot
 		for _, team := range strings.Split(*teamsFlag, ",") {
-			i := slices.IndexFunc(pool, func(b Bot) bool { return b.Name == strings.TrimSpace(team) })
-			if i < 0 {
-				log.Fatalf("no current bot for team %q", team)
-			}
-			selected = append(selected, pool[i])
+			request.Teams = append(request.Teams, strings.TrimSpace(team))
 		}
-		pool = selected
+	}
+	if *at != "" {
+		loc, _ := ladder.Config.Location()
+		request.At, err = time.ParseInLocation("2006-01-02 15:04", *at, loc)
+		if err != nil || *top == 0 {
+			log.Fatalf("invalid -at %q (expected \"2006-01-02 15:04\", with -top)", *at)
+		}
+	} else if *top > 0 {
+		request.At = time.Now()
+	}
+	if err := request.validate(ladder.Config); err != nil {
+		log.Fatal(err)
 	}
 
-	config := TournamentConfig{Name: *name, Formats: formats, Repeats: *repeats}
-	runID, err := ladder.Play(ctx, "tournament", config, pool, formats, *repeats, time.Now().Add(24*time.Hour))
+	// The service plays it after its current match
+	if err := lockDataDir(ladder.Config.DataDir); err != nil {
+		if err := QueueTournament(ladder.Config.DataDir, request); err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("The ladder service will play the tournament after its current match.")
+		fmt.Println("Follow it on the website (Tournaments), or in the service's logs.")
+		return
+	}
+
+	if err := RemoveLeftovers(ctx); err != nil {
+		log.Fatal(err)
+	}
+	runID, err := ladder.PlayTournament(ctx, request)
 	if err != nil {
 		log.Fatal(err)
 	}

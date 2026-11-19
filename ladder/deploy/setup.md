@@ -39,7 +39,9 @@ Being in the `docker` group is equivalent to root access on the machine: the VM 
 - Build new versions now: `systemctl kill -s USR1 hive-ladder`
 - A team's build failed for a transient reason (e.g. network): `sudo -u ladder ladder/ladder rebuild -config ladder.json <team>` (safe while the service runs)
 
-The other commands (`ladder/ladder help`) are for debugging and testing. `tournament` and `build` play matches or build images: they refuse to start while the service runs (stop it first: `systemctl stop hive-ladder`). Run them as the `ladder` user (`sudo -u ladder ...`), so that the files they write in the data directory belong to it.
+- A tournament, for instance the final among the top 8 of the ladder at the deadline: `sudo -u ladder ladder/ladder tournament -config ladder.json -formats balanced:4,tiny:2 -repeats 5 -top 8 -at "2026-12-04 16:00" -name "Final"`. The service plays it after its current match (pause the ladder first, `"paused": true`, if no ladder match should follow it before you look at the results).
+
+The other commands (`ladder/ladder help`) are for debugging and testing. `build` builds images: it refuses to start while the service runs (stop it first: `systemctl stop hive-ladder`). Run commands as the `ladder` user (`sudo -u ladder ...`), so that the files they write in the data directory belong to it.
 
 ## Network access
 

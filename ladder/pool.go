@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"slices"
 	"time"
 )
 
@@ -73,6 +74,55 @@ func leaveOutFailing(store *Store, maxFailures int, states []TeamState) ([]Bot, 
 				log.Printf("Team %s: %s", state.Team.Name, state.LeftOut)
 				continue
 			}
+		}
+		bots = append(bots, *state.Bot)
+	}
+	return bots, nil
+}
+
+// TournamentBots returns the bots of a tournament: the current bots of the
+// requested teams (all by default), or the top teams of the global ladder at
+// the requested time, with the version each had then (built again if needed)
+func (p *PoolResolver) TournamentBots(ctx context.Context, request TournamentRequest, params RatingParams) ([]Bot, error) {
+	if request.Top == 0 {
+		bots, err := p.Resolve(ctx)
+		if err != nil || len(request.Teams) == 0 {
+			return bots, err
+		}
+		var selected []Bot
+		for _, team := range request.Teams {
+			i := slices.IndexFunc(bots, func(b Bot) bool { return b.Name == team })
+			if i < 0 {
+				return nil, fmt.Errorf("team %s has no current bot", team)
+			}
+			selected = append(selected, bots[i])
+		}
+		return selected, nil
+	}
+
+	top, err := TopTeams(p.Store, params, request.Top, request.At)
+	if err != nil {
+		return nil, err
+	}
+	teams, _, err := LoadTeams(ctx, p.Registry, p.DataDir)
+	if err != nil {
+		return nil, fmt.Errorf("reading the registry: %w", err)
+	}
+	var pinned []Team
+	for _, t := range top {
+		i := slices.IndexFunc(teams, func(team Team) bool { return team.Name == t.Team })
+		if i < 0 {
+			return nil, fmt.Errorf("team %s is no longer registered", t.Team)
+		}
+		team := teams[i]
+		team.Ref = t.Commit
+		pinned = append(pinned, team)
+	}
+	_, states := p.Builder.Pool(ctx, pinned)
+	var bots []Bot
+	for i, state := range states {
+		if state.Bot == nil || state.Bot.Commit != top[i].Commit {
+			return nil, fmt.Errorf("team %s: version %s is not available: %s", top[i].Team, top[i].Commit, state.Error)
 		}
 		bots = append(bots, *state.Bot)
 	}

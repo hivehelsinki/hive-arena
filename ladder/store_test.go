@@ -45,53 +45,39 @@ func fakeResult(mapname string, bots []Bot, flowers []uint, statuses []BotStatus
 	return result
 }
 
-func TestStoreRunsAndLeaderboard(t *testing.T) {
+func TestStoreRunsAndMatches(t *testing.T) {
 	store := newTestStore(t)
 
 	a := Bot{Name: "a", Image: "img-a", Commit: "c1"}
 	b := Bot{Name: "b", Image: "img-b", Commit: "c2"}
 	c := Bot{Name: "c", Image: "img-c", Commit: "c3"}
-
 	ok := []BotStatus{Finished, Finished, Finished}
 
-	// An old run, outside of the window
-	old, _ := store.CreateRun("ladder", map[string]any{"repeats": 1}, []Bot{a, b, c})
-	store.RecordMatch(MatchInfo{Kind: LadderMatch, RunID: old}, fakeResult("m", []Bot{a, b, c}, []uint{0, 0, 9}, ok))
-	store.FinishRun(old, RunComplete)
-
-	run1, err := store.CreateRun("ladder", map[string]any{"repeats": 1}, []Bot{a, b, c})
+	run1, err := store.CreateRun("tournament", map[string]any{"repeats": 1}, []Bot{a, b, c})
 	if err != nil {
 		t.Fatal(err)
 	}
-	m1, err := store.RecordMatch(MatchInfo{Kind: LadderMatch, RunID: run1}, fakeResult("m", []Bot{a, b, c}, []uint{5, 3, 0}, ok))
+	info := MatchInfo{Kind: TournamentMatch, RunID: run1}
+	m1, err := store.RecordMatch(info, fakeResult("m", []Bot{a, b, c}, []uint{5, 3, 0}, ok))
 	if err != nil {
 		t.Fatal(err)
 	}
 	store.FinishRun(run1, RunComplete)
 
-	run2, _ := store.CreateRun("ladder", map[string]any{"repeats": 1}, []Bot{a, b, c})
-	store.RecordMatch(MatchInfo{Kind: LadderMatch, RunID: run2}, fakeResult("m", []Bot{a, b, c}, []uint{5, 3, 9}, []BotStatus{Finished, Finished, Crashed}))
-	store.FinishRun(run2, RunIncomplete)
+	run2, _ := store.CreateRun("tournament", nil, []Bot{a, b, c})
+	store.RecordMatch(MatchInfo{Kind: TournamentMatch, RunID: run2}, fakeResult("m", []Bot{a, b, c}, []uint{5, 3, 9}, []BotStatus{Finished, Finished, Crashed}))
 
-	// Still running: not counted
-	run3, _ := store.CreateRun("ladder", nil, []Bot{a, b, c})
-	store.RecordMatch(MatchInfo{Kind: LadderMatch, RunID: run3}, fakeResult("m", []Bot{a, b, c}, []uint{0, 0, 9}, ok))
-
-	board, runs, err := store.Leaderboard(2)
+	// Results of a run: c crashed, so it is last despite its flowers
+	results, err := store.Results([]int64{run2})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(runs) != 2 || runs[0].ID != run2 || runs[1].ID != run1 || len(runs[0].Bots) != 3 {
-		t.Fatalf("unexpected runs in the window: %+v", runs)
+	points := map[string]int{}
+	for _, r := range results {
+		points[r.Team] = r.Points
 	}
-
-	// a: 60, 60 / b: 30, 30 / c: 0 (last), 0 (crashed)
-	means := map[string]float64{}
-	for _, s := range board.Standings {
-		means[s.Team] = s.Score.Mean
-	}
-	if means["a"] != 60 || means["b"] != 30 || means["c"] != 0 || board.Standings[0].Team != "a" {
-		t.Errorf("unexpected standings: %+v", board.Standings)
+	if points["a"] != 60 || points["b"] != 30 || points["c"] != 0 {
+		t.Errorf("unexpected points: %v", points)
 	}
 
 	// Match details and files
@@ -111,17 +97,10 @@ func TestStoreRunsAndLeaderboard(t *testing.T) {
 		t.Errorf("unexpected log: %s, %v", log, err)
 	}
 
-	// Void matches are not counted, and a run without counted matches
-	// leaves its place in the window to the previous one
+	// Void matches are not counted
 	store.SetVoid(m1, true, "test")
-	board, runs, _ = store.Leaderboard(2)
-	if len(runs) != 2 || runs[0].ID != run2 || runs[1].ID != old {
-		t.Errorf("unexpected runs in the window: %+v", runs)
-	}
-	for _, s := range board.Standings {
-		if s.Score.Games != 2 {
-			t.Errorf("expected the matches of runs %d and %d: %+v", run2, old, s)
-		}
+	if results, _ := store.Results([]int64{run1}); len(results) != 0 {
+		t.Errorf("a void match should not count: %+v", results)
 	}
 
 	// Filters
@@ -134,8 +113,8 @@ func TestStoreRunsAndLeaderboard(t *testing.T) {
 
 	// Interrupted runs
 	store.MarkInterruptedRuns()
-	if run, _ := store.Run(run3); run.Status != RunIncomplete || run.EndedAt == nil {
-		t.Errorf("expected the running run to be marked incomplete: %+v", run)
+	if run, _ := store.Run(run2); run.Status != RunIncomplete || run.EndedAt == nil {
+		t.Errorf("the running run should be marked incomplete: %+v", run)
 	}
 }
 

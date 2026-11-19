@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"fmt"
 	"log"
 	"math/rand"
@@ -127,6 +130,8 @@ type Ladder struct {
 	// Returns the current bot of each registered team, building new versions
 	Pool func(ctx context.Context) ([]Bot, error)
 	Rand *rand.Rand
+	// Returns the bots of a tournament (see PoolResolver.TournamentBots)
+	TournamentBots func(ctx context.Context, request TournamentRequest) ([]Bot, error)
 	// Removes the containers and networks left by a previous process (nil:
 	// none, as in tests, which must not touch the real ones)
 	RemoveLeftovers func(ctx context.Context) error
@@ -247,4 +252,103 @@ func botNames(bots []Bot) string {
 		names = append(names, bot.Name)
 	}
 	return strings.Join(names, ", ")
+}
+
+// A tournament requested by staff: a one-off round-robin among the current
+// bots, or among the top teams of the global ladder at some time, with the
+// versions they had then. It is recorded with the run.
+type TournamentRequest struct {
+	Name    string   `json:"name"`
+	Formats []Format `json:"formats"`
+	Repeats int      `json:"repeats"`
+	// The teams taking part (default: all the current bots)
+	Teams []string `json:"teams,omitempty"`
+	// Or the first Top teams of the global ladder at the given time (default:
+	// now), playing with the version of their last match before then
+	Top int       `json:"top,omitempty"`
+	At  time.Time `json:"at,omitzero"`
+}
+
+func (r *TournamentRequest) validate(config *Config) error {
+	if len(r.Formats) == 0 || r.Repeats < 1 {
+		return fmt.Errorf("a tournament needs formats, and repeats of at least 1")
+	}
+	for _, f := range r.Formats {
+		if f.Players < 2 || f.Players > 6 {
+			return fmt.Errorf("invalid format %s", f)
+		}
+		if err := config.checkMap(f.Map); err != nil {
+			return err
+		}
+	}
+	if r.Top < 0 || r.Top == 1 || (r.Top > 0 && len(r.Teams) > 0) {
+		return fmt.Errorf("top must be at least 2, and cannot be combined with a list of teams")
+	}
+	return nil
+}
+
+// TopTeams returns the first n teams of the global ladder with the matches
+// that ended before a time (all of them if zero)
+func TopTeams(store *Store, params RatingParams, n int, at time.Time) ([]TeamRating, error) {
+	matches, err := store.RatedMatches(at)
+	if err != nil {
+		return nil, err
+	}
+	standings := ComputeRatings(params, matches).Global.Standings()
+	if len(standings) < n {
+		return nil, fmt.Errorf("the ladder has %d teams, fewer than %d", len(standings), n)
+	}
+	return standings[:n], nil
+}
+
+// The file where a tournament request waits for the ladder service
+func tournamentRequestPath(dataDir string) string {
+	return filepath.Join(dataDir, "tournament-request.json")
+}
+
+// QueueTournament asks the ladder service to play a tournament after its
+// current match
+func QueueTournament(dataDir string, request TournamentRequest) error {
+	if _, err := os.Stat(tournamentRequestPath(dataDir)); err == nil {
+		return fmt.Errorf("another tournament is waiting to be played (%s)", tournamentRequestPath(dataDir))
+	}
+	data, err := json.MarshalIndent(request, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeFileDurably(tournamentRequestPath(dataDir), data)
+}
+
+// takeTournamentRequest returns the waiting tournament request, if any, and
+// removes it: a tournament interrupted by a restart is not played again
+func takeTournamentRequest(dataDir string) (*TournamentRequest, error) {
+	path := tournamentRequestPath(dataDir)
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := os.Remove(path); err != nil {
+		return nil, err
+	}
+	var request TournamentRequest
+	if err := json.Unmarshal(data, &request); err != nil {
+		return nil, fmt.Errorf("invalid tournament request: %w", err)
+	}
+	return &request, nil
+}
+
+// PlayTournament resolves the bots of a tournament, and plays it
+func (l *Ladder) PlayTournament(ctx context.Context, request TournamentRequest) (int64, error) {
+	if err := request.validate(l.Config); err != nil {
+		return 0, err
+	}
+	bots, err := l.TournamentBots(ctx, request)
+	if err != nil {
+		return 0, err
+	}
+	log.Printf("Tournament %q: %s", request.Name, botNames(bots))
+	return l.Play(ctx, "tournament", request, bots, request.Formats, request.Repeats, time.Now().Add(24*time.Hour))
 }

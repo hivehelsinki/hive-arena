@@ -10,11 +10,11 @@ Copy [ladder.example.json](ladder.example.json) to `ladder.json` and adjust it, 
 
 Everything is derived from the recorded matches and the configuration: after a restart, the ladder resumes where it left off (the match being played when it stopped is lost).
 
-The other commands are for debugging and testing (`ladder help` lists them). `tournament` and `build` play matches or build images: they take a lock on the data directory, and refuse to start while the ladder service runs.
+The other commands are for debugging and testing (`ladder help` lists them), except `tournament`. `build` builds images: it takes a lock on the data directory, and refuses to start while the ladder service runs.
 
 - `go run ./ladder web`: runs the website only
 - `go run ./ladder leaderboard`: prints the global ladder
-- `go run ./ladder tournament -formats balanced:4,tiny:2 [-repeats N] [-teams a,b,c] [-name "Lunch cup"]`: plays a one-off round-robin now, with its own formats, among the current bots (all of them, or the given teams). It appears with the tournaments on the website, and is not rated.
+- `go run ./ladder tournament -formats balanced:4,tiny:2 [-repeats N] [-name "Lunch cup"] [-teams a,b,c | -top N [-at "2026-12-04 16:00"]]`: plays a one-off round-robin with its own formats, among the current bots (all of them, or the given teams), or among the first N teams of the global ladder (now, or at the given time in the configured `timezone`), each with the version of its last match before then. When the ladder service runs, it plays the tournament after its current match (the request waits in `tournament-request.json` in the data directory), even when paused; otherwise the command plays it. It appears with the tournaments on the website, and is not rated.
 - `go run ./ladder build`: fetches the registered teams, builds and smoke-tests their new versions (also done every `build.interval` by the ladder)
 - `go run ./ladder rebuild <team>`: forgets the failed build of a team's current version, so that it is built again (for instance after a network failure during the build)
 - `go run ./ladder match`: plays one match with the given images, without recording anything (see below)

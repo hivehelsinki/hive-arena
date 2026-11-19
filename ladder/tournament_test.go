@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -113,7 +115,7 @@ func newTestLadder(t *testing.T, teams []Bot, player MatchPlayer) *Ladder {
 }
 
 func playTournament(ladder *Ladder, pool []Bot, deadline time.Time) (int64, error) {
-	return ladder.Play(context.Background(), "tournament", TournamentConfig{Name: "test"}, pool, []Format{{"m", 2}}, 2, deadline)
+	return ladder.Play(context.Background(), "tournament", TournamentRequest{Name: "test"}, pool, []Format{{"m", 2}}, 2, deadline)
 }
 
 func TestTournament(t *testing.T) {
@@ -249,5 +251,86 @@ func TestPlanRunSamplesLargePools(t *testing.T) {
 	}
 	if binomial(6, 2) != 15 || binomial(40, 6) != 3838380 {
 		t.Error("wrong binomial")
+	}
+}
+
+func TestTopTeams(t *testing.T) {
+	store := newTestStore(t)
+	bots := testBots(3)
+	// bot2 beats bot1 beats bot0
+	for range 5 {
+		store.RecordMatch(MatchInfo{Kind: LadderMatch}, fakeResult("m", bots, []uint{1, 2, 3}, []BotStatus{Finished, Finished, Finished}))
+	}
+	top, err := TopTeams(store, DefaultRatingParams(), 2, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(top) != 2 || top[0].Team != "bot2" || top[1].Team != "bot1" || top[0].Commit != "c" {
+		t.Errorf("unexpected top teams: %+v", top)
+	}
+	if _, err := TopTeams(store, DefaultRatingParams(), 4, time.Time{}); err == nil {
+		t.Error("expected an error with more teams than the ladder has")
+	}
+	// The ladder as it was before these matches: empty
+	if _, err := TopTeams(store, DefaultRatingParams(), 2, time.Now().Add(-time.Hour)); err == nil {
+		t.Error("expected an error for a time before the matches")
+	}
+}
+
+func TestServePlaysQueuedTournaments(t *testing.T) {
+	ladder := newTestLadder(t, testBots(3), &fakePlayer{})
+	ladder.Config.DataDir = t.TempDir()
+	ladder.Config.MapsDir = t.TempDir()
+	os.WriteFile(filepath.Join(ladder.Config.MapsDir, "m.txt"), []byte("map"), 0o644)
+	var requested TournamentRequest
+	ladder.TournamentBots = func(ctx context.Context, request TournamentRequest) ([]Bot, error) {
+		requested = request
+		return testBots(2), nil
+	}
+	// Even when paused
+	settings := ladder.Settings.Get()
+	settings.Paused = true
+	ladder.Settings = NewLiveSettings("", settings)
+
+	request := TournamentRequest{Name: "Final", Formats: []Format{{"m", 2}}, Repeats: 3, Top: 2}
+	if err := QueueTournament(ladder.Config.DataDir, request); err != nil {
+		t.Fatal(err)
+	}
+	if err := QueueTournament(ladder.Config.DataDir, request); err == nil {
+		t.Error("a second request should wait for the first one")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	ladder.Serve(ctx, nil)
+
+	runs, _ := ladder.Store.Runs("tournament", 10)
+	if len(runs) != 1 || runs[0].Status != RunComplete || requested.Name != "Final" || requested.Top != 2 {
+		t.Fatalf("expected the tournament to be played: %+v, %+v", runs, requested)
+	}
+	if matches, _ := ladder.Store.Matches(MatchFilter{RunID: runs[0].ID}); len(matches) != 3 {
+		t.Errorf("expected 3 matches, got %d", len(matches))
+	}
+	if _, err := os.Stat(tournamentRequestPath(ladder.Config.DataDir)); !os.IsNotExist(err) {
+		t.Error("the request should be removed")
+	}
+}
+
+func TestTournamentRequestValidation(t *testing.T) {
+	config := &Config{MapsDir: t.TempDir()}
+	os.WriteFile(filepath.Join(config.MapsDir, "m.txt"), []byte("map"), 0o644)
+	for _, request := range []TournamentRequest{
+		{Formats: nil, Repeats: 1},
+		{Formats: []Format{{"m", 2}}, Repeats: 0},
+		{Formats: []Format{{"nope", 2}}, Repeats: 1},
+		{Formats: []Format{{"m", 2}}, Repeats: 1, Top: 1},
+		{Formats: []Format{{"m", 2}}, Repeats: 1, Top: 3, Teams: []string{"a"}},
+	} {
+		if err := request.validate(config); err == nil {
+			t.Errorf("expected an invalid request: %+v", request)
+		}
+	}
+	if err := (&TournamentRequest{Formats: []Format{{"m", 2}}, Repeats: 1, Top: 4}).validate(config); err != nil {
+		t.Error(err)
 	}
 }
