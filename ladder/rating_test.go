@@ -131,3 +131,37 @@ func TestNewVersionsRaiseUncertainty(t *testing.T) {
 		t.Errorf("unexpected versions: %+v, %+v", before, bumped)
 	}
 }
+
+func TestChartHistory(t *testing.T) {
+	params := DefaultRatingParams()
+	var matches []RatedMatch
+	for i := range 1000 {
+		commit := "v1aaaaaaaa"
+		if i >= 600 {
+			commit = "v2bbbbbbbb"
+		}
+		matches = append(matches, match(int64(i), "m:2", bot("a", commit, uint(i%2)), bot("b", "b1", uint(1-i%2))))
+	}
+	ratings := ComputeRatings(params, matches)
+	history := ratings.Global.History("a")
+	if len(history) != 1000 || history[999].Rating != ratings.Global.Rating("a").Rating {
+		t.Fatalf("expected the rating after every match: %d points", len(history))
+	}
+
+	points := chartHistory(history, time.Unix(0, 0), time.Unix(999, 0), 100)
+	if len(points) > 105 || len(points) < 90 {
+		t.Errorf("expected about 100 points, got %d", len(points))
+	}
+	var versions []string
+	for _, p := range points {
+		if p.Version != "" {
+			versions = append(versions, p.Version)
+		}
+	}
+	if len(versions) != 2 || versions[0] != "v1aaaaaa" || versions[1] != "v2bbbbbb" {
+		t.Errorf("expected the start of both versions: %v", versions)
+	}
+	if last := points[len(points)-1]; last.Time != 999 {
+		t.Errorf("the last point should be the latest rating: %+v", last)
+	}
+}

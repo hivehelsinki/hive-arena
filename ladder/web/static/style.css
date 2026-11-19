@@ -42,3 +42,33 @@ th { font-weight: 600; font-size: 0.9em; }
 .button { display: inline-block; padding: 0.3em 0.8em; border: 1px solid var(--accent); border-radius: 4px; text-decoration: none; margin-right: 0.5em; }
 .filter input { padding: 0.2em 0.4em; }
 footer { max-width: 1100px; margin: 0 auto; padding: 1em 1.5em 2em; color: var(--dim); font-size: 0.85em; border-top: 1px solid var(--line); }
+
+/* Charts. Series colors are validated for both surfaces (CVD-safe as a set
+   of three); text never takes a series color. */
+:root { --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --context: #c9c3b3; --grid: #ece6d6; }
+@media (prefers-color-scheme: dark) {
+	:root { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --context: #4d493f; --grid: #2e2b25; }
+}
+.chart { margin: 0.5em 0 1.5em; }
+.chart-frame { position: relative; outline-offset: 4px; }
+.chart svg { display: block; overflow: visible; }
+.chart .grid line { stroke: var(--grid); stroke-width: 1; }
+.chart .grid text { fill: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .dot { stroke: var(--bg); stroke-width: 2; }
+.chart .series-1 .line { stroke: var(--series-1); } .chart .series-1 .dot { fill: var(--series-1); }
+.chart .series-2 .line { stroke: var(--series-2); } .chart .series-2 .dot { fill: var(--series-2); }
+.chart .series-3 .line { stroke: var(--series-3); } .chart .series-3 .dot { fill: var(--series-3); }
+.chart .context .line { stroke: var(--context); } .chart .context .dot { fill: var(--context); }
+.chart.has-focus .series:not(.focus) { opacity: 0.35; }
+.chart .series.focus.context .line { stroke: var(--fg); }
+.chart .crosshair { stroke: var(--dim); stroke-width: 1; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 0.3em 1.2em; font-size: 0.85em; color: var(--dim); margin-bottom: 0.4em; }
+.key { display: inline-block; width: 14px; height: 2px; border-radius: 1px; vertical-align: middle; margin-right: 0.45em; background: var(--context); }
+.key.series-1 { background: var(--series-1); } .key.series-2 { background: var(--series-2); } .key.series-3 { background: var(--series-3); }
+.chart-tooltip { position: absolute; pointer-events: none; background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+	padding: 0.4em 0.6em; font-size: 0.82em; box-shadow: 0 2px 8px rgb(0 0 0 / 0.12); white-space: nowrap; z-index: 1; }
+.chart-tooltip .when { color: var(--dim); margin-bottom: 0.2em; }
+.chart-tooltip b { display: inline-block; min-width: 2.8em; text-align: right; margin-right: 0.5em; font-variant-numeric: tabular-nums; }
+.chart-tooltip span { color: var(--dim); }
+.chart-tooltip .focus span { color: var(--fg); }

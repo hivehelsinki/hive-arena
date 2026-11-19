@@ -392,7 +392,7 @@ func (web *Web) handleTeam(w http.ResponseWriter, r *http.Request) {
 	}
 	web.render(w, "team", map[string]any{
 		"Name": name, "State": state, "Builds": builds, "Matches": matches,
-		"Row": view.Row(name), "Formats": view.Formats, "H2H": view.Stats.HeadToHead[name],
+		"Row": view.Row(name), "History": view.TeamHistory(name), "Formats": view.Formats, "H2H": view.Stats.HeadToHead[name],
 		"StatsPeriod": view.StatsPeriod, "Counts": counts[name], "Quota": settings.Quota,
 	})
 }

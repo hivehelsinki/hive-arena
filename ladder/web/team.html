@@ -18,6 +18,16 @@
 <p><span class="big">{{rating .Global}}</span> <span class="dim">(μ ± σ: {{musigma .Global}})</span> over {{.Global.Games}} matches{{with .Stats}}; {{score .Score}} points per match over the last {{days $.StatsPeriod}}{{end}}.
 {{if not .Global.Since.IsZero}}Version <span class="mono">{{short .Global.Commit}}</span> playing since {{time .Global.Since}}.{{end}}</p>
 {{end}}
+{{with .History}}
+<div id="rating"></div>
+<script type="application/json" id="rating-data">{{.}}</script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+	const data = JSON.parse(document.getElementById("rating-data").textContent);
+	ratingChart(document.getElementById("rating"), data, { highlight: 1, versions: true, height: 220, label: "Global rating over time, with the start of each version" });
+});
+</script>
+{{end}}
 <table>
 <thead><tr><th>Format</th><th class="num">Rating</th><th class="num">μ ± σ</th><th class="num">Matches</th><th class="num">Last 24 hours</th></tr></thead>
 <tbody>

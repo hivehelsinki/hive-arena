@@ -133,6 +133,25 @@ type TeamRating struct {
 type RatingTable struct {
 	params RatingParams
 	teams  map[string]*TeamRating
+	// The ratings of each team after each of its matches, if recorded
+	history map[string][]RatingPoint
+}
+
+// A team's rating after a match
+type RatingPoint struct {
+	Time   time.Time
+	Rating Rating
+	Commit string
+}
+
+// RecordHistory makes the table keep the history of the ratings
+func (l *RatingTable) RecordHistory() {
+	l.history = make(map[string][]RatingPoint)
+}
+
+// History returns a team's ratings after each of its matches, if recorded
+func (l *RatingTable) History(team string) []RatingPoint {
+	return l.history[team]
 }
 
 func NewRatingTable(params RatingParams) *RatingTable {
@@ -175,6 +194,9 @@ func (l *RatingTable) Add(match RatedMatch) {
 		t.Commit = bot.Commit
 		t.LastPlayed = match.Time
 		l.teams[bot.Team] = &t
+		if l.history != nil {
+			l.history[bot.Team] = append(l.history[bot.Team], RatingPoint{match.Time, t.Rating, t.Commit})
+		}
 	}
 }
 
@@ -205,9 +227,11 @@ type RatingTables struct {
 	PerFormat map[string]*RatingTable
 }
 
-// ComputeRatings rates matches in the given order (chronological)
+// ComputeRatings rates matches in the given order (chronological). The
+// global table records the history of the ratings.
 func ComputeRatings(params RatingParams, matches []RatedMatch) *RatingTables {
 	ladders := &RatingTables{Global: NewRatingTable(params), PerFormat: make(map[string]*RatingTable)}
+	ladders.Global.RecordHistory()
 	for _, match := range matches {
 		ladders.Add(match)
 	}

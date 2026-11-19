@@ -6,6 +6,18 @@
 </p>
 {{template "ladder" .}}
 
+{{with .Ladder.History}}
+<h2>Ratings over time</h2>
+<div id="ratings"></div>
+<script type="application/json" id="ratings-data">{{.}}</script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+	const data = JSON.parse(document.getElementById("ratings-data").textContent);
+	ratingChart(document.getElementById("ratings"), data, { highlight: 3, label: "Global ratings of the teams over time" });
+});
+</script>
+{{end}}
+
 {{range .Ladder.Tables}}
 <h2>{{.Format.Map}}, {{.Format.Players}} players</h2>
 <table class="standings">

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hive Arena ladder</title>
 <link rel="stylesheet" href="/static/style.css">
+<script src="/static/chart.js" defer></script>
 </head>
 <body>
 <header>
@@ -28,7 +29,7 @@
 </tr></thead>
 <tbody>
 {{range $i, $r := .Ladder.Rows}}
-<tr{{if not $r.Playing}} class="dim" title="Not playing at the moment"{{end}}>
+<tr data-team="{{$r.Team}}"{{if not $r.Playing}} class="dim" title="Not playing at the moment"{{end}}>
 	<td>{{add $i 1}}</td>
 	<td><a href="/teams/{{$r.Team}}">{{$r.Team}}</a></td>
 	<td class="num strong">{{rating $r.Global}}</td>
