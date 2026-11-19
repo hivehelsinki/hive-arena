@@ -331,14 +331,14 @@ func readGzip(path string) ([]byte, error) {
 }
 
 type MatchBot struct {
-	Team     string    `json:"team"`
-	Image    string    `json:"image"`
-	Commit   string    `json:"commit"`
-	Seat     int       `json:"seat"`
-	Flowers  int       `json:"flowers"`
+	Team    string `json:"team"`
+	Image   string `json:"image"`
+	Commit  string `json:"commit"`
+	Seat    int    `json:"seat"`
+	Flowers int    `json:"flowers"`
 	// 1 for the winner; tied bots share the first place they span. A bot
 	// that crashed or did not join is last. 0 in a void match.
-	Place int `json:"place"`
+	Place    int       `json:"place"`
 	Status   BotStatus `json:"status"`
 	ExitCode int       `json:"exitCode"`
 }
