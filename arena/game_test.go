@@ -478,7 +478,9 @@ func TestSeededGamesAreReproducible(t *testing.T) {
 						}
 					}
 				}
-				slices.SortFunc(mine, func(a, b *Order) int { return strings.Compare(a.Coords.String()+string(a.Direction), b.Coords.String()+string(b.Direction)) })
+				slices.SortFunc(mine, func(a, b *Order) int {
+					return strings.Compare(a.Coords.String()+string(a.Direction), b.Coords.String()+string(b.Direction))
+				})
 				orders = append(orders, mine)
 			}
 			processed, _ := gs.ProcessOrders(orders)
