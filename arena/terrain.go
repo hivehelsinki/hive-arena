@@ -30,14 +30,31 @@ type Coords struct {
 }
 
 func (c Coords) Neighbour(dir Direction) Coords {
-	offset := DirectionToOffset[dir]
-	return Coords{Row: c.Row + offset.Row, Col: c.Col + offset.Col}
+	// A switch rather than DirectionToOffset: this is called very often
+	switch dir {
+	case E:
+		return Coords{c.Row, c.Col + 2}
+	case NE:
+		return Coords{c.Row - 1, c.Col + 1}
+	case NW:
+		return Coords{c.Row - 1, c.Col - 1}
+	case W:
+		return Coords{c.Row, c.Col - 2}
+	case SW:
+		return Coords{c.Row + 1, c.Col - 1}
+	case SE:
+		return Coords{c.Row + 1, c.Col + 1}
+	}
+	return c
 }
 
+// The offsets of the neighbours, in a fixed order (E, NE, NW, W, SW, SE)
+var neighbourOffsets = [6]Coords{{0, 2}, {-1, 1}, {-1, -1}, {0, -2}, {1, -1}, {1, 1}}
+
 func (c Coords) Neighbours() []Coords {
-	neighbors := make([]Coords, 0, 6)
-	for _, offset := range DirectionToOffset {
-		neighbors = append(neighbors, Coords{Row: c.Row + offset.Row, Col: c.Col + offset.Col})
+	neighbors := make([]Coords, 6)
+	for i, offset := range neighbourOffsets {
+		neighbors[i] = Coords{Row: c.Row + offset.Row, Col: c.Col + offset.Col}
 	}
 	return neighbors
 }
@@ -81,6 +98,10 @@ type Spawn struct {
 type MapData struct {
 	Map    map[Coords]Terrain
 	Spawns []Spawn
+	// For maps made for a number of players (random maps): their spawns are
+	// numbered from 0. Map files have 6 numbered seats, and fewer players
+	// take some of them (0).
+	Players int
 }
 
 var charToTerrain = map[rune]Terrain{

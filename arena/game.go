@@ -176,7 +176,12 @@ func NewGame(mapData MapData, numPlayers int, rules Rules, seed int64) *GameStat
 	}
 
 	for _, spawn := range mapData.Spawns {
-		player := playerMappings[numPlayers][spawn.Player]
+		player := spawn.Player
+		if mapData.Players == 0 {
+			player = playerMappings[numPlayers][spawn.Player]
+		} else if mapData.Players != numPlayers {
+			return nil
+		}
 		if player == -1 {
 			continue
 		}
