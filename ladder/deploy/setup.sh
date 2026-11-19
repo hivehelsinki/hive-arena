@@ -171,7 +171,7 @@ mkdir -p "$DATA"
 find "$DATA" \( ! -user "$SERVICE_USER" -o ! -group "$SERVICE_USER" \) -exec chown "$SERVICE_USER:$SERVICE_USER" {} +
 chown "root:$SERVICE_USER" "$CONFIG"
 chmod 640 "$CONFIG"
-runuser -u "$SERVICE_USER" -- test -r "$REPO/maps/tiny.txt" -a -x "$LADDER" -a -r "$CONFIG" ||
+runuser -u "$SERVICE_USER" -- test -r "$REPO/go.mod" -a -x "$LADDER" -a -r "$CONFIG" ||
 	fail "the $SERVICE_USER user cannot read $REPO: clone it in a directory readable by all (e.g. /opt)"
 echo "Website on $BASE, data in $DATA: ok"
 

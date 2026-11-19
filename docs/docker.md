@@ -6,7 +6,7 @@ The ladder builds and runs every team's agent with Docker. Your repository must 
 
 - Registers your repository through the public registry (see the ladder page). The repository must be public, with an `https://` URL.
 - Takes the most recent tag on the `main` branch of your repository, and builds it with `docker build` from the repository root, using the `Dockerfile` at the root (another context and Dockerfile can be registered). New tags are built within about 15 minutes, and play from the next match: the result and the build log are on your team's page.
-- Before a new version plays, it must pass a smoke test: a 1-player game on `tiny`, played until the end.
+- Before a new version plays, it must pass a smoke test: a 1-player game on a random map, played until the end.
 - For each match, starts a fresh game server and one container per agent, on a private network.
 
 ## The contract
@@ -45,7 +45,7 @@ docker build -t arena-server path/to/hive-arena
 docker run -d --rm --name server --network arenatest -p 8000:8080 arena-server
 
 # Create a 1-player game and run your agent in it, with the ladder's restrictions
-ID=$(curl -s "localhost:8000/newgame?map=tiny&players=1" | sed 's/.*"id":"\([^"]*\)".*/\1/')
+ID=$(curl -s "localhost:8000/newgame?map=random&players=1" | sed 's/.*"id":"\([^"]*\)".*/\1/')
 docker run --rm --network arenatest --read-only --tmpfs /tmp --cap-drop ALL \
   --user 65534:65534 --security-opt no-new-privileges --cpus 1 --memory 256m --pids-limit 64 \
   -e ARENA_HOST=server:8080 -e ARENA_GAME_ID=$ID -e ARENA_NAME=me my-agent

@@ -234,12 +234,10 @@ func TestServeRebuildsThePoolWhenWoken(t *testing.T) {
 
 func TestLiveSettingsReload(t *testing.T) {
 	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, "maps"), 0o755)
-	os.WriteFile(filepath.Join(dir, "maps", "m.txt"), []byte("map"), 0o644)
 	path := filepath.Join(dir, "ladder.json")
 	write := func(quota string) {
-		config := fmt.Sprintf(`{"mapsDir": %q, "registry": {"path": "teams.json"}, "build": {"smokeMap": "m"},
-			"ladder": {"formats": [{"map": "m", "players": 2}], "quota": %s}}`, filepath.Join(dir, "maps"), quota)
+		config := fmt.Sprintf(`{"registry": {"path": "teams.json"},
+			"ladder": {"formats": [{"map": "random", "players": 2}], "quota": %s}}`, quota)
 		os.WriteFile(path, []byte(config), 0o644)
 	}
 	touch := func(i int) {
@@ -277,14 +275,16 @@ func TestLiveSettingsReload(t *testing.T) {
 }
 
 func TestRandomMapFormats(t *testing.T) {
-	config := &Config{MapsDir: t.TempDir()}
+	config := &Config{}
 	settings := DefaultLadderSettings()
 	settings.Formats = []Format{{"random", 2}, {"random", 6}}
 	if err := settings.validate(config); err != nil {
 		t.Errorf("random maps should be valid formats: %v", err)
 	}
-	settings.Formats = []Format{{"random", 5}}
-	if err := settings.validate(config); err == nil {
-		t.Error("there are no random maps for 5 players")
+	for _, format := range []Format{{"random", 5}, {"random", 1}, {"balanced", 4}} {
+		settings.Formats = []Format{format}
+		if err := settings.validate(config); err == nil {
+			t.Errorf("%s should not be a valid format", format)
+		}
 	}
 }

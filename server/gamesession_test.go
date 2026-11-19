@@ -17,10 +17,7 @@ func newTestSession(t *testing.T, players int) (*GameSession, []Player) {
 	DevMode = true
 	HistoryDir = t.TempDir()
 
-	mapdata, err := arena.LoadMap("../maps/tiny.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
+	mapdata := testMap(t)
 
 	session := NewGameSession("test", players, "tiny", mapdata)
 	var joined []Player
@@ -98,10 +95,7 @@ func TestOrdersForAnotherTurnAreRejected(t *testing.T) {
 func TestOrdersBeforeStartAreRejected(t *testing.T) {
 	DevMode = true
 
-	mapdata, err := arena.LoadMap("../maps/tiny.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
+	mapdata := testMap(t)
 
 	session := NewGameSession("test", 2, "tiny", mapdata)
 	player, _ := session.AddPlayer("team")
@@ -227,7 +221,7 @@ func TestForfeit(t *testing.T) {
 
 func TestForfeitBeforeStart(t *testing.T) {
 	DevMode = true
-	mapdata, _ := arena.LoadMap("../maps/tiny.txt")
+	mapdata := testMap(t)
 	session := NewGameSession("test", 2, "tiny", mapdata)
 	player, _ := session.AddPlayer("team")
 

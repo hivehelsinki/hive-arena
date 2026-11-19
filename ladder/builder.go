@@ -38,7 +38,6 @@ type Builder struct {
 	DataDir string
 	// Plays the smoke test match
 	Smoke        MatchPlayer
-	SmokeMap     string
 	BuildTimeout time.Duration
 	KeepImages   int   // successful images kept per team (at least 1)
 	MaxImageSize int64 // in bytes, 0 for no limit
@@ -199,7 +198,7 @@ func (b *Builder) build(ctx context.Context, team Team, dir string, tag Tag) (*B
 		build.Status = BuildFailed
 		build.Error = err.Error()
 	} else {
-		fmt.Fprintf(&output, "\n=== Smoke test: 1-player game on %s\n", b.SmokeMap)
+		fmt.Fprintf(&output, "\n=== Smoke test: 1-player game on a random map\n")
 		build.Status, build.Error, err = b.smokeTest(ctx, build, &output)
 	}
 	build.EndedAt = time.Now()
@@ -340,7 +339,7 @@ func (b *Builder) dockerBuild(ctx context.Context, team Team, dir string, build 
 // until the end. A match that could not be played at all (server or docker
 // failure) is not the team's failure: it returns an error.
 func (b *Builder) smokeTest(ctx context.Context, build *Build, output io.Writer) (BuildStatus, string, error) {
-	result, err := b.Smoke.Run(ctx, Match{Map: b.SmokeMap, Bots: []Bot{{Name: build.Team, Image: build.Image, Commit: build.Commit}}})
+	result, err := b.Smoke.Run(ctx, Match{Map: RandomMap, Bots: []Bot{{Name: build.Team, Image: build.Image, Commit: build.Commit}}})
 	result.RemoveReport()
 	if err != nil {
 		fmt.Fprintf(output, "Error: %s\n", err)

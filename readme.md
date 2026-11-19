@@ -7,11 +7,15 @@ A friendly AI competition for the Hive students!
 ## Running the arena
 
 - Install the Go compiler (for instance `brew install go` on MacOS, or `apt install golang-go` or `snap install go` on Ubuntu, or follow instructions from the official website).
-- Run `go run ./server`. Optionally add the `-p <port>` option to select which port should the server listen on, `--maps <dir>` to load maps from another directory than `maps`, and `--history <dir>` to save game reports in another directory than `history`.
+- Run `go run ./server`. Optionally add the `-p <port>` option to select which port should the server listen on, `--maps <dir>` to also load map files from a directory (see below), and `--history <dir>` to save game reports in another directory than `history`.
 
 The server is now ready to host games. Multiple games can run concurrently.
 
 In addition to the API routes to be used programmatically, the `/status` route shows information about all currently running games, `/history` contains JSON reports of past completed games, and `/report?id=<game id>` returns the report of a given finished game.
+
+## Maps
+
+Games are played on random maps (`/newgame?map=random&players=N`, for 1, 2, 3, 4 or 6 players), exactly symmetric so that every player starts with the same surroundings. A game's map is recorded as `random:<seed>`, and the same seed gives the same map again. To train a bot on a specific scenario, write a map file (the format is described in `arena.ParseMap`) in a directory given with `--maps`, and use its name without `.txt`.
 
 ## Development mode
 
@@ -19,7 +23,7 @@ By default, the server ensures a minimum turn duration of 0.5 seconds. To bypass
 
 ## Building for production
 
-Building an executable with `go build -C server .` will embed the git revision and the executable will print it at startup. By default, the server looks for the `maps` directory in the current working directory (see the `--maps` option), so it can be run from the repo root as `./server/server -p port`.
+Building an executable with `go build -C server .` will embed the git revision and the executable will print it at startup. It can be run from anywhere, as `./server/server -p port`.
 
 A Dockerfile is also provided for smoother deployment. Follow the usual Docker building process, or use the `runDocker.sh` script.
 

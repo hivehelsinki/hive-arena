@@ -117,12 +117,19 @@ var charToSpawn = map[rune]EntityType{
 	'B': BEE,
 }
 
+// LoadMap reads a map file (see ParseMap)
 func LoadMap(path string) (MapData, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return MapData{}, err
 	}
+	return ParseMap(string(content))
+}
 
+// ParseMap reads a map in text form: one line per row of hexes, each hex
+// two characters apart, odd rows shifted by one: '.' empty, 'R' rock, 'F'
+// field, 'H<player>' a hive, 'B<player>' a bee (see MapData.String)
+func ParseMap(content string) (MapData, error) {
 	lines := strings.Split(string(content), "\n")
 	gameMap := make(map[Coords]Terrain)
 	spawns := []Spawn{}

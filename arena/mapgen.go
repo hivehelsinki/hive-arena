@@ -11,7 +11,8 @@ import (
 // once, then copied by the symmetries of the map, so that every player sees
 // the same surroundings. A hexagonal map has the symmetries needed for 2, 3
 // and 6 players (rotations), and 4 players (two mirrors); there is no exact
-// symmetry for 5 players on a hex grid.
+// symmetry for 5 players on a hex grid. 1-player maps are for testing and
+// training.
 
 // MapSettings shape random maps
 type MapSettings struct {
@@ -26,7 +27,7 @@ type MapSettings struct {
 
 func DefaultMapSettings() MapSettings {
 	return MapSettings{
-		Radius:            map[int]int{2: 8, 3: 10, 4: 11, 6: 12},
+		Radius:            map[int]int{1: 6, 2: 8, 3: 10, 4: 11, 6: 12},
 		FieldShare:        0.14,
 		RockShare:         0.10,
 		HomeFieldDistance: [2]int{2, 4},
@@ -34,7 +35,7 @@ func DefaultMapSettings() MapSettings {
 }
 
 // RandomMapPlayers are the numbers of players random maps can be made for
-var RandomMapPlayers = []int{2, 3, 4, 6}
+var RandomMapPlayers = []int{1, 2, 3, 4, 6}
 
 // cube coordinates, centered on the middle of the map
 type cube struct{ x, y, z int }
@@ -60,7 +61,7 @@ func rotate(c cube, times int) cube {
 // one is the identity, and the i-th one takes player 0's base to player i's
 func symmetries(n int) []func(cube) cube {
 	switch n {
-	case 2, 3, 6:
+	case 1, 2, 3, 6:
 		var result []func(cube) cube
 		for i := range n {
 			turns := i * 6 / n
@@ -282,7 +283,7 @@ func tryMap(numPlayers, radius int, syms []func(cube) cube, settings MapSettings
 	return m, true
 }
 
-// String renders a map in the format of the files in maps/
+// String renders a map in the text format of ParseMap
 func (m MapData) String() string {
 	var rows, cols int
 	for c := range m.Map {

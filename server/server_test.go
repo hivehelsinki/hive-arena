@@ -23,10 +23,7 @@ func newTestServerWithState(t *testing.T) (*httptest.Server, *Server) {
 	DevMode = true
 	HistoryDir = t.TempDir()
 
-	mapdata, err := arena.LoadMap("../maps/tiny.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
+	mapdata := testMap(t)
 
 	server := &Server{
 		Maps:     map[string]arena.MapData{"tiny": mapdata},

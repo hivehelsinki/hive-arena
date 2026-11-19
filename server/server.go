@@ -23,7 +23,8 @@ import (
 
 const GameStartTimeout = 5 * time.Minute
 
-var MapDir = "maps"
+// Map files, for specific scenarios (random maps need none). Empty: none.
+var MapDir = ""
 var HistoryDir = "history" // empty: reports are not saved
 
 // Maximum number of games the server creates in its lifetime (0: no limit)
@@ -44,16 +45,22 @@ type Server struct {
 func loadMaps() map[string]arena.MapData {
 
 	data := make(map[string]arena.MapData)
+	if MapDir == "" {
+		return data
+	}
 
 	entries, err := os.ReadDir(MapDir)
 	if err != nil {
-		log.Fatalf("Could not find maps directory")
+		log.Fatalf("Could not read the maps directory: %s", err)
 	}
 
 	for _, entry := range entries {
 		name, isMap := strings.CutSuffix(entry.Name(), ".txt")
 		if !isMap || entry.IsDir() {
 			continue
+		}
+		if name == RandomMap {
+			log.Fatalf("A map file cannot be called %s.txt: the name is for random maps", RandomMap)
 		}
 
 		mapdata, err := arena.LoadMap(filepath.Join(MapDir, entry.Name()))

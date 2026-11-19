@@ -50,7 +50,7 @@ local function start_game(players, map)
 	return game
 end
 
-local g = start_game(math.random(2,6), "balanced")
+local g = start_game(({2, 3, 4, 6})[math.random(1, 4)], "random")
 
 print(json.encode(g))
 

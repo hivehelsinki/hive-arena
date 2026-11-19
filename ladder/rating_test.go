@@ -74,21 +74,21 @@ func TestRatingsFollowResults(t *testing.T) {
 	var matches []RatedMatch
 	// a always beats b, which always beats c, in two formats
 	for i := range 30 {
-		format := "tiny:3"
+		format := "a:3"
 		if i%2 == 0 {
-			format = "balanced:3"
+			format = "b:3"
 		}
 		matches = append(matches, match(int64(i), format, bot("c", "c1", 1), bot("a", "a1", 9), bot("b", "b1", 5)))
 	}
 	ratings := ComputeRatings(params, matches)
 
-	for _, table := range []*RatingTable{ratings.Global, ratings.PerFormat["tiny:3"], ratings.PerFormat["balanced:3"]} {
+	for _, table := range []*RatingTable{ratings.Global, ratings.PerFormat["a:3"], ratings.PerFormat["b:3"]} {
 		standings := table.Standings()
 		if len(standings) != 3 || standings[0].Team != "a" || standings[1].Team != "b" || standings[2].Team != "c" {
 			t.Fatalf("unexpected standings: %+v", standings)
 		}
 	}
-	if g, f := ratings.Global.Rating("a"), ratings.PerFormat["tiny:3"].Rating("a"); g.Games != 30 || f.Games != 15 {
+	if g, f := ratings.Global.Rating("a"), ratings.PerFormat["a:3"].Rating("a"); g.Games != 30 || f.Games != 15 {
 		t.Errorf("expected 30 matches globally and 15 in a format, got %d and %d", g.Games, f.Games)
 	}
 	// Uncertainty shrinks with matches (slowly with Plackett-Luce)

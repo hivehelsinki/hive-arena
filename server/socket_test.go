@@ -95,10 +95,7 @@ func TestClosedSocketsAreRemoved(t *testing.T) {
 func TestCloseSockets(t *testing.T) {
 	DevMode = true
 
-	mapdata, err := arena.LoadMap("../maps/tiny.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
+	mapdata := testMap(t)
 	session := NewGameSession("test", 2, "tiny", mapdata)
 	conn := dialSession(t, session)
 
@@ -106,7 +103,7 @@ func TestCloseSockets(t *testing.T) {
 	session.CloseSockets()
 
 	conn.SetReadDeadline(time.Now().Add(time.Second))
-	_, _, err = conn.ReadMessage()
+	_, _, err := conn.ReadMessage()
 	if !websocket.IsCloseError(err, websocket.CloseNormalClosure) {
 		t.Errorf("expected the socket to be closed, got %v", err)
 	}

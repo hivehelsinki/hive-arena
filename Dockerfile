@@ -13,6 +13,5 @@ RUN apk add --no-cache tzdata
 ENV TZ=Europe/Helsinki
 WORKDIR /app
 COPY --from=build /server server/server
-COPY maps ./maps
 EXPOSE 8080
 CMD ["server/server", "-p", "8080"]

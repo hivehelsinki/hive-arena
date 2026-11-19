@@ -15,7 +15,7 @@ The game is played on a hexagonal tiling of cells. Pre-written map files indicat
 
 ### Static terrain
 
-Maps are randomly generated for each game (for 2, 3, 4 or 6 players), and exactly symmetric: every player starts with the same surroundings, rotated or mirrored. Some hand-made maps also exist.
+Maps are randomly generated for each game (for 2, 3, 4 or 6 players), and exactly symmetric: every player starts with the same surroundings, rotated or mirrored.
 
 Terrain can be of three types:
 

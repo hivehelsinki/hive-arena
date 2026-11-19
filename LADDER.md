@@ -87,7 +87,7 @@ A team's repo must contain, at its root, a `Dockerfile` that builds an image whi
 - Failures that are not the team's (an interrupted build, docker or the image registry failing, a smoke test that could not run) are not recorded: the build is tried again next time.
 - The build log is stored and shown on the team's page.
 - **A failed build never removes a team from the ladder**: the previous good image keeps playing, and the website shows the failure and its log.
-- **Smoke test before admission:** a new image must complete a 1-player match on `tiny` (join, and play until the end of the game) before it is used in the ladder. Failure is shown like a build failure. This is the CI/CD-style feedback teams get for free.
+- **Smoke test before admission:** a new image must complete a 1-player match on a random map (join, and play until the end of the game) before it is used in the ladder. Failure is shown like a build failure. This is the CI/CD-style feedback teams get for free.
 
 ## Running a match
 
@@ -113,7 +113,7 @@ When a bot crashes (mid-game, or after joining but before the game starts), the 
 
 ## Games and lineups
 
-Maps are fixed by the files in `maps/` (the number of players per map is chosen by the configuration: any `n` the map supports). A **format** is a map and a number of players, for instance:
+Every match is played on a new random map, exactly symmetric (see the game rules), so bots cannot rely on knowing the maps. A **format** is a number of players (2, 3, 4 or 6: there are no exactly fair maps for 5), for instance:
 
 - 2-player matches, the most direct comparison,
 - 3 and 4 player matches,
@@ -121,7 +121,7 @@ Maps are fixed by the files in `maps/` (the number of players per map is chosen 
 
 Every format gets the same quota of matches (see Matchmaking), and its own ladder. With about 10 teams, a 6-player match takes most of the field: it says less about who beats whom, and one bot can decide the winner by interfering with another. Smaller lineups show direct strength.
 
-**Seats are random.** All maps are symmetrical, so a start position is neither an advantage nor a handicap: it only decides who your neighbours are. Seats are drawn at random for every match, and the luck of the neighbour draw averages out over many matches.
+**Seats are random.** Maps are symmetric, so a start position is neither an advantage nor a handicap: it only decides who your neighbours are. Seats are drawn at random for every match, and the luck of the neighbour draw averages out over many matches.
 
 ## Matchmaking: a continuous ladder
 
@@ -217,7 +217,7 @@ The server needs no change to work with the ladder, but a few small ones make th
 3. **Random seats.** A joining player gets a random free seat instead of the next one in join order, so seating does not depend on container start-up timing (ladder) or on who joins first (live events). The `players` list in the report is indexed by seat.
 4. **Results in the report.** A `result` block in the report and in the finished game's status, with the final flowers, rank and winners per player. The ladder and website then do not re-derive scores from the last state.
 5. **CORS and websocket origin.** CORS headers on the read routes and an origin check that accepts the configured origins, so the web viewer can talk to the arena server directly during live events. Not needed for the ladder itself, since the ladder site serves its own reports.
-6. **Lighter Docker image.** A multi-stage `Dockerfile` (build with the Go toolchain, run from a small image with the binary and `maps/`) and a `.dockerignore` excluding `history/`, so per-match server start-up is fast.
+6. **Lighter Docker image.** A multi-stage `Dockerfile` (build with the Go toolchain, run from a small image with the binary) and a `.dockerignore` excluding `history/`, so per-match server start-up is fast.
 7. **Forfeit route** (added during implementation). `GET /forfeit?id=&token=<admin token>&player=` stops waiting for a player's orders. The runner uses it when a bot's container exits mid-game: otherwise every remaining turn waits for the 2-second timeout, and a crashing bot would make its matches last minutes.
 8. **Reserved seats** (added during implementation). `/newgame?names=a,b,c` returns a private game ID per name; each joins once, under its name. The ladder gives each bot its own: a bot joining under another name crashed the ladder, and a malicious one could take another team's seat. Also `--max-games` (the ladder's servers accept a single game), limits on `/orders` (1 MB, 2 × units + 16 orders), and reports written one turn at a time (encoding a large report at once doubled the server's memory).
 
@@ -265,7 +265,7 @@ The game review happens after this work.
 
 ## Decisions
 
-- **Game review.** A pass over rules and balance, so this year's game is similar in accessibility but not identical, is separate and comes after the ladder. Maps, viewer and example agents may change with it, so the ladder treats them as data (maps are read from `maps/`, reports are in the standard format).
+- **Game review.** A pass over rules and balance, so this year's game is similar in accessibility but not identical, is separate and comes after the ladder. Maps, viewer and example agents may change with it, so the ladder treats them as data (reports are in the standard format). The game review introduced field regrowth, a turn limit, stealing and random maps, with values tuned by simulation between strategy bots.
 - **Pacing.** Ladder servers run with `--dev`, with the standard turn timeout for all agents.
 - **Tags.** The latest tag on the `main` branch of a team's repo.
 - **Retention.** Results are kept forever; replays and logs for the last 100 matches of each team (see "Recording").

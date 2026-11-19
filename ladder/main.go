@@ -174,7 +174,6 @@ func openLadderWithFlags(flags *flag.FlagSet, args []string) (*Ladder, *flag.Fla
 		Store:        store,
 		DataDir:      config.DataDir,
 		Smoke:        &Runner{Config: smoke},
-		SmokeMap:     config.Build.SmokeMap,
 		BuildTimeout: config.Build.Timeout.Duration,
 		KeepImages:   config.Build.KeepImages,
 		MaxImageSize: config.Build.MaxImageMB << 20,

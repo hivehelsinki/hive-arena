@@ -8,7 +8,6 @@ import (
 	"github.com/hivehelsinki/hive-arena/arena"
 	"log"
 	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -89,17 +88,11 @@ func (s *LadderSettings) validate(c *Config) error {
 		return fmt.Errorf("no formats configured")
 	}
 	for _, f := range s.Formats {
-		if f.Players < 2 || f.Players > 6 {
-			return fmt.Errorf("invalid format %s", f)
+		if f.Map != RandomMap {
+			return fmt.Errorf("invalid format %s: the map must be %q (a new random map for each match)", f, RandomMap)
 		}
-		if f.Map == RandomMap {
-			if !slices.Contains(arena.RandomMapPlayers, f.Players) {
-				return fmt.Errorf("invalid format %s: random maps are for %v players", f, arena.RandomMapPlayers)
-			}
-			continue
-		}
-		if err := c.checkMap(f.Map); err != nil {
-			return err
+		if f.Players < 2 || !slices.Contains(arena.RandomMapPlayers, f.Players) {
+			return fmt.Errorf("invalid format %s: random maps are for %v players", f, arena.RandomMapPlayers)
 		}
 	}
 	if s.Quota < 1 || s.Window < 1 || s.KeepMatchFiles < 1 || s.MaxFailures < 0 {
@@ -120,8 +113,6 @@ func (s *LadderSettings) validate(c *Config) error {
 
 type Config struct {
 	DataDir string `json:"dataDir"`
-	// The maps of the arena server, to check the configured formats
-	MapsDir string `json:"mapsDir"`
 	// A warning is logged, and /health reports a problem, below this free space
 	MinFreeDiskGB float64 `json:"minFreeDiskGB"`
 
@@ -146,7 +137,6 @@ type Config struct {
 	Build struct {
 		Timeout    Duration `json:"timeout"`
 		KeepImages int      `json:"keepImages"` // successful images kept per team
-		SmokeMap   string   `json:"smokeMap"`   // map of the 1-player smoke test
 		MaxImageMB int64    `json:"maxImageMB"` // larger images fail their build (0: no limit)
 		CacheLimit string   `json:"cacheLimit"` // size the docker build cache is kept under, e.g. "10GB" (empty: no limit)
 		// New versions are built this often, between matches
@@ -171,7 +161,6 @@ func LoadConfig(path string) (*Config, error) {
 	defaults := DefaultRunnerConfig()
 	config := &Config{
 		DataDir:  "data",
-		MapsDir:  "maps",
 		Timezone: "Europe/Helsinki",
 		Ladder:   DefaultLadderSettings(),
 	}
@@ -180,7 +169,6 @@ func LoadConfig(path string) (*Config, error) {
 	config.Web.ViewerDir = "viewer/web"
 	config.Build.Timeout = Duration{10 * time.Minute}
 	config.Build.KeepImages = 3
-	config.Build.SmokeMap = "tiny"
 	config.Build.MaxImageMB = 2048
 	config.Build.CacheLimit = "10GB"
 	config.Build.Interval = Duration{15 * time.Minute}
@@ -207,9 +195,6 @@ func (c *Config) validate() error {
 	if err := c.Ladder.validate(c); err != nil {
 		return err
 	}
-	if err := c.checkMap(c.Build.SmokeMap); err != nil {
-		return err
-	}
 	if c.Registry.URL == "" && c.Registry.Path == "" {
 		return fmt.Errorf("no registry configured (registry.url or registry.path)")
 	}
@@ -220,17 +205,6 @@ func (c *Config) validate() error {
 	}
 	if c.Build.Timeout.Duration <= 0 || c.Build.KeepImages < 1 || c.Build.MaxImageMB < 0 || c.Build.Interval.Duration <= 0 {
 		return fmt.Errorf("build: timeout and interval must be positive, and keepImages at least 1")
-	}
-	return nil
-}
-
-// checkMap checks that a map exists
-func (c *Config) checkMap(name string) error {
-	if name == "" || strings.ContainsAny(name, "/\\.") {
-		return fmt.Errorf("invalid map name %q", name)
-	}
-	if _, err := os.Stat(filepath.Join(c.MapsDir, name+".txt")); err != nil {
-		return fmt.Errorf("unknown map %q (maps are read from %s, see mapsDir)", name, c.MapsDir)
 	}
 	return nil
 }

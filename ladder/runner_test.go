@@ -43,7 +43,7 @@ func TestRunMatch(t *testing.T) {
 	config.MatchTimeout = 5 * time.Minute
 	runner := Runner{Config: config}
 
-	match := Match{Map: "tiny", Bots: []Bot{
+	match := Match{Map: "random", Bots: []Bot{
 		{Name: "good", Image: "example-agent-go"},
 		{Name: "crash", Image: "hive-ladder-crashbot"},
 		{Name: "nojoin", Image: "busybox"},
@@ -106,7 +106,7 @@ func TestNoJoinDoesNotWaitForTimeout(t *testing.T) {
 	runner := Runner{Config: config}
 
 	start := time.Now()
-	result, err := runner.Run(context.Background(), Match{Map: "tiny", Bots: []Bot{
+	result, err := runner.Run(context.Background(), Match{Map: "random", Bots: []Bot{
 		{Name: "good", Image: "example-agent-go"},
 		{Name: "nojoin", Image: "busybox"},
 	}})
@@ -131,7 +131,7 @@ func TestEarlyCrashesAreForfeited(t *testing.T) {
 	runner := Runner{Config: config}
 
 	start := time.Now()
-	result, err := runner.Run(context.Background(), Match{Map: "tiny", Bots: []Bot{
+	result, err := runner.Run(context.Background(), Match{Map: "random", Bots: []Bot{
 		{Name: "good", Image: "example-agent-go"},
 		{Name: "crash", Image: "hive-ladder-crashbot"},
 		{Name: "slowcrash", Image: "hive-ladder-slowcrashbot"},
@@ -157,7 +157,7 @@ func TestBotsJoinUnderTheirOwnName(t *testing.T) {
 	requireDocker(t)
 
 	runner := Runner{Config: DefaultRunnerConfig()}
-	result, err := runner.Run(context.Background(), Match{Map: "tiny", Bots: []Bot{
+	result, err := runner.Run(context.Background(), Match{Map: "random", Bots: []Bot{
 		{Name: "good", Image: "example-agent-go"},
 		{Name: "honest", Image: "hive-ladder-impostorbot"},
 	}})
@@ -177,7 +177,7 @@ func TestNoJoinOutputIsKept(t *testing.T) {
 	requireDocker(t)
 
 	runner := Runner{Config: DefaultRunnerConfig()}
-	result, err := runner.Run(context.Background(), Match{Map: "tiny", Bots: []Bot{
+	result, err := runner.Run(context.Background(), Match{Map: "random", Bots: []Bot{
 		{Name: "good", Image: "example-agent-go"},
 		{Name: "broken", Image: "hive-ladder-nojoinbot"},
 		{Name: "missing", Image: "hive-ladder-no-such-image"},
@@ -204,7 +204,7 @@ func TestFailedMatchHasPartialResult(t *testing.T) {
 	runner := Runner{Config: config}
 
 	// The idle bot makes every turn wait for the turn timeout
-	result, err := runner.Run(context.Background(), Match{Map: "tiny", Bots: []Bot{
+	result, err := runner.Run(context.Background(), Match{Map: "random", Bots: []Bot{
 		{Name: "good", Image: "example-agent-go"},
 		{Name: "idle", Image: "hive-ladder-idlebot"},
 	}})
@@ -218,13 +218,13 @@ func TestFailedMatchHasPartialResult(t *testing.T) {
 }
 
 func TestValidateMatch(t *testing.T) {
-	if validateMatch(Match{Map: "tiny"}) == nil {
+	if validateMatch(Match{Map: "random"}) == nil {
 		t.Error("a match without bots should be invalid")
 	}
-	if validateMatch(Match{Map: "tiny", Bots: []Bot{{Name: "a", Image: "x"}, {Name: "a", Image: "y"}}}) == nil {
+	if validateMatch(Match{Map: "random", Bots: []Bot{{Name: "a", Image: "x"}, {Name: "a", Image: "y"}}}) == nil {
 		t.Error("duplicate names should be invalid")
 	}
-	if validateMatch(Match{Map: "tiny", Bots: []Bot{{Name: "a", Image: "x"}, {Name: "b", Image: "y"}}}) != nil {
+	if validateMatch(Match{Map: "random", Bots: []Bot{{Name: "a", Image: "x"}, {Name: "b", Image: "y"}}}) != nil {
 		t.Error("valid match rejected")
 	}
 }

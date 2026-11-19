@@ -37,7 +37,6 @@ func TestBuilder(t *testing.T) {
 		Store:        store,
 		DataDir:      t.TempDir(),
 		Smoke:        &Runner{Config: smoke},
-		SmokeMap:     "tiny",
 		BuildTimeout: 5 * time.Minute,
 		KeepImages:   1,
 	}

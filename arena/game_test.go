@@ -8,16 +8,11 @@ import (
 	"testing"
 )
 
-// newState builds a game state from map rows, in the same format as the files in maps/
+// newState builds a game state from map rows, in the text format of ParseMap
 func newState(t *testing.T, numPlayers int, rows ...string) *GameState {
 	t.Helper()
 
-	path := filepath.Join(t.TempDir(), "map.txt")
-	if err := os.WriteFile(path, []byte(strings.Join(rows, "\n")), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	mapdata, err := LoadMap(path)
+	mapdata, err := ParseMap(strings.Join(rows, "\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,27 +96,15 @@ func TestLoadInvalidMap(t *testing.T) {
 	}
 }
 
-func TestLoadAllMaps(t *testing.T) {
-	paths, _ := filepath.Glob("../maps/*.txt")
-	if len(paths) == 0 {
-		t.Fatal("no maps found")
+func TestMapFiles(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "map.txt")
+	os.WriteFile(path, []byte(strings.Join(smallMap, "\n")), 0o644)
+	mapdata, err := LoadMap(path)
+	if err != nil || len(mapdata.Map) != 9 || len(mapdata.Spawns) != 2 {
+		t.Errorf("unexpected map: %+v, %v", mapdata, err)
 	}
-
-	for _, path := range paths {
-		mapdata, err := LoadMap(path)
-		if err != nil {
-			t.Errorf("%s: %s", path, err)
-			continue
-		}
-
-		for players := 1; players <= MaxPlayers; players++ {
-			gs := NewGameState(mapdata, players)
-			for player := range players {
-				if len(gs.PlayerView(player).Hexes) == 0 {
-					t.Errorf("%s with %d players: player %d has no units", path, players, player)
-				}
-			}
-		}
+	if _, err := LoadMap(filepath.Join(t.TempDir(), "none.txt")); err == nil {
+		t.Error("a missing file should be an error")
 	}
 }
 
@@ -459,7 +442,7 @@ func TestAttacksStealFlowers(t *testing.T) {
 }
 
 func TestSeededGamesAreReproducible(t *testing.T) {
-	mapdata, err := LoadMap("../maps/tiny.txt")
+	mapdata, err := GenerateMap(2, 1, DefaultMapSettings())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -563,7 +546,7 @@ func TestDistance(t *testing.T) {
 }
 
 func BenchmarkPlayerView(b *testing.B) {
-	mapdata, err := LoadMap("../maps/balanced.txt")
+	mapdata, err := GenerateMap(6, 1, DefaultMapSettings())
 	if err != nil {
 		b.Fatal(err)
 	}

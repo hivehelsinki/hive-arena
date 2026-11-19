@@ -41,7 +41,6 @@
 	"build": {
 		"timeout": "10m",
 		"keepImages": 3,
-		"smokeMap": "tiny",
 		"maxImageMB": 2048,
 		"cacheLimit": "10GB",
 		"interval": "15m"
