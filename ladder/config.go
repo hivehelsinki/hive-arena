@@ -1,8 +1,11 @@
 package main
 
 import (
+	"slices"
+
 	"encoding/json"
 	"fmt"
+	"github.com/hivehelsinki/hive-arena/arena"
 	"log"
 	"os"
 	"path/filepath"
@@ -88,6 +91,12 @@ func (s *LadderSettings) validate(c *Config) error {
 	for _, f := range s.Formats {
 		if f.Players < 2 || f.Players > 6 {
 			return fmt.Errorf("invalid format %s", f)
+		}
+		if f.Map == RandomMap {
+			if !slices.Contains(arena.RandomMapPlayers, f.Players) {
+				return fmt.Errorf("invalid format %s: random maps are for %v players", f, arena.RandomMapPlayers)
+			}
+			continue
 		}
 		if err := c.checkMap(f.Map); err != nil {
 			return err
@@ -241,6 +250,10 @@ func (c *Config) RunnerConfig() RunnerConfig {
 	config.MatchTimeout = c.Runner.MatchTimeout.Duration
 	return config
 }
+
+// RandomMap is the map name of a new random map for each match (see the
+// arena server)
+const RandomMap = "random"
 
 // LiveSettings holds the ladder settings, reloaded from the configuration
 // file when it changes. The other settings need a restart.

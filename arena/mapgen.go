@@ -83,9 +83,10 @@ func symmetries(n int) []func(cube) cube {
 }
 
 func (c cube) coords(radius int) Coords {
-	// Doubled coordinates (see Coords), shifted so that they are not negative
+	// Doubled coordinates (see Coords), shifted so that they are not
+	// negative, and so that row + column stays even as in map files
 	q, r := c.x, c.z
-	return Coords{Row: r + radius, Col: 2*q + r + 2*radius}
+	return Coords{Row: r + radius, Col: 2*q + r + 2*radius + radius%2}
 }
 
 // GenerateMap generates a random map for numPlayers players (see

@@ -4,10 +4,10 @@
 	"timezone": "Europe/Helsinki",
 	"ladder": {
 		"formats": [
-			{"map": "balanced", "players": 4},
-			{"map": "pure3", "players": 3},
-			{"map": "tiny", "players": 2},
-			{"map": "balanced", "players": 6}
+			{"map": "random", "players": 2},
+			{"map": "random", "players": 3},
+			{"map": "random", "players": 4},
+			{"map": "random", "players": 6}
 		],
 		"quota": 20,
 		"window": 4,

@@ -275,3 +275,16 @@ func TestLiveSettingsReload(t *testing.T) {
 		t.Errorf("a fixed file should apply and clear the warning: %d, %q", live.Get().Quota, live.Warning())
 	}
 }
+
+func TestRandomMapFormats(t *testing.T) {
+	config := &Config{MapsDir: t.TempDir()}
+	settings := DefaultLadderSettings()
+	settings.Formats = []Format{{"random", 2}, {"random", 6}}
+	if err := settings.validate(config); err != nil {
+		t.Errorf("random maps should be valid formats: %v", err)
+	}
+	settings.Formats = []Format{{"random", 5}}
+	if err := settings.validate(config); err == nil {
+		t.Error("there are no random maps for 5 players")
+	}
+}

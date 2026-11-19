@@ -102,6 +102,8 @@ type MapData struct {
 	// numbered from 0. Map files have 6 numbered seats, and fewer players
 	// take some of them (0).
 	Players int
+	// The seed of a random map
+	Seed int64
 }
 
 var charToTerrain = map[rune]Terrain{

@@ -15,6 +15,8 @@ The game is played on a hexagonal tiling of cells. Pre-written map files indicat
 
 ### Static terrain
 
+Maps are randomly generated for each game (for 2, 3, 4 or 6 players), and exactly symmetric: every player starts with the same surroundings, rotated or mirrored. Some hand-made maps also exist.
+
 Terrain can be of three types:
 
 - rock (impassable and cannot be built in)
@@ -37,7 +39,7 @@ There can only ever be one entity per cell, which therefore prevents movement or
 
 In addition to entities, the game state consists in:
 
-- the number of remaining flowers in each flower field of the map
+- the number of remaining flowers in each flower field of the map: a field that still has flowers regains one every few turns, up to its initial content, but an emptied field stays empty for the rest of the game
 - the number of flowers in reserves for each player
 
 ## Gameplay
@@ -67,7 +69,7 @@ The possible commands for bees are the following:
 If the bee is already carrying a flower, and is adjacent to a hive of the same player, the player's resources are immediately increased by one, and the bee is not longer carrying a flower. If the bee is not adjacent to a hive of the same player, the command fails.
 - `build wall`: create a wax wall in the given direction.
 - `build hive`: transform the bee into a hive in its current cell.
-- `attack`: attack the adjacent entity in the given direction. If it is a wax wall, it is destroyed with a 1 in 6 chance. If it is a bee, it is stunned with a 1 in 2 chance, and cannot act for the rest of the turn (nothing happens if it has already acted).
+- `attack`: attack the adjacent entity in the given direction. If it is a wax wall, it is destroyed with a 1 in 6 chance. If it is a bee, it is stunned with a 1 in 2 chance, and cannot act for the rest of the turn (nothing happens if it has already acted). A stunned bee carrying a flower loses it: the attacker takes it, if it is not already carrying one.
 
 The possible commands for hives are:
 
@@ -79,18 +81,20 @@ The commands `build wall`, `build hive` and `spawn bee` all have a cost in resou
 
 ### Victory conditions
 
-The game ends when all flower fields are depleted and no bee is carrying flowers. The winner is the player with most flowers currently in reserves (or all tied for most).
+The game ends after a fixed number of turns, or earlier when all flower fields are depleted and no bee is carrying flowers. The winner is the player with most flowers currently in reserves (or all tied for most).
 
-The game also ends if no flower has been dropped into a hive in a given number of turns.
+## Values
 
-## Hardcoded values
+The values of the game are part of the game state (`rules`, see the API). They are currently:
 
 |          | Cost |
 |----------|------|
 | Bee      | 6    |
-| Hive     | 12   |
+| Hive     | 16   |
 | Wax wall | 1    |
 
 - Flower field initial content: 8 flowers.
+- A field with flowers left regains one every 40 turns.
 - Field of view: 4 hexes away.
-- Resource timeout: 50 turns.
+- Attacks: 1 in 6 chance to destroy a wall, 1 in 2 chance to stun a bee.
+- Game length: 1000 turns at most.

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"maps"
+	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -68,6 +69,30 @@ func loadMaps() map[string]arena.MapData {
 	return data
 }
 
+// RandomMap is the map name of random maps: "random" (a new one), or
+// "random:<seed>" (always the same one)
+const RandomMap = "random"
+
+func (server *Server) findMap(name string, players int) (arena.MapData, error) {
+	if name == RandomMap || strings.HasPrefix(name, RandomMap+":") {
+		seed := rand.Int63()
+		if s, ok := strings.CutPrefix(name, RandomMap+":"); ok {
+			var err error
+			if seed, err = strconv.ParseInt(s, 10, 64); err != nil {
+				return arena.MapData{}, fmt.Errorf("invalid random map seed: %s", s)
+			}
+		}
+		mapdata, err := arena.GenerateMap(players, seed, arena.DefaultMapSettings())
+		mapdata.Seed = seed
+		return mapdata, err
+	}
+	mapdata, found := server.Maps[name]
+	if !found {
+		return arena.MapData{}, fmt.Errorf("Map not found: %s", name)
+	}
+	return mapdata, nil
+}
+
 func logRoute(r *http.Request) {
 	log.Printf("%s %v %v", r.Method, r.URL, r.RemoteAddr)
 }
@@ -82,18 +107,22 @@ func (server *Server) handleNewGame(w http.ResponseWriter, r *http.Request) {
 
 	logRoute(r)
 
-	mapname := r.URL.Query().Get("map")
-	mapdata, mapfound := server.Maps[mapname]
-	if !mapfound {
-		writeJson(w, "Map not found: "+mapname, http.StatusBadRequest)
-		return
-	}
-
 	playerStr := r.URL.Query().Get("players")
 	players, ok := strconv.Atoi(playerStr)
 	if ok != nil || !arena.IsValidNumPlayers(players) {
 		writeJson(w, "Invalid number of players: "+playerStr, http.StatusBadRequest)
 		return
+	}
+
+	mapname := r.URL.Query().Get("map")
+	mapdata, err := server.findMap(mapname, players)
+	if err != nil {
+		writeJson(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	// A random map is recorded with its seed, so that it can be played again
+	if mapname == RandomMap {
+		mapname = fmt.Sprintf("%s:%d", RandomMap, mapdata.Seed)
 	}
 
 	var names []string

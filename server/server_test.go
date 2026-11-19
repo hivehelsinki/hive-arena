@@ -111,6 +111,34 @@ func TestNewGame(t *testing.T) {
 	}
 }
 
+func TestRandomMaps(t *testing.T) {
+	server, state := newTestServerWithState(t)
+
+	var game map[string]any
+	call(t, server, "GET", "/newgame?map=random&players=4", "", http.StatusOK, &game)
+	name, _ := game["map"].(string)
+	if !strings.HasPrefix(name, "random:") {
+		t.Fatalf("a random map should be recorded with its seed, got %q", name)
+	}
+
+	// The same seed gives the same map
+	var again map[string]any
+	call(t, server, "GET", "/newgame?map="+name+"&players=4", "", http.StatusOK, &again)
+	a := state.Sessions[game["id"].(string)].FullState()
+	b := state.Sessions[again["id"].(string)].FullState()
+	if len(a.Hexes) != len(b.Hexes) || again["map"] != name {
+		t.Fatalf("expected the same map, got %d and %d cells", len(a.Hexes), len(b.Hexes))
+	}
+	for c, hex := range a.Hexes {
+		if b.Hexes[c].Terrain != hex.Terrain {
+			t.Fatalf("%v differs", c)
+		}
+	}
+
+	call(t, server, "GET", "/newgame?map=random&players=5", "", http.StatusBadRequest, nil)
+	call(t, server, "GET", "/newgame?map=random:x&players=2", "", http.StatusBadRequest, nil)
+}
+
 func TestJoin(t *testing.T) {
 	server := newTestServer(t)
 

@@ -8,7 +8,7 @@ Requests return standard HTTP status codes such as OK (200), Bad Request (400), 
 
 Query string parameters:
 
-- `map`: the name of the map to load. See the maps folder in the Arena repository to see the available maps.
+- `map`: the name of the map to load: `random` for a new random map (for 2, 3, 4 or 6 players, exactly symmetric), `random:<seed>` for a given random map, or the name of a file of the maps folder in the Arena repository.
 - `players`: the number of players to spawn on the map. Between 1 and 6.
 - `names` (optional): comma-separated names of the players, one per player, all different. The seats are then reserved (see below).
 
@@ -24,7 +24,7 @@ Response:
 {
 	"id": (string) the game ID,
 	"numPlayer": (int) the number of players the games expects (equal to the 'players' parameter),
-	"map": (string) the chosen map (equal to the 'map' parameter),
+	"map": (string) the chosen map (equal to the 'map' parameter; a new random map is given as "random:<seed>"),
 	"createdDate": (string) the time of creation of the game, in ISO 8601 format,
 	"adminToken": (string) an access token used to see the full state of the game (see '/game' route),
 	"joinIds": (dictionary, name to string) the private game ID of each reserved seat, only with 'names'
@@ -91,11 +91,25 @@ The game state is given in the following format:
 {
 	"numPlayers": (int) the number of players in the game,
 	"turn": (int) the current turn (the first turn is 0),
+	"rules": (Rules) the values of the game, see below,
 	"hexes": (dictionary of Hex, with coordinates strings as keys) the current map of the game, including static and dynamic elements,
 	"playerResources": (array of int) the number of flowers for each player,
-	"lastResourceChange": (int) the last turn during which a flower was dropped in a hive,
 	"gameOver": (bool) whether the game is over or not,
 	"winners": (array of int) all the players who are tied for the win, if the game is over (can be a single value)
+}
+```
+
+The rules are:
+
+```
+{
+	"fieldFlowers": (int) the flowers in a field at the start, and at most,
+	"regrowInterval": (int) a field with flowers left regains one every this many turns (an emptied field stays empty),
+	"beeCost": (int), "hiveCost": (int), "wallCost": (int) the costs, in flowers,
+	"wallAttackChance": (float) the chance that an attack destroys a wall,
+	"stunChance": (float) the chance that an attack stuns a bee (and takes its flower),
+	"fieldOfView": (int) how far players see from their hives and bees,
+	"maxTurns": (int) the game ends after this many turns
 }
 ```
 

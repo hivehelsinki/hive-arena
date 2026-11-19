@@ -7,7 +7,7 @@ import (
 
 func toCube(c Coords, radius int) cube {
 	r := c.Row - radius
-	q := (c.Col - r - 2*radius) / 2
+	q := (c.Col - r - 2*radius - radius%2) / 2
 	return cube{q, -q - r, r}
 }
 
@@ -23,6 +23,9 @@ func TestGeneratedMapsAreSymmetric(t *testing.T) {
 			}
 			terrain := make(map[cube]Terrain)
 			for c, ter := range m.Map {
+				if (c.Row+c.Col)%2 != 0 {
+					t.Fatalf("%d players: %v is not a doubled coordinate (row + column must be even)", n, c)
+				}
 				terrain[toCube(c, radius)] = ter
 			}
 			for c, ter := range terrain {
