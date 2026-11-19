@@ -4,6 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hive Arena ladder</title>
+<script>
+// The theme: the visitor's choice, or their system's (before the page shows, so that it never flashes)
+(function () {
+	const system = matchMedia("(prefers-color-scheme: dark)");
+	const apply = () => { document.documentElement.dataset.theme = localStorage.getItem("theme") || (system.matches ? "dark" : "light"); };
+	apply();
+	system.addEventListener("change", apply);
+	window.switchTheme = () => {
+		localStorage.setItem("theme", document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+		apply();
+	};
+})();
+</script>
 <link rel="stylesheet" href="/static/style.css">
 <script src="/static/chart.js" defer></script>
 </head>
@@ -11,6 +24,7 @@
 <header>
 	<a class="title" href="/">Hive Arena ladder</a>
 	<nav><a href="/">Ladder</a> <a href="/matches">Matches</a> <a href="/screen">Big screen</a></nav>
+	<button class="theme-switch" type="button" onclick="switchTheme()" aria-label="Switch between light and dark" title="Switch between light and dark"></button>
 </header>
 <main>
 {{template "content" .}}

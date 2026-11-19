@@ -1,4 +1,5 @@
-/* Hive Arena ladder: "Honeycomb". Light: warm and friendly, cards on a
+/* Hive Arena ladder: "Honeycomb". The theme is set on the root element
+   (data-theme, see layout.html): the visitor's choice, or their system's. Light: warm and friendly, cards on a
    honey-tinted page. Dark: a night hive, dark panels and amber glow.
    Chart series colors are validated (colorblind-safe as a set of three) on
    both surfaces; text never takes a series color. */
@@ -10,8 +11,7 @@
 	--glow: none;
 	color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-	:root {
+:root[data-theme="dark"] {
 		--bg: #121019; --card: #1a1824; --fg: #ece8f5; --dim: #8c86a0; --accent: #ffb000; --accent-ink: #ffb000;
 		--line: #2a2738; --hover: #221f2f; --chip: #24212f; --good: #6fe39a; --bad: #ff7a7a;
 		--series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --context: #3f3b52; --grid: #24212f;
@@ -19,12 +19,9 @@
 		--glow: 0 0 10px rgb(255 176 0 / 0.45);
 		color-scheme: dark;
 	}
-}
 
 body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.55 ui-rounded, "SF Pro Rounded", system-ui, sans-serif; }
-@media (prefers-color-scheme: dark) {
-	body { background: radial-gradient(1200px 500px at 50% -200px, #2a1f3d 0%, var(--bg) 70%) no-repeat, var(--bg); }
-}
+:root[data-theme="dark"] body { background: radial-gradient(1200px 500px at 50% -200px, #2a1f3d 0%, var(--bg) 70%) no-repeat, var(--bg); }
 
 header {
 	display: flex; align-items: center; flex-wrap: wrap; gap: 0.6em 2.5em; padding: 1.1em 2em;
@@ -37,16 +34,14 @@ header .title::before { content: "⬢"; margin-right: 0.35em; color: #fff3c4; }
 header nav { display: flex; flex-wrap: wrap; gap: 0.5em; }
 header nav a { text-decoration: none; font-weight: 600; padding: 0.25em 0.8em; border-radius: 999px; background: rgb(255 255 255 / 0.25); }
 header nav a:hover { background: rgb(255 255 255 / 0.5); }
-@media (prefers-color-scheme: dark) {
-	header {
+:root[data-theme="dark"] header {
 		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='27.71' height='48' viewBox='0 0 27.71 48'%3E%3Cg fill='none' stroke='%23ffb000' stroke-opacity='.12' stroke-width='1.5'%3E%3Cpolygon points='0.00,16.00 -13.86,8.00 -13.86,-8.00 -0.00,-16.00 13.86,-8.00 13.86,8.00'/%3E%3Cpolygon points='27.71,16.00 13.86,8.00 13.86,-8.00 27.71,-16.00 41.57,-8.00 41.57,8.00'/%3E%3Cpolygon points='13.86,40.00 -0.00,32.00 0.00,16.00 13.86,8.00 27.71,16.00 27.71,32.00'/%3E%3Cpolygon points='0.00,64.00 -13.86,56.00 -13.86,40.00 -0.00,32.00 13.86,40.00 13.86,56.00'/%3E%3Cpolygon points='27.71,64.00 13.86,56.00 13.86,40.00 27.71,32.00 41.57,40.00 41.57,56.00'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 27.71px 48px, linear-gradient(135deg, #2a1f10, #16131d 70%);
 		border-bottom: 1px solid #3a2a10; color: var(--fg);
 	}
-	header .title { color: var(--accent); text-shadow: var(--glow); }
-	header .title::before { color: var(--accent); }
-	header nav a { background: rgb(255 176 0 / 0.1); color: var(--fg); }
-	header nav a:hover { background: rgb(255 176 0 / 0.22); }
-}
+:root[data-theme="dark"] header .title { color: var(--accent); text-shadow: var(--glow); }
+:root[data-theme="dark"] header .title::before { color: var(--accent); }
+:root[data-theme="dark"] header nav a { background: rgb(255 176 0 / 0.1); color: var(--fg); }
+:root[data-theme="dark"] header nav a:hover { background: rgb(255 176 0 / 0.22); }
 
 main { max-width: 1080px; margin: 0 auto; padding: 1em 1.5em 3em; }
 h1 { font-size: 2.2em; font-weight: 800; letter-spacing: -0.02em; margin: 0.6em 0 0.2em; }
@@ -83,15 +78,13 @@ table.standings tbody tr:nth-child(3) td:first-child { background-image: url("da
 table.standings tbody tr:nth-child(-n+3) td:first-child { color: #2b1a00; }
 p + table.standings td:nth-child(2) a { font-weight: 700; }
 p + table.standings tbody tr:first-child td:nth-child(2) a::after { content: " 👑"; }
-@media (prefers-color-scheme: dark) {
-	table.standings tbody td:first-child { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 34'%3E%3Cpath d='M15 1l13 7.5v17L15 33 2 25.5v-17z' fill='%232a2738'/%3E%3C/svg%3E"); color: var(--dim); }
-	table.standings tbody tr:nth-child(1) td:first-child { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 34'%3E%3Cpath d='M15 1l13 7.5v17L15 33 2 25.5v-17z' fill='%23ffb000'/%3E%3C/svg%3E"); }
-	table.standings tbody tr:nth-child(2) td:first-child { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 34'%3E%3Cpath d='M15 1l13 7.5v17L15 33 2 25.5v-17z' fill='%23c9ced6'/%3E%3C/svg%3E"); }
-	table.standings tbody tr:nth-child(3) td:first-child { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 34'%3E%3Cpath d='M15 1l13 7.5v17L15 33 2 25.5v-17z' fill='%23d99a6c'/%3E%3C/svg%3E"); }
-	table.standings tbody tr:nth-child(-n+3) td:first-child { filter: drop-shadow(0 0 6px rgb(255 176 0 / 0.35)); }
-	p + table.standings tbody tr:first-child td { background-color: rgb(255 176 0 / 0.07); }
-	.num, .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
-}
+:root[data-theme="dark"] table.standings tbody td:first-child { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 34'%3E%3Cpath d='M15 1l13 7.5v17L15 33 2 25.5v-17z' fill='%232a2738'/%3E%3C/svg%3E"); color: var(--dim); }
+:root[data-theme="dark"] table.standings tbody tr:nth-child(1) td:first-child { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 34'%3E%3Cpath d='M15 1l13 7.5v17L15 33 2 25.5v-17z' fill='%23ffb000'/%3E%3C/svg%3E"); }
+:root[data-theme="dark"] table.standings tbody tr:nth-child(2) td:first-child { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 34'%3E%3Cpath d='M15 1l13 7.5v17L15 33 2 25.5v-17z' fill='%23c9ced6'/%3E%3C/svg%3E"); }
+:root[data-theme="dark"] table.standings tbody tr:nth-child(3) td:first-child { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 34'%3E%3Cpath d='M15 1l13 7.5v17L15 33 2 25.5v-17z' fill='%23d99a6c'/%3E%3C/svg%3E"); }
+:root[data-theme="dark"] table.standings tbody tr:nth-child(-n+3) td:first-child { filter: drop-shadow(0 0 6px rgb(255 176 0 / 0.35)); color: #2b1a00; }
+:root[data-theme="dark"] p + table.standings tbody tr:first-child td { background-color: rgb(255 176 0 / 0.07); }
+:root[data-theme="dark"] .num, :root[data-theme="dark"] .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
 
 .h2h td { text-align: center; min-width: 3em; }
 .h2h th { text-transform: none; letter-spacing: 0; }
@@ -132,3 +125,12 @@ footer { max-width: 1080px; margin: 0 auto; padding: 1em 1.5em 2em; color: var(-
 .chart-tooltip b { display: inline-block; min-width: 2.8em; text-align: right; margin-right: 0.5em; font-variant-numeric: tabular-nums; }
 .chart-tooltip span { color: var(--dim); }
 .chart-tooltip .focus span { color: var(--fg); }
+
+/* Light and dark switch */
+.theme-switch { margin-left: auto; border: 0; cursor: pointer; font: inherit; font-size: 1.05em; line-height: 1;
+	width: 2.1em; height: 2.1em; border-radius: 50%; background: rgb(255 255 255 / 0.25); color: inherit; }
+.theme-switch:hover { background: rgb(255 255 255 / 0.5); }
+.theme-switch::before { content: "☾"; }
+:root[data-theme="dark"] .theme-switch { background: rgb(255 176 0 / 0.1); color: var(--accent); }
+:root[data-theme="dark"] .theme-switch:hover { background: rgb(255 176 0 / 0.22); }
+:root[data-theme="dark"] .theme-switch::before { content: "☀"; }
