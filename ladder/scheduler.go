@@ -168,7 +168,14 @@ func (l *Ladder) Play(ctx context.Context, kind string, config any, pool []Bot, 
 		return 0, err
 	}
 	log.Printf("Run %d (%s): %d bots, %d matches, deadline %s", runID, kind, len(pool), len(matches), deadline.Format(time.DateTime))
-	if err := l.Store.SetRunVersions(runID, l.serverImageID(ctx), gitRevision()); err != nil {
+	info := MatchInfo{Kind: ManualMatch, RunID: runID, ServerImage: l.serverImageID(ctx), LadderRevision: gitRevision()}
+	switch kind {
+	case "ladder":
+		info.Kind = LadderMatch
+	case "tournament":
+		info.Kind = TournamentMatch
+	}
+	if err := l.Store.SetRunVersions(runID, info.ServerImage, info.LadderRevision); err != nil {
 		log.Printf("Run %d: could not record the versions: %s", runID, err)
 	}
 	defer SetActivity("")
@@ -194,7 +201,7 @@ func (l *Ladder) Play(ctx context.Context, kind string, config any, pool []Bot, 
 			log.Printf("Run %d: match %d failed: %s", runID, i+1, err)
 			// Recorded as void, with the bots' output, unless the ladder is stopping
 			if result != nil && ctx.Err() == nil {
-				if id, err := l.Store.RecordMatch(runID, result); err != nil {
+				if id, err := l.Store.RecordMatch(info, result); err != nil {
 					log.Printf("Run %d: could not record the failed match: %s", runID, err)
 				} else {
 					log.Printf("Run %d: failed match recorded as #%d (void)", runID, id)
@@ -214,7 +221,7 @@ func (l *Ladder) Play(ctx context.Context, kind string, config any, pool []Bot, 
 		}
 		errors = 0
 
-		id, err := l.Store.RecordMatch(runID, result)
+		id, err := l.Store.RecordMatch(info, result)
 		result.RemoveReport()
 		if err != nil {
 			l.Store.FinishRun(runID, RunFailed)

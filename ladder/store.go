@@ -102,6 +102,18 @@ var migrations = []string{
 	`ALTER TABLE runs ADD COLUMN server_image TEXT NOT NULL DEFAULT '';
 	ALTER TABLE runs ADD COLUMN ladder_revision TEXT NOT NULL DEFAULT '';
 	CREATE INDEX IF NOT EXISTS matches_map ON matches(map);`,
+	// The continuous ladder: matches outside of runs, with what played them,
+	// and files that expire
+	`ALTER TABLE matches ADD COLUMN kind TEXT NOT NULL DEFAULT 'ladder';
+	ALTER TABLE matches ADD COLUMN server_image TEXT NOT NULL DEFAULT '';
+	ALTER TABLE matches ADD COLUMN ladder_revision TEXT NOT NULL DEFAULT '';
+	ALTER TABLE matches ADD COLUMN files_deleted INTEGER NOT NULL DEFAULT 0;
+	UPDATE matches SET
+		kind = COALESCE((SELECT CASE r.kind WHEN 'tournament' THEN 'tournament' ELSE 'ladder' END FROM runs r WHERE r.id = matches.run_id), 'manual'),
+		server_image = COALESCE((SELECT r.server_image FROM runs r WHERE r.id = matches.run_id), ''),
+		ladder_revision = COALESCE((SELECT r.ladder_revision FROM runs r WHERE r.id = matches.run_id), '');
+	CREATE INDEX IF NOT EXISTS matches_ended ON matches(ended_at);
+	CREATE INDEX IF NOT EXISTS match_bots_team_match ON match_bots(team, match_id);`,
 }
 
 // migrate brings the database schema to the current version. A database
@@ -297,13 +309,31 @@ func (s *Store) Runs(kind string, limit int) ([]Run, error) {
 	return s.scanRuns(`WHERE kind = ? ORDER BY id DESC LIMIT ?`, kind, limit)
 }
 
+// Kinds of matches: only ladder matches are rated
+const (
+	LadderMatch     = "ladder"
+	TournamentMatch = "tournament"
+	ManualMatch     = "manual" // played by hand, for testing
+)
+
+// MatchInfo is what the store needs to know about a match besides its result
+type MatchInfo struct {
+	Kind  string
+	RunID int64 // 0 outside of runs (tournaments are runs)
+	// What played the match: the arena server image, and the ladder's revision
+	ServerImage    string
+	LadderRevision string
+}
+
 // RecordMatch stores a played match: its results with the points of each
-// bot, its report and the bot logs. runID is 0 for matches outside of runs.
-// The report file is moved into the store.
+// bot, its report and the bot logs. The report file is moved into the store.
 //
 // A failed match (with an error, and no game result) is recorded as void:
 // it does not count, but its bots and their output are kept.
-func (s *Store) RecordMatch(runID int64, result *MatchResult) (int64, error) {
+func (s *Store) RecordMatch(info MatchInfo, result *MatchResult) (int64, error) {
+	if info.Kind == "" {
+		return 0, fmt.Errorf("the match has no kind")
+	}
 	void := result.Error != ""
 	if !void && (result.Result == nil || result.ReportFile == "") {
 		return 0, fmt.Errorf("the match has no result")
@@ -332,8 +362,9 @@ func (s *Store) RecordMatch(runID int64, result *MatchResult) (int64, error) {
 	}
 	defer tx.Rollback()
 
-	res, err := tx.Exec(`INSERT INTO matches (run_id, game_id, map, players, started_at, ended_at, turns, void, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		nullID(runID), result.GameID, result.Map, len(result.Bots), result.Started, result.Ended, turns, void, result.Error)
+	res, err := tx.Exec(`INSERT INTO matches (run_id, kind, game_id, map, players, started_at, ended_at, turns, void, error, server_image, ladder_revision)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		nullID(info.RunID), info.Kind, result.GameID, result.Map, len(result.Bots), result.Started, result.Ended, turns, void, result.Error, info.ServerImage, info.LadderRevision)
 	if err != nil {
 		return 0, err
 	}
@@ -546,6 +577,7 @@ type MatchBot struct {
 
 type MatchSummary struct {
 	ID        int64      `json:"id"`
+	Kind      string     `json:"kind"`
 	RunID     int64      `json:"runId,omitempty"`
 	GameID    string     `json:"gameId"`
 	Map       string     `json:"map"`
@@ -555,9 +587,14 @@ type MatchSummary struct {
 	Void      bool       `json:"void"`
 	Error     string     `json:"error,omitempty"` // why the match failed or was voided
 	Bots      []MatchBot `json:"bots"`            // by seat
+	// The report and logs were deleted (see PruneFiles)
+	FilesDeleted   bool   `json:"filesDeleted,omitempty"`
+	ServerImage    string `json:"serverImage,omitempty"`
+	LadderRevision string `json:"ladderRevision,omitempty"`
 }
 
 type MatchFilter struct {
+	Kind   string
 	RunID  int64
 	Team   string
 	Map    string
@@ -569,6 +606,10 @@ type MatchFilter struct {
 func (s *Store) Matches(filter MatchFilter) ([]MatchSummary, error) {
 	var where []string
 	var args []any
+	if filter.Kind != "" {
+		where = append(where, "m.kind = ?")
+		args = append(args, filter.Kind)
+	}
 	if filter.RunID != 0 {
 		where = append(where, "m.run_id = ?")
 		args = append(args, filter.RunID)
@@ -585,7 +626,8 @@ func (s *Store) Matches(filter MatchFilter) ([]MatchSummary, error) {
 		where = append(where, "m.id < ?")
 		args = append(args, filter.Before)
 	}
-	query := `SELECT m.id, COALESCE(m.run_id, 0), m.game_id, m.map, m.started_at, m.ended_at, m.turns, m.void, m.error FROM matches m`
+	query := `SELECT m.id, m.kind, COALESCE(m.run_id, 0), m.game_id, m.map, m.started_at, m.ended_at, m.turns, m.void, m.error,
+		m.files_deleted, m.server_image, m.ladder_revision FROM matches m`
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -601,7 +643,8 @@ func (s *Store) Matches(filter MatchFilter) ([]MatchSummary, error) {
 	var matches []MatchSummary
 	for rows.Next() {
 		var m MatchSummary
-		if err := rows.Scan(&m.ID, &m.RunID, &m.GameID, &m.Map, &m.StartedAt, &m.EndedAt, &m.Turns, &m.Void, &m.Error); err != nil {
+		if err := rows.Scan(&m.ID, &m.Kind, &m.RunID, &m.GameID, &m.Map, &m.StartedAt, &m.EndedAt, &m.Turns, &m.Void, &m.Error,
+			&m.FilesDeleted, &m.ServerImage, &m.LadderRevision); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -660,7 +703,7 @@ func (s *Store) SetVoid(id int64, void bool, reason string) error {
 func (s *Store) ConsecutiveFailures(team string, commit string) (int, error) {
 	rows, err := s.db.Query(`
 		SELECT b.status FROM match_bots b JOIN matches m ON m.id = b.match_id
-		WHERE b.team = ? AND b.commit_id = ? AND m.void = 0
+		WHERE b.team = ? AND b.commit_id = ? AND m.void = 0 AND m.kind = 'ladder'
 		ORDER BY m.id DESC LIMIT 100`, team, commit)
 	if err != nil {
 		return 0, err
@@ -679,6 +722,152 @@ func (s *Store) ConsecutiveFailures(team string, commit string) (int, error) {
 		count++
 	}
 	return count, rows.Err()
+}
+
+// RatedMatches returns the valid ladder matches that ended before a time
+// (all of them if zero), in order, as needed for ratings
+func (s *Store) RatedMatches(before time.Time) ([]RatedMatch, error) {
+	query := `SELECT m.id, m.ended_at, m.map, m.players, b.team, b.commit_id, b.flowers, b.status
+		FROM matches m JOIN match_bots b ON b.match_id = m.id
+		WHERE m.kind = 'ladder' AND m.void = 0`
+	var args []any
+	if !before.IsZero() {
+		query += ` AND m.ended_at < ?`
+		args = append(args, before)
+	}
+	rows, err := s.db.Query(query+` ORDER BY m.id, b.seat`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var matches []RatedMatch
+	for rows.Next() {
+		var id int64
+		var ended time.Time
+		var format Format
+		var bot RatedBot
+		var status BotStatus
+		if err := rows.Scan(&id, &ended, &format.Map, &format.Players, &bot.Team, &bot.Commit, &bot.Flowers, &status); err != nil {
+			return nil, err
+		}
+		bot.Failed = status != Finished
+		if len(matches) == 0 || matches[len(matches)-1].ID != id {
+			matches = append(matches, RatedMatch{ID: id, Time: ended, Format: format.Key()})
+		}
+		last := &matches[len(matches)-1]
+		last.Bots = append(last.Bots, bot)
+	}
+	return matches, rows.Err()
+}
+
+// MatchCounts returns how many valid ladder matches each team played in each
+// format (see Format.Key) since a time
+func (s *Store) MatchCounts(since time.Time) (map[string]map[string]int, error) {
+	rows, err := s.db.Query(`SELECT b.team, m.map, m.players, COUNT(*)
+		FROM matches m JOIN match_bots b ON b.match_id = m.id
+		WHERE m.kind = 'ladder' AND m.void = 0 AND m.ended_at >= ?
+		GROUP BY b.team, m.map, m.players`, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	counts := make(map[string]map[string]int)
+	for rows.Next() {
+		var team string
+		var format Format
+		var count int
+		if err := rows.Scan(&team, &format.Map, &format.Players, &count); err != nil {
+			return nil, err
+		}
+		if counts[team] == nil {
+			counts[team] = make(map[string]int)
+		}
+		counts[team][format.Key()] = count
+	}
+	return counts, rows.Err()
+}
+
+// Played is what the ladder played over a period
+type Played struct {
+	Matches int           `json:"matches"`
+	Void    int           `json:"void"`
+	Busy    time.Duration `json:"busy"` // total duration of the matches
+}
+
+// PlayedSince returns what the ladder played since a time
+func (s *Store) PlayedSince(since time.Time) (Played, error) {
+	var a Played
+	rows, err := s.db.Query(`SELECT void, started_at, ended_at FROM matches WHERE kind = 'ladder' AND ended_at >= ?`, since)
+	if err != nil {
+		return a, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var void bool
+		var started, ended time.Time
+		if err := rows.Scan(&void, &started, &ended); err != nil {
+			return a, err
+		}
+		if void {
+			a.Void++
+		} else {
+			a.Matches++
+		}
+		a.Busy += ended.Sub(started)
+	}
+	return a, rows.Err()
+}
+
+// PruneFiles deletes the report and logs of the matches that are not among
+// the last `keep` matches of any of their teams, and returns how many
+// matches lost their files. Tournament matches keep theirs.
+func (s *Store) PruneFiles(keep int) (int, error) {
+	return s.deleteFiles(`SELECT m.id FROM matches m
+		WHERE m.files_deleted = 0 AND m.kind != 'tournament' AND NOT EXISTS (
+			SELECT 1 FROM (
+				SELECT match_id, ROW_NUMBER() OVER (PARTITION BY team ORDER BY match_id DESC) AS n
+				FROM match_bots
+			) r WHERE r.match_id = m.id AND r.n <= ?)`, keep)
+}
+
+// DeleteOldestFiles deletes the report and logs of the `count` oldest
+// matches that still have them (tournaments last), when disk space is low
+func (s *Store) DeleteOldestFiles(count int) (int, error) {
+	return s.deleteFiles(`SELECT id FROM matches WHERE files_deleted = 0
+		ORDER BY kind = 'tournament', id LIMIT ?`, count)
+}
+
+func (s *Store) deleteFiles(query string, args ...any) (int, error) {
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return 0, err
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	// Marked first: if deleting is interrupted, files are left over, but the
+	// site never links to missing ones
+	for _, id := range ids {
+		if _, err := s.db.Exec(`UPDATE matches SET files_deleted = 1 WHERE id = ?`, id); err != nil {
+			return 0, err
+		}
+		os.Remove(s.ReportPath(id))
+		os.RemoveAll(filepath.Dir(s.LogPath(id, "")))
+	}
+	return len(ids), nil
 }
 
 const buildsSchema = `

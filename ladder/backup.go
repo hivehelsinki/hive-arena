@@ -15,8 +15,10 @@ import (
 )
 
 // Data under the store directory that is backed up, besides the database.
-// Repository mirrors and Docker images are not: they can be fetched or built again.
-var backupDirs = []string{"reports", "logs", "builds"}
+// Repository mirrors and Docker images are not: they can be fetched or built
+// again. Match reports and logs are not either: they are large, they expire
+// (see PruneFiles), and the results are in the database.
+var backupDirs = []string{"builds"}
 var backupFiles = []string{"teams.json", "registry-last.json"}
 
 type BackupFile struct {

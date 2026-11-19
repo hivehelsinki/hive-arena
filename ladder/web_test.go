@@ -20,7 +20,7 @@ func TestWebPages(t *testing.T) {
 	b := Bot{Name: "beta", Image: "img", Commit: "b"}
 	c := Bot{Name: "gamma", Image: "img", Commit: "c"}
 	run, _ := store.CreateRun("ladder", config.Schedule, []Bot{a, b, c})
-	match, _ := store.RecordMatch(run, fakeResult("m", []Bot{a, b, c}, []uint{5, 3, 0}, []BotStatus{Finished, Finished, Crashed}))
+	match, _ := store.RecordMatch(MatchInfo{Kind: LadderMatch, RunID: run}, fakeResult("m", []Bot{a, b, c}, []uint{5, 3, 0}, []BotStatus{Finished, Finished, Crashed}))
 	store.FinishRun(run, RunComplete)
 	store.RecordBuild(&Build{Team: "alpha", Tag: "v1", Commit: "0123456789abcdef", Status: BuildOK}, "build output")
 	store.SavePoolState(&PoolState{Teams: []TeamState{{Team: Team{Name: "alpha", Repo: "https://example.com/alpha", Members: []string{"x"}}, Bot: &a}}})
@@ -75,7 +75,7 @@ func TestWebPages(t *testing.T) {
 
 	// Tournaments are listed with the runs, but not counted in the leaderboard
 	tournament, _ := store.CreateRun("tournament", TournamentConfig{Name: "Lunch cup"}, []Bot{a, c})
-	store.RecordMatch(tournament, fakeResult("m", []Bot{a, c}, []uint{0, 9}, []BotStatus{Finished, Finished}))
+	store.RecordMatch(MatchInfo{Kind: TournamentMatch, RunID: tournament}, fakeResult("m", []Bot{a, c}, []uint{0, 9}, []BotStatus{Finished, Finished}))
 	store.FinishRun(tournament, RunComplete)
 	get("/runs", 200, "Lunch cup", "tournament")
 	get("/runs/"+id(tournament), 200, "Lunch cup", "not counted")

@@ -16,7 +16,7 @@ func TestStatusAndHealth(t *testing.T) {
 
 	a, b := Bot{Name: "a"}, Bot{Name: "b"}
 	run, _ := store.CreateRun("ladder", nil, []Bot{a, b})
-	store.RecordMatch(run, fakeResult("m", []Bot{a, b}, []uint{1, 0}, []BotStatus{Finished, Finished}))
+	store.RecordMatch(MatchInfo{Kind: LadderMatch, RunID: run}, fakeResult("m", []Bot{a, b}, []uint{1, 0}, []BotStatus{Finished, Finished}))
 	store.FinishRun(run, RunComplete)
 	store.SavePoolState(&PoolState{Teams: []TeamState{{Team: Team{Name: "a"}, Bot: &a}, {Team: Team{Name: "b"}, Error: "build-failed"}}})
 

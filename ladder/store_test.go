@@ -2,9 +2,11 @@ package main
 
 import (
 	"compress/gzip"
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -54,26 +56,26 @@ func TestStoreRunsAndLeaderboard(t *testing.T) {
 
 	// An old run, outside of the window
 	old, _ := store.CreateRun("ladder", map[string]any{"repeats": 1}, []Bot{a, b, c})
-	store.RecordMatch(old, fakeResult("m", []Bot{a, b, c}, []uint{0, 0, 9}, ok))
+	store.RecordMatch(MatchInfo{Kind: LadderMatch, RunID: old}, fakeResult("m", []Bot{a, b, c}, []uint{0, 0, 9}, ok))
 	store.FinishRun(old, RunComplete)
 
 	run1, err := store.CreateRun("ladder", map[string]any{"repeats": 1}, []Bot{a, b, c})
 	if err != nil {
 		t.Fatal(err)
 	}
-	m1, err := store.RecordMatch(run1, fakeResult("m", []Bot{a, b, c}, []uint{5, 3, 0}, ok))
+	m1, err := store.RecordMatch(MatchInfo{Kind: LadderMatch, RunID: run1}, fakeResult("m", []Bot{a, b, c}, []uint{5, 3, 0}, ok))
 	if err != nil {
 		t.Fatal(err)
 	}
 	store.FinishRun(run1, RunComplete)
 
 	run2, _ := store.CreateRun("ladder", map[string]any{"repeats": 1}, []Bot{a, b, c})
-	store.RecordMatch(run2, fakeResult("m", []Bot{a, b, c}, []uint{5, 3, 9}, []BotStatus{Finished, Finished, Crashed}))
+	store.RecordMatch(MatchInfo{Kind: LadderMatch, RunID: run2}, fakeResult("m", []Bot{a, b, c}, []uint{5, 3, 9}, []BotStatus{Finished, Finished, Crashed}))
 	store.FinishRun(run2, RunIncomplete)
 
 	// Still running: not counted
 	run3, _ := store.CreateRun("ladder", nil, []Bot{a, b, c})
-	store.RecordMatch(run3, fakeResult("m", []Bot{a, b, c}, []uint{0, 0, 9}, ok))
+	store.RecordMatch(MatchInfo{Kind: LadderMatch, RunID: run3}, fakeResult("m", []Bot{a, b, c}, []uint{0, 0, 9}, ok))
 
 	board, runs, err := store.Leaderboard(2)
 	if err != nil {
@@ -139,7 +141,7 @@ func TestStoreRunsAndLeaderboard(t *testing.T) {
 
 func TestStoreMatchWithoutRun(t *testing.T) {
 	store := newTestStore(t)
-	id, err := store.RecordMatch(0, fakeResult("m", []Bot{{Name: "x"}, {Name: "y"}}, []uint{1, 2}, []BotStatus{Finished, Finished}))
+	id, err := store.RecordMatch(MatchInfo{Kind: LadderMatch, RunID: 0}, fakeResult("m", []Bot{{Name: "x"}, {Name: "y"}}, []uint{1, 2}, []BotStatus{Finished, Finished}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +186,7 @@ func TestRecordVoidMatch(t *testing.T) {
 			{Bot: b, Seat: -1, Status: Crashed, ExitCode: 1},
 		},
 	}
-	id, err := store.RecordMatch(run, failed)
+	id, err := store.RecordMatch(MatchInfo{Kind: LadderMatch, RunID: run}, failed)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +220,7 @@ func TestRecordMatchRejectsUnseatedBots(t *testing.T) {
 	result := fakeResult("m", []Bot{a, b}, []uint{1, 2}, []BotStatus{Finished, Finished})
 	defer result.RemoveReport()
 	result.Bots[1].Seat = -1
-	if _, err := store.RecordMatch(0, result); err == nil {
+	if _, err := store.RecordMatch(MatchInfo{Kind: LadderMatch, RunID: 0}, result); err == nil {
 		t.Error("a bot without a seat should be an error, not a crash")
 	}
 }
@@ -227,18 +229,29 @@ func TestMigrations(t *testing.T) {
 	dir := t.TempDir()
 
 	// A database of the first version, with data
-	store, err := OpenStore(dir)
+	db, err := sql.Open("sqlite", filepath.Join(dir, "ladder.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.db.Exec(`DROP INDEX matches_map; CREATE TABLE runs_old AS SELECT id, kind, started_at, ended_at, status, config FROM runs; DROP TABLE run_bots; DROP TABLE runs;
-		ALTER TABLE runs_old RENAME TO runs; PRAGMA user_version = 1`); err != nil {
-		t.Fatal(err)
+	now := time.Now()
+	for _, statement := range []string{
+		migrations[0],
+		`INSERT INTO runs (id, kind, started_at, status, config) VALUES (1, 'ladder', ?, 'complete', '{}'), (2, 'tournament', ?, 'complete', '{}')`,
+		`INSERT INTO matches (id, run_id, game_id, map, players, started_at, ended_at, turns) VALUES
+			(1, 1, 'g', 'm', 2, ?, ?, 10), (2, 2, 'g', 'm', 2, ?, ?, 10), (3, NULL, 'g', 'm', 2, ?, ?, 10)`,
+		`PRAGMA user_version = 1`,
+	} {
+		args := []any{}
+		for range strings.Count(statement, "?") {
+			args = append(args, now)
+		}
+		if _, err := db.Exec(statement, args...); err != nil {
+			t.Fatal(err)
+		}
 	}
-	store.db.Exec(`INSERT INTO runs (kind, started_at, status, config) VALUES ('ladder', ?, 'complete', '{}')`, time.Now())
-	store.Close()
+	db.Close()
 
-	store, err = OpenStore(dir)
+	store, err := OpenStore(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,11 +267,114 @@ func TestMigrations(t *testing.T) {
 	if backups, _ := filepath.Glob(filepath.Join(dir, "ladder-v1-*.db")); len(backups) != 1 {
 		t.Errorf("expected a copy of the database before the migration, got %v", backups)
 	}
+	// Matches get their kind from their run
+	for id, kind := range map[int64]string{1: LadderMatch, 2: TournamentMatch, 3: ManualMatch} {
+		if match, _ := store.Match(id); match == nil || match.Kind != kind {
+			t.Errorf("expected match %d to be of kind %s: %+v", id, kind, match)
+		}
+	}
 
 	// A database from a newer ladder is refused
 	store.db.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, len(migrations)+1))
 	if other, err := OpenStore(dir); err == nil {
 		other.Close()
 		t.Error("a database from a newer version should be refused")
+	}
+}
+
+func TestRatedMatchesAndCounts(t *testing.T) {
+	store := newTestStore(t)
+	a := Bot{Name: "a", Image: "img-a", Commit: "c1"}
+	b := Bot{Name: "b", Image: "img-b", Commit: "c2"}
+	ok := []BotStatus{Finished, Finished}
+	ladder := MatchInfo{Kind: LadderMatch, ServerImage: "sha256:s", LadderRevision: "r"}
+
+	first, _ := store.RecordMatch(ladder, fakeResult("m", []Bot{a, b}, []uint{1, 2}, ok))
+	store.RecordMatch(ladder, fakeResult("m", []Bot{a, b}, []uint{3, 2}, []BotStatus{Finished, Crashed}))
+	store.RecordMatch(ladder, fakeResult("other", []Bot{b, a}, []uint{0, 0}, ok))
+	// Not rated: tournaments, manual and void matches
+	store.RecordMatch(MatchInfo{Kind: TournamentMatch}, fakeResult("m", []Bot{a, b}, []uint{1, 2}, ok))
+	store.RecordMatch(MatchInfo{Kind: ManualMatch}, fakeResult("m", []Bot{a, b}, []uint{1, 2}, ok))
+	void, _ := store.RecordMatch(ladder, fakeResult("m", []Bot{a, b}, []uint{1, 2}, ok))
+	store.SetVoid(void, true, "test")
+
+	matches, err := store.RatedMatches(time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 3 || matches[0].ID != first || matches[0].Format != "m:2" || matches[2].Format != "other:2" {
+		t.Fatalf("unexpected rated matches: %+v", matches)
+	}
+	if bots := matches[1].Bots; len(bots) != 2 || bots[0].Team != "a" || bots[0].Flowers != 3 || bots[0].Failed || !bots[1].Failed || bots[1].Commit != "c2" {
+		t.Errorf("unexpected bots: %+v", bots)
+	}
+	if before, _ := store.RatedMatches(time.Now().Add(-time.Hour)); len(before) != 0 {
+		t.Errorf("expected no matches before an hour ago, got %d", len(before))
+	}
+
+	counts, err := store.MatchCounts(time.Now().Add(-24 * time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if counts["a"]["m:2"] != 2 || counts["b"]["other:2"] != 1 {
+		t.Errorf("unexpected counts: %v", counts)
+	}
+	if counts, _ := store.MatchCounts(time.Now().Add(time.Hour)); len(counts) != 0 {
+		t.Errorf("expected no counts in the future: %v", counts)
+	}
+
+	played, err := store.PlayedSince(time.Now().Add(-24 * time.Hour))
+	if err != nil || played.Matches != 3 || played.Void != 1 {
+		t.Errorf("unexpected activity: %+v, %v", played, err)
+	}
+
+	match, _ := store.Match(first)
+	if match.Kind != LadderMatch || match.ServerImage != "sha256:s" || match.LadderRevision != "r" {
+		t.Errorf("unexpected match: %+v", match)
+	}
+}
+
+func TestPruneFiles(t *testing.T) {
+	store := newTestStore(t)
+	a, b, c := Bot{Name: "a"}, Bot{Name: "b"}, Bot{Name: "c"}
+	ok := []BotStatus{Finished, Finished}
+	ladder := MatchInfo{Kind: LadderMatch}
+
+	tournament, _ := store.RecordMatch(MatchInfo{Kind: TournamentMatch}, fakeResult("m", []Bot{a, b}, []uint{1, 2}, ok))
+	ab1, _ := store.RecordMatch(ladder, fakeResult("m", []Bot{a, b}, []uint{1, 2}, ok))
+	bc, _ := store.RecordMatch(ladder, fakeResult("m", []Bot{b, c}, []uint{1, 2}, ok))
+	ab2, _ := store.RecordMatch(ladder, fakeResult("m", []Bot{a, b}, []uint{1, 2}, ok))
+	ab3, _ := store.RecordMatch(ladder, fakeResult("m", []Bot{a, b}, []uint{1, 2}, ok))
+
+	// Keeping 2 matches per team: a and b keep ab2 and ab3, c keeps bc
+	n, err := store.PruneFiles(2)
+	if err != nil || n != 1 {
+		t.Fatalf("expected one match to lose its files, got %d, %v", n, err)
+	}
+	for _, id := range []int64{tournament, bc, ab2, ab3} {
+		if _, err := os.Stat(store.ReportPath(id)); err != nil {
+			t.Errorf("match %d should keep its report", id)
+		}
+	}
+	if _, err := os.Stat(store.ReportPath(ab1)); !os.IsNotExist(err) {
+		t.Error("the report of the first match should be deleted")
+	}
+	if _, err := os.Stat(filepath.Dir(store.LogPath(ab1, "a"))); !os.IsNotExist(err) {
+		t.Error("the logs of the first match should be deleted")
+	}
+	if match, _ := store.Match(ab1); !match.FilesDeleted {
+		t.Error("the match should be marked as without files")
+	}
+
+	// Low disk space: the oldest first, tournaments last
+	if n, _ := store.DeleteOldestFiles(1); n != 1 {
+		t.Errorf("expected one match, got %d", n)
+	}
+	if match, _ := store.Match(bc); !match.FilesDeleted {
+		t.Error("the oldest ladder match should lose its files first")
+	}
+	store.DeleteOldestFiles(10)
+	if match, _ := store.Match(tournament); !match.FilesDeleted {
+		t.Error("tournaments lose their files last")
 	}
 }

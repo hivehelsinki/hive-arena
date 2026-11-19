@@ -19,7 +19,7 @@ func TestBackup(t *testing.T) {
 
 	a, b := Bot{Name: "a"}, Bot{Name: "b"}
 	run, _ := store.CreateRun("ladder", nil, []Bot{a, b})
-	match, _ := store.RecordMatch(run, fakeResult("m", []Bot{a, b}, []uint{1, 0}, []BotStatus{Finished, Finished}))
+	match, _ := store.RecordMatch(MatchInfo{Kind: LadderMatch, RunID: run}, fakeResult("m", []Bot{a, b}, []uint{1, 0}, []BotStatus{Finished, Finished}))
 	store.RecordBuild(&Build{Team: "a", Status: BuildOK}, "build log")
 	store.SavePoolState(&PoolState{Teams: []TeamState{{Team: Team{Name: "a"}}}})
 
@@ -63,13 +63,14 @@ func TestBackup(t *testing.T) {
 		files[header.Name], _ = io.ReadAll(archive)
 	}
 
-	for _, want := range []string{"ladder.db", "reports/1.json.gz", "logs/1/a.log.gz", "logs/1/b.log.gz", "builds/1.log.gz", "teams.json"} {
+	// Match reports and logs are not backed up
+	for _, want := range []string{"ladder.db", "builds/1.log.gz", "teams.json"} {
 		if files[want] == nil {
 			t.Errorf("missing %s in the archive", want)
 		}
 	}
-	if len(files) != 6 {
-		t.Errorf("expected 6 files, got %d", len(files))
+	if len(files) != 3 {
+		t.Errorf("expected 3 files, got %d", len(files))
 	}
 
 	// The snapshot is a working database
