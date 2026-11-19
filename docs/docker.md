@@ -19,7 +19,7 @@ The ladder builds and runs every team's agent with Docker (its website and data:
 - **Join, play until the game is over, exit.** Exit with status 0 once the game is over. A container that exits before the end of the game, or never joins, counts as a crash: it ranks last in that match.
 - **No network access** other than the game server. Everything your agent needs must be in the image: fetch dependencies during the build, not when the agent starts.
 - **Read-only filesystem**, except `/tmp` (which counts in the memory limit). The agent runs as an unprivileged user (uid 65534, whatever `USER` the image sets): files it needs must be readable by everyone.
-- **Equal resources for everyone:** the CPU is split equally between the agents of a match (one match runs at a time), and each agent has 256 MB of memory and a limited number of processes. The standard turn timeout (2 seconds) applies.
+- **Equal resources for everyone:** each agent gets one CPU core (a little less in 6-player matches, the same for every agent of a match; one match runs at a time), 256 MB of memory and a limited number of processes. The standard turn timeout (2 seconds) applies.
 - **Output:** what your agent prints is kept (the last 256 kB per match) and shown on the match page, which helps you debug it. Docker keeps at most 1 MB per container: don't print every turn's whole state.
 - **Building** happens with network access, under a time limit (10 minutes), and the image must be under 2 GB. Keep images small: use a multi-stage build when your language allows it. Build cache mounts (`RUN --mount=type=cache`) are emptied before each build.
 

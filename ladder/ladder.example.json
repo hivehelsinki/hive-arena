@@ -26,9 +26,10 @@
 	},
 	"runner": {
 		"serverImage": "hive-arena-server",
-		"cores": 2,
+		"cpuPerBot": 1,
+		"cores": 5.5,
 		"memory": "256m",
-		"serverMemory": "2g",
+		"serverMemory": "512m",
 		"pids": 64,
 		"joinTimeout": "1m",
 		"matchTimeout": "30m"

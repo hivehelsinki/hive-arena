@@ -123,6 +123,7 @@ type Config struct {
 
 	Runner struct {
 		ServerImage  string   `json:"serverImage"`
+		CPUPerBot    float64  `json:"cpuPerBot"`
 		Cores        float64  `json:"cores"`
 		Memory       string   `json:"memory"`
 		ServerMemory string   `json:"serverMemory"`
@@ -173,6 +174,7 @@ func LoadConfig(path string) (*Config, error) {
 	config.Build.CacheLimit = "10GB"
 	config.Build.Interval = Duration{15 * time.Minute}
 	config.Runner.ServerImage = defaults.ServerImage
+	config.Runner.CPUPerBot = defaults.CPUPerBot
 	config.Runner.Cores = defaults.Cores
 	config.Runner.Memory = defaults.Memory
 	config.Runner.ServerMemory = defaults.ServerMemory
@@ -200,8 +202,8 @@ func (c *Config) validate() error {
 	}
 
 	r := c.Runner
-	if r.ServerImage == "" || r.Memory == "" || r.ServerMemory == "" || r.Cores <= 0 || r.Pids <= 0 || r.JoinTimeout.Duration <= 0 || r.MatchTimeout.Duration <= 0 {
-		return fmt.Errorf("runner: serverImage and memory must be set, and cores, pids, joinTimeout and matchTimeout positive")
+	if r.ServerImage == "" || r.Memory == "" || r.ServerMemory == "" || r.Cores <= 0 || r.CPUPerBot <= 0 || r.Pids <= 0 || r.JoinTimeout.Duration <= 0 || r.MatchTimeout.Duration <= 0 {
+		return fmt.Errorf("runner: serverImage and memory must be set, and cpuPerBot, cores, pids, joinTimeout and matchTimeout positive")
 	}
 	if c.Build.Timeout.Duration <= 0 || c.Build.KeepImages < 1 || c.Build.MaxImageMB < 0 || c.Build.Interval.Duration <= 0 {
 		return fmt.Errorf("build: timeout and interval must be positive, and keepImages at least 1")
@@ -216,6 +218,7 @@ func (c *Config) Location() (*time.Location, error) {
 func (c *Config) RunnerConfig() RunnerConfig {
 	config := DefaultRunnerConfig()
 	config.ServerImage = c.Runner.ServerImage
+	config.CPUPerBot = c.Runner.CPUPerBot
 	config.Cores = c.Runner.Cores
 	config.Memory = c.Runner.Memory
 	config.ServerMemory = c.Runner.ServerMemory

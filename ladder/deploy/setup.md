@@ -1,6 +1,6 @@
 # Deploying the ladder
 
-On a dedicated Linux VM (Debian or Ubuntu for the automatic installation of the tools; the plan assumes 2 cores). Memory: the bots of a match take up to 256 MB each (1.5 GB for 6 players), and the match server up to `runner.serverMemory` (2 GB): 4 GB or more.
+On a dedicated Linux VM (Debian or Ubuntu for the automatic installation of the tools). The defaults are for 6 cores and 4 GB of memory. CPU: each bot gets a core (`runner.cpuPerBot`), within `runner.cores` (5.5) for all the bots of a match; set `cores` to the machine's cores minus half a core. Memory: the bots of a match take up to 256 MB each (1.5 GB for 6 players), and the match server up to `runner.serverMemory` (512 MB: it keeps the whole game in memory, about 50 MB for a 540-turn 6-player game, so a 1000-turn game on the largest map should stay well under it); builds run between matches.
 
 ## Setup and updates
 
