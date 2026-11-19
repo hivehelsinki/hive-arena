@@ -13,8 +13,13 @@
 	#board h1 { margin: 0 0 0.6em; font-size: 1.6em; font-weight: 800; color: #ffb000; text-shadow: 0 0 12px rgb(255 176 0 / 0.5); }
 	#board h1::before { content: "⬢ "; }
 	#replay { flex: 1; display: flex; flex-direction: column; }
-	#caption { padding: 0.5em 1em; font-size: 1.1em; }
+	#caption { padding: 0.5em 1em; font-size: 1.1em; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3em 1.2em; }
 	#caption .dim, .dim { color: #8c86a0; }
+	#caption .format { font-weight: 800; color: #ffb000; }
+	#caption .bot .place { font-size: 0.8em; color: #8c86a0; margin-right: 0.25em; }
+	#caption .bot.first .place, #caption .bot.first .team { color: #ffb000; font-weight: 700; }
+	#caption .bot .flowers { font-family: ui-monospace, "SF Mono", Menlo, monospace; margin-left: 0.3em; }
+	#caption .bot .rank { font-size: 0.75em; color: #8c86a0; margin-left: 0.3em; border: 1px solid #3a3550; border-radius: 999px; padding: 0 0.45em; }
 	iframe { flex: 1; border: 0; width: 100%; }
 	table { width: 100%; border-collapse: collapse; }
 	td { padding: 0.4em 0.3em; border-bottom: 1px solid #2a2738; }
@@ -36,18 +41,32 @@
 	</div>
 </div>
 <script>
-// Replays play at 6 turns per second (see the viewer), then stay a few seconds on the last turn
-const TURNS_PER_SECOND = 6;
+// Replays play in about a minute (faster for long games, never slower than
+// the viewer's default), then stay a few seconds on the final state. The
+// viewer says when it reaches the last turn; a timer is the fallback.
+const REPLAY_SECONDS = 60;
+const MIN_SPEED = 6;
 const PAUSE = 8;
 
 function escape(s) {
 	return String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
 }
 
+function ordinal(n) {
+	const s = ["th", "st", "nd", "rd"], v = n % 100;
+	return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+// Ladder rank of each team, from the last update of the board
+let ranks = {};
+
 async function updateBoard() {
 	try {
 		const data = await (await fetch("/api/leaderboard")).json();
-		const rows = (data.ladder || []).filter(r => r.playing).map((r, i) =>
+		const playing = (data.ladder || []).filter(r => r.playing);
+		ranks = {};
+		playing.forEach((r, i) => { ranks[r.team] = i + 1; });
+		const rows = playing.map((r, i) =>
 			`<tr><td>${i + 1}</td><td>${escape(r.team)}</td><td class="num score">${(r.global.rating.mu - 3 * r.global.rating.sigma).toFixed(1)}</td>` +
 			`<td class="num dim">${r.global.games} matches</td></tr>`);
 		document.getElementById("standings").innerHTML = rows.join("") || "<tr><td class='dim'>No results yet.</td></tr>";
@@ -57,32 +76,60 @@ async function updateBoard() {
 }
 
 let lastShown = 0;
+let current = 0;
+let fallback = null;
+let ended = null;
+
+function schedule(seconds) {
+	clearTimeout(fallback);
+	clearTimeout(ended);
+	fallback = setTimeout(nextReplay, seconds * 1000);
+}
+
+// The viewer reached the last turn: stay on the final state, then go on
+window.addEventListener("message", e => {
+	if (e.source === document.getElementById("viewer").contentWindow && e.data && e.data.type === "hive-replay-ended") {
+		clearTimeout(ended);
+		ended = setTimeout(nextReplay, PAUSE * 1000);
+	}
+});
 
 async function nextReplay() {
-	let delay = 10;
+	let wait = 10;
 	try {
 		const matches = ((await (await fetch("/api/matches?limit=20")).json()) || []).filter(m => !m.void && !m.filesDeleted);
-		if (matches && matches.length > 0) {
-			// The most recent match not shown yet, or else a random recent one
-			let match = matches.find(m => m.id > lastShown) || matches[Math.floor(Math.random() * matches.length)];
+		if (matches.length > 0) {
+			// The most recent match not shown yet, or else a random recent one,
+			// never the one just shown (the viewer would not even reload)
+			const others = matches.filter(m => m.id !== current);
+			const pool = others.length > 0 ? others : matches;
+			const match = pool.find(m => m.id > lastShown) || pool[Math.floor(Math.random() * pool.length)];
 			lastShown = Math.max(lastShown, match.id);
+			current = match.id;
 
 			const bots = match.bots.slice().sort((a, b) => a.place - b.place);
 			document.getElementById("caption").innerHTML =
-				`Match #${match.id} <span class="dim">on ${escape(match.map)}</span> &nbsp; ` +
-				bots.map(b => `${escape(b.team)} <span class="dim">${b.flowers}</span>`).join(" &nbsp; ");
-			document.getElementById("viewer").src = `/viewer/?match=${match.id}&autoplay=1`;
-			delay = match.turns / TURNS_PER_SECOND + PAUSE + 5;
+				`<span class="format">${bots.length} players</span>` +
+				bots.map(b =>
+					`<span class="bot${b.place === 1 ? " first" : ""}"><span class="place">${ordinal(b.place)}</span>` +
+					`<span class="team">${escape(b.team)}</span><span class="flowers">${b.flowers}</span>` +
+					(ranks[b.team] ? `<span class="rank" title="Rank on the ladder">#${ranks[b.team]}</span>` : "") +
+					`</span>`).join("");
+
+			const speed = Math.max(MIN_SPEED, match.turns / REPLAY_SECONDS);
+			document.getElementById("viewer").src = `/viewer/?match=${match.id}&autoplay=1&speed=${speed.toFixed(1)}`;
+			// Loading the replay takes a while: the fallback is generous
+			wait = match.turns / speed + PAUSE + 30;
 		}
 	} catch (e) {
 		console.log(e);
 	}
-	setTimeout(nextReplay, delay * 1000);
+	schedule(wait);
 }
 
-updateBoard();
+// The board first, for the ladder ranks in the caption
+updateBoard().then(nextReplay);
 setInterval(updateBoard, 60 * 1000);
-nextReplay();
 </script>
 </body>
 </html>

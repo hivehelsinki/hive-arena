@@ -38,7 +38,8 @@ func (viewer *Viewer) playerName(player int) string {
 	return "?"
 }
 
-const AutoplaySpeed = 10 // ebiten runs 60 ticks per second, so 6 turns per second
+// Turns per second when playing, by default (ebiten runs 60 ticks per second)
+const DefaultSpeed = 6
 
 const ZoomFactor = 1.5
 const MinScale = 0.1
@@ -57,9 +58,11 @@ type Viewer struct {
 	// available in the browser)
 	Width, Height int
 
-	// Autoplay
-	Playing   bool
-	PlayTimer int
+	// Autoplay: Speed turns per second; Progress accumulates the fractions
+	// of a turn between ticks
+	Playing  bool
+	Speed    float64
+	Progress float64
 }
 
 func (viewer *Viewer) Update() error {
@@ -86,18 +89,19 @@ func (viewer *Viewer) Update() error {
 	// Toggle Autoplay with Space
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
 		viewer.Playing = !viewer.Playing
-		viewer.PlayTimer = 0
+		viewer.Progress = 1 // the next turn right away
 	}
 
 	// Run Autoplay
 	if viewer.Playing {
-		viewer.PlayTimer--
-		if viewer.PlayTimer <= 0 {
+		viewer.Progress += viewer.Speed / 60
+		for viewer.Playing && viewer.Progress >= 1 {
+			viewer.Progress--
 			if viewer.Turn < len(viewer.Game.History)-1 {
 				viewer.Turn++
-				viewer.PlayTimer = AutoplaySpeed
 			} else {
 				viewer.Playing = false
+				replayEnded()
 			}
 		}
 	}
@@ -318,6 +322,10 @@ func main() {
 		Scale:   1.0,
 		Live:    live,
 		Playing: args.Autoplay,
+		Speed:   args.Speed,
+	}
+	if viewer.Speed <= 0 {
+		viewer.Speed = DefaultSpeed
 	}
 	if len(game.History) > 0 {
 		viewer.CenterCamera()

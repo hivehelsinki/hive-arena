@@ -18,7 +18,7 @@ Input:
 
 ## In the browser
 
-`./build-web.sh` builds the viewer to WebAssembly in `web/` (`index.html`, `viewer.wasm` and its compressed version, `wasm_exec.js`). Serve that directory and open `index.html?url=<URL of a game report>` (add `&autoplay=1` to start playing right away; `--autoplay` on the desktop). The ladder serves it at `/viewer/`, where `?match=<id>` opens the replay of one of its matches.
+`./build-web.sh` builds the viewer to WebAssembly in `web/` (`index.html`, `viewer.wasm` and its compressed version, `wasm_exec.js`). Serve that directory and open `index.html?url=<URL of a game report>` (add `&autoplay=1` to start playing right away, and `&speed=<turns per second>`, 6 by default; `--autoplay` and `--speed` on the desktop). When an autoplayed replay reaches its last turn, the browser viewer sends a `{type: "hive-replay-ended"}` message to the page that embeds it. The ladder serves it at `/viewer/`, where `?match=<id>` opens the replay of one of its matches.
 
 Watching live games (`--host`, `--id`, `--token`) is only available in the desktop version.
 
