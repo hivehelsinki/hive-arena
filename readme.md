@@ -41,4 +41,4 @@ During the competition, the **ladder** plays every registered team's agent again
 
 ## License
 
-The Hive Arena source code is Copyright (c) Hive Helsinki 2025, and released under the MIT License
+The Hive Arena source code is Copyright (c) Hive Helsinki 2025-2026, and released under the MIT License
