@@ -2,6 +2,7 @@ package arena
 
 import (
 	"os"
+	"slices"
 	"testing"
 )
 
@@ -14,13 +15,13 @@ func toCube(c Coords, radius int) cube {
 func TestGeneratedMapsAreSymmetric(t *testing.T) {
 	settings := DefaultMapSettings()
 	for _, n := range RandomMapPlayers {
-		radius := settings.Radius[n]
 		syms := symmetries(n)
 		for seed := range int64(50) {
 			m, err := GenerateMap(n, seed, settings)
 			if err != nil {
 				t.Fatal(err)
 			}
+			radius := mapRadius(m)
 			terrain := make(map[cube]Terrain)
 			for c, ter := range m.Map {
 				if (c.Row+c.Col)%2 != 0 {
@@ -126,4 +127,51 @@ func TestGeneratedMapsRoundTrip(t *testing.T) {
 
 func writeFile(path, content string) error {
 	return os.WriteFile(path, []byte(content), 0o644)
+}
+
+// mapRadius returns the radius of a generated map: it has 2 * radius + 1 rows
+func mapRadius(m MapData) int {
+	rows := 0
+	for c := range m.Map {
+		rows = max(rows, c.Row+1)
+	}
+	return (rows - 1) / 2
+}
+
+func TestGeneratedMapsVary(t *testing.T) {
+	settings := DefaultMapSettings()
+	for _, n := range RandomMapPlayers {
+		radii := make(map[int]bool)
+		var fieldShares, rockShares []float64
+		for seed := range int64(60) {
+			m, err := GenerateMap(n, seed, settings)
+			if err != nil {
+				t.Fatal(err)
+			}
+			radius := mapRadius(m)
+			if radius < settings.Radius[n] || radius > settings.Radius[n]+settings.ExtraRadius {
+				t.Fatalf("%d players: radius %d out of range", n, radius)
+			}
+			radii[radius] = true
+			fields, rocks := 0, 0
+			for _, ter := range m.Map {
+				switch ter {
+				case FIELD:
+					fields++
+				case ROCK:
+					rocks++
+				}
+			}
+			fieldShares = append(fieldShares, float64(fields)/float64(len(m.Map)))
+			rockShares = append(rockShares, float64(rocks)/float64(len(m.Map)))
+		}
+		if len(radii) != settings.ExtraRadius+1 {
+			t.Errorf("%d players: expected every radius in range, got %v", n, radii)
+		}
+		spread := func(xs []float64) float64 { return slices.Max(xs) - slices.Min(xs) }
+		if spread(fieldShares) < 0.06 || spread(rockShares) < 0.08 {
+			t.Errorf("%d players: shares should vary: fields %.2f-%.2f, rocks %.2f-%.2f", n,
+				slices.Min(fieldShares), slices.Max(fieldShares), slices.Min(rockShares), slices.Max(rockShares))
+		}
+	}
 }

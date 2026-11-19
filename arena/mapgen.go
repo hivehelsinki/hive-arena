@@ -16,11 +16,14 @@ import (
 
 // MapSettings shape random maps
 type MapSettings struct {
-	// Radius of the hexagonal map, by number of players
-	Radius map[int]int
-	// Shares of the map covered by fields and rocks (roughly)
-	FieldShare float64
-	RockShare  float64
+	// Radius of the hexagonal map, by number of players, at least: up to
+	// ExtraRadius more, at random
+	Radius      map[int]int
+	ExtraRadius int
+	// Shares of the map covered by fields and rocks (roughly), drawn between
+	// these bounds: from scarce to rich, from open to maze-like
+	FieldShare [2]float64
+	RockShare  [2]float64
 	// Distance from a base to the nearest field, at least and at most
 	HomeFieldDistance [2]int
 }
@@ -28,8 +31,9 @@ type MapSettings struct {
 func DefaultMapSettings() MapSettings {
 	return MapSettings{
 		Radius:            map[int]int{1: 6, 2: 8, 3: 10, 4: 11, 6: 12},
-		FieldShare:        0.14,
-		RockShare:         0.10,
+		ExtraRadius:       2,
+		FieldShare:        [2]float64{0.08, 0.20},
+		RockShare:         [2]float64{0.03, 0.20},
 		HomeFieldDistance: [2]int{2, 4},
 	}
 }
@@ -97,21 +101,33 @@ func GenerateMap(numPlayers int, seed int64, settings MapSettings) (MapData, err
 	if syms == nil {
 		return MapData{}, fmt.Errorf("random maps are for %v players, not %d", RandomMapPlayers, numPlayers)
 	}
-	radius := settings.Radius[numPlayers]
-	if radius < 5 {
+	if settings.Radius[numPlayers] < 5 {
 		return MapData{}, fmt.Errorf("no map radius for %d players", numPlayers)
 	}
 	rng := rand.New(rand.NewSource(seed))
+	between := func(bounds [2]float64) float64 { return bounds[0] + rng.Float64()*(bounds[1]-bounds[0]) }
+	shape := mapShape{
+		radius:     settings.Radius[numPlayers] + rng.Intn(settings.ExtraRadius+1),
+		fieldShare: between(settings.FieldShare),
+		rockShare:  between(settings.RockShare),
+	}
 
 	for range 1000 {
-		if m, ok := tryMap(numPlayers, radius, syms, settings, rng); ok {
+		if m, ok := tryMap(numPlayers, shape, syms, settings, rng); ok {
 			return m, nil
 		}
 	}
 	return MapData{}, fmt.Errorf("could not generate a map for %d players with seed %d", numPlayers, seed)
 }
 
-func tryMap(numPlayers, radius int, syms []func(cube) cube, settings MapSettings, rng *rand.Rand) (MapData, bool) {
+// The size and the shares of a map, drawn once per map
+type mapShape struct {
+	radius                int
+	fieldShare, rockShare float64
+}
+
+func tryMap(numPlayers int, shape mapShape, syms []func(cube) cube, settings MapSettings, rng *rand.Rand) (MapData, bool) {
+	radius := shape.radius
 	var cells []cube
 	terrain := make(map[cube]Terrain)
 	for x := -radius; x <= radius; x++ {
@@ -166,9 +182,13 @@ func tryMap(numPlayers, radius int, syms []func(cube) cube, settings MapSettings
 	}
 
 	// Rocks: ridges (random walks) and boulders, away from the bases
-	target := int(settings.RockShare * float64(len(cells)) / float64(numPlayers))
+	target := int(shape.rockShare * float64(len(cells)) / float64(numPlayers))
 	for placed := 0; placed < target; {
+		// Ridges start away from the edge, where they shape the paths
 		c := cells[rng.Intn(len(cells))]
+		if c.distance(center) > radius-3 {
+			continue
+		}
 		length := 2 + rng.Intn(5)
 		dir := rng.Intn(6)
 		for range length {
@@ -212,7 +232,7 @@ func tryMap(numPlayers, radius int, syms []func(cube) cube, settings MapSettings
 			break
 		}
 	}
-	target = int(settings.FieldShare * float64(len(cells)) / float64(numPlayers))
+	target = int(shape.fieldShare * float64(len(cells)) / float64(numPlayers))
 	for placed := 0; placed < target; {
 		c := cells[rng.Intn(len(cells))]
 		if nearBase(c, hi) {
