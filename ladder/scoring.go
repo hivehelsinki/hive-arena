@@ -15,16 +15,11 @@ type Placement struct {
 	Failed  bool // crashed or did not join
 }
 
-// MatchPoints returns the points of each bot in a match, in the same order.
-// Bots are ordered by flowers, except that failed bots are all last, tied
-// with each other. Tied bots share the average of the places they span.
-func MatchPoints(placements []Placement) []int {
-	n := len(placements)
-	points := make([]int, n)
-	if n < 2 {
-		return points
-	}
-
+// matchRanks returns the rank of each bot in a match, in the same order:
+// the first place (1-based) its group of tied bots spans, and the size of that
+// group. Bots are ordered by flowers, except that failed bots are all last,
+// tied with each other.
+func matchRanks(placements []Placement) (ranks []int, tied []int) {
 	// Sort keys: failed bots after all others, then more flowers first
 	better := func(a, b Placement) bool {
 		if a.Failed != b.Failed {
@@ -35,21 +30,34 @@ func MatchPoints(placements []Placement) []int {
 		}
 		return a.Flowers > b.Flowers
 	}
-	tied := func(a, b Placement) bool {
-		return !better(a, b) && !better(b, a)
-	}
 
+	ranks = make([]int, len(placements))
+	tied = make([]int, len(placements))
 	for i, p := range placements {
-		// Places (1-based) spanned by p's group of tied bots
-		first, size := 1, 0
+		ranks[i] = 1
 		for _, other := range placements {
 			if better(other, p) {
-				first++
-			} else if tied(other, p) {
-				size++
+				ranks[i]++
+			} else if !better(p, other) {
+				tied[i]++
 			}
 		}
-		rank := float64(first) + float64(size-1)/2
+	}
+	return ranks, tied
+}
+
+// MatchPoints returns the points of each bot in a match, in the same order
+// (see matchRanks). Tied bots share the average of the places they span.
+func MatchPoints(placements []Placement) []int {
+	n := len(placements)
+	points := make([]int, n)
+	if n < 2 {
+		return points
+	}
+
+	ranks, tied := matchRanks(placements)
+	for i := range placements {
+		rank := float64(ranks[i]) + float64(tied[i]-1)/2
 		points[i] = int(math.Round(MaxPoints * (float64(n) - rank) / float64(n-1)))
 	}
 	return points
