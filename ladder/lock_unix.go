@@ -22,6 +22,10 @@ func lockDataDir(dataDir string) error {
 		file.Close()
 		return fmt.Errorf("another ladder process is playing matches with this data (the service?): stop it first")
 	}
-	// Kept open: the lock is released when the process exits
+	// Kept open, and referenced so that the garbage collector does not
+	// close it: the lock is released when the process exits
+	lockFile = file
 	return nil
 }
+
+var lockFile *os.File
