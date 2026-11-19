@@ -1,10 +1,10 @@
 # Hive Arena Ladder: Plan
 
-A staff-run service that plays all registered bots against each other **twice a day** (for instance at 8:00 and 16:00), records every game, and publishes results and replays on a public website. It gives participants regular automatic feedback during the competition, without anyone having to run matches by hand. The same machinery can also run a quick tournament for a live event.
+A staff-run service that plays registered bots against each other **continuously**, as a ladder (each team challenges the teams ranked just above it, automatically), records every game, and publishes ratings, results and replays on a public website. It gives participants automatic feedback within minutes of pushing a new version, without anyone having to run matches by hand. The same machinery can also run a quick tournament for a live event.
 
 ## Background
 
-In the 2019 Arena, bots were built and run by the organizers, which turned into a mess of language versions, virtual environments and OS differences. In Arena 2025 each team ran its own bot against the server API, which avoided that problem but meant the only interaction between teams was a preview tournament and the final, both needing an organizer present and teams typing in match names on screen. The goal now is for a team to register once, keep pushing, and see fresh results twice a day.
+In the 2019 Arena, bots were built and run by the organizers, which turned into a mess of language versions, virtual environments and OS differences. In Arena 2025 each team ran its own bot against the server API, which avoided that problem but meant the only interaction between teams was a preview tournament and the final, both needing an organizer present and teams typing in match names on screen. The goal now is for a team to register once, keep pushing, and see its new version climb or fall on the ladder.
 
 The compromise that keeps environment problems out of the organizers' hands: **teams provide a working Dockerfile**. The organizers only build and run it.
 
@@ -42,7 +42,7 @@ One Go binary, `ladder`, with these parts:
 
 1. **Registry sync**: reads the team list and resolves what to run.
 2. **Builder**: turns a team's repo at a tag into a Docker image.
-3. **Scheduler**: decides which matches to play (full round-robins).
+3. **Matchmaker**: decides which match to play next (ladder challenges, within a daily quota).
 4. **Runner**: plays one match in containers and collects the result.
 5. **Store**: SQLite for match records, plus the report files on disk.
 6. **Web**: a read-only HTTP site over the store, including the wasm viewer.
@@ -61,7 +61,7 @@ A public, organizer-owned repo holds `teams.json`:
 
 - To register or change a team, open a pull request; staff review and merge. Reviewing the PR is the "authentication".
 - Team size is limited to 4-5 (checked by staff when merging).
-- The ladder pulls the registry repo at the start of each run (and on demand by staff) and picks up changes.
+- The ladder pulls the registry repo at every build check (every 15 minutes) and picks up changes.
 - **What runs:** the most recent tag (by commit date) among the tags that point to a commit on the repo's `main` branch. Tags elsewhere are ignored. Pushing a new tag on `main` is how a team "submits" an update. Images are keyed by commit, so moved or deleted tags are harmless: whatever commit the resolved tag points to at sync time is what runs. An optional `ref` field in the registry pins a specific tag or commit, for staff overrides and for the final.
 - Repos must be public (or readable with a staff deploy key); we don't hide bots from each other.
 
@@ -82,7 +82,7 @@ A team's repo must contain, at its root, a `Dockerfile` that builds an image whi
 
 ## Building
 
-- **At the start of each run** (see Scheduling), and every 15 minutes between runs so that teams get feedback soon, for every team, resolve the latest tag to a commit; if no image exists for that commit, fetch it and `docker build` it with a time limit (10 minutes) and a size cap (2 GB). Build cache mounts are emptied before each build (they are shared between all builds), and the build cache is kept under a size limit.
+- **Every 15 minutes** (between matches), for every team, resolve the latest tag to a commit; if no image exists for that commit, fetch it and `docker build` it with a time limit (10 minutes) and a size cap (2 GB). Build cache mounts are emptied before each build (they are shared between all builds), and the build cache is kept under a size limit.
 - Images are tagged `hive-ladder/<team>:<commit>`; old images are pruned (keep the last few per team). A good build whose image disappeared is built again.
 - Failures that are not the team's (an interrupted build, docker or the image registry failing, a smoke test that could not run) are not recorded: the build is tried again next time.
 - The build log is stored and shown on the team's page.
@@ -97,7 +97,7 @@ For each match the runner:
 2. Starts a server container from the arena server image on that network, with `--dev` (no minimum turn duration, so games play as fast as the bots can answer; the standard 2-second turn timeout still applies to every agent), accepting a single game and keeping no files, with memory and process limits.
 3. Calls `/newgame?map=...&players=n&names=...` on it, which reserves one seat per bot.
 4. Starts one container per bot with the contract's env variables (each with its own seat's game ID), in a random order.
-5. Polls `/status` until the game is over (within the match timeout, and never past the start of the next scheduled run), and takes the result from it.
+5. Polls `/status` until the game is over (within the match timeout), and takes the result from it.
 6. Streams the final report (`/report`) to a compressed file, and records it.
 7. Stops and removes all containers and the network, whatever happened.
 
@@ -105,7 +105,7 @@ A match that fails (timeout, server failure) is recorded as **void**, with the e
 
 Container limits, the same for every bot: `--read-only`, `--tmpfs /tmp`, `--user 65534:65534`, `--cpus <cores / n>` (see below), `--memory 256m`, `--pids-limit 64`, `--network <match net>`, no extra capabilities (`--cap-drop ALL`, `--security-opt no-new-privileges`), at most 1 MB of output kept by docker, `--pull=never`. The limits are tuned after testing on real example bots. Docker's daemon is the only privileged component, and the ladder machine is a dedicated VM.
 
-The target VM has only **2 virtual cores**, and with `--dev` matches are CPU-bound rather than paced by the clock. So **matches run one at a time**: nothing else competes for the CPU, and a bot's result does not depend on what else is running. Within a match, the CPU is split equally between the `n` bots: `--cpus = cores / n` (2 cores give 1.0 each in a 2-player match, 0.5 in a 4-player one, 0.33 in a 6-player one). The server container has no limit of its own: it only works between turns (validating and applying orders), when the bots are mostly waiting, so it should not take much from them. This is an assumption to verify: in step 2, measure match duration and the server's CPU use with the example bots, and adjust (e.g. reserve a fraction of a core for the server) if it turns out to matter. The per-bot CPU share differs between formats, but is identical for all bots in a match, which is what matters for fairness. If time per run turns out too tight, the answer is a larger VM or fewer matches per run, not unequal shares.
+The target VM has only **2 virtual cores**, and with `--dev` matches are CPU-bound rather than paced by the clock. So **matches run one at a time**: nothing else competes for the CPU, and a bot's result does not depend on what else is running. Within a match, the CPU is split equally between the `n` bots: `--cpus = cores / n` (2 cores give 1.0 each in a 2-player match, 0.5 in a 4-player one, 0.33 in a 6-player one). The server container has no limit of its own: it only works between turns (validating and applying orders), when the bots are mostly waiting, so it should not take much from them. This is an assumption to verify: in step 2, measure match duration and the server's CPU use with the example bots, and adjust (e.g. reserve a fraction of a core for the server) if it turns out to matter. The per-bot CPU share differs between formats, but is identical for all bots in a match, which is what matters for fairness. If the quotas turn out too large for the machine, the answer is a larger VM or a lower quota, not unequal shares.
 
 A bot is counted as **crashed** if its container exits before the game is over, and as **no-join** if it does not join in time (or its container exits first). The match goes on: the runner joins a stand-in in place of a missing bot, which posts empty orders every turn so the game is not slowed down. Either way the bot is ranked last (see "Scoring").
 
@@ -113,91 +113,91 @@ When a bot crashes (mid-game, or after joining but before the game starts), the 
 
 ## Games and lineups
 
-Maps are fixed by the files in `maps/` (the number of players per map is chosen by the schedule: any `n` the map supports). The mix of formats:
+Maps are fixed by the files in `maps/` (the number of players per map is chosen by the configuration: any `n` the map supports). A **format** is a map and a number of players, for instance:
 
-- mostly 3-4 player matches,
-- 6-player matches as the showcase format,
-- 2-player matches (a full head-to-head round-robin) for the head-to-head table.
+- 2-player matches, the most direct comparison,
+- 3 and 4 player matches,
+- 6-player matches as the showcase format.
 
-With a few teams, a 6-player match is one big game with everyone in it: it says little about who beats whom, and one bot can decide the winner by interfering with another. Smaller lineups show direct strength.
+Every format gets the same quota of matches (see Matchmaking), and its own ladder. With about 10 teams, a 6-player match takes most of the field: it says less about who beats whom, and one bot can decide the winner by interfering with another. Smaller lineups show direct strength.
 
-## Scheduling: full round-robins
+**Seats are random.** All maps are symmetrical, so a start position is neither an advantage nor a handicap: it only decides who your neighbours are. Seats are drawn at random for every match, and the luck of the neighbour draw averages out over many matches.
 
-With a small pool (around 5-6 teams) there is no skill-based matchmaking. Everyone plays everyone, equally often.
+## Matchmaking: a continuous ladder
 
-**Per map with `n` players, a round-robin is every lineup of `n` bots:** C(B, n) lineups for B bots. With 6 bots that is 15 lineups on a 4-player map, 20 on a 3-player map, 15 pairs on a 2-player map, and a single lineup (everyone) on a 6-player map. Each bot meets each opponent equally often within a round-robin.
+The ladder plays one match at a time, continuously, until every team has played its quota; then it waits. There are no runs, no fixed schedule and no frozen pool: a team's new version enters the pool as soon as it is built, and the leaderboard is always current. The first design (full round-robins twice a day, scored by mean points over a window of runs) was replaced because the number of lineups grows combinatorially with the pool (10 bots: 585 lineups per round over the four formats) and turned into random sampling anyway, while teams waited up to 12 hours to see a new version play.
 
-**Seats are random.** All maps are symmetrical, so a start position is neither an advantage nor a handicap: it only decides who your neighbours are. Seats are drawn at random for every match. Each lineup is played several times (best of N), so the luck of the neighbour draw averages out over the repeats.
+**Quota: N matches per 24 hours in each format, per team.** Every match a team plays counts, whether it started it or was challenged. With about 10 teams and the four formats, the cost is about `teams × formats × N / average players per match`: N = 20 gives about 210 matches a day.
 
-**Runs.** The ladder runs twice a day at configured times (e.g. 8:00 and 16:00; staff can also trigger a run by hand). At the start of a run:
+**Before each match**, the matchmaker:
 
-1. pull the registry and resolve every team's latest tag on `main` to a commit;
-2. build the images that don't exist yet, and smoke-test the new ones (teams with a failing build keep their previous good image);
-3. **freeze the pool**: the list of bots and commits for this run. Every match in the run uses exactly these images, so all results in a run are comparable and a team pushing a tag mid-run changes nothing until the next one.
+1. **Picks the challenger**: the team and format furthest below the quota (matches played in the last 24 hours, a rolling window), ties broken at random. A format needs as many teams as players, otherwise it is skipped. If every team has met its quota, nothing is played, and the matchmaker looks again a minute later (or as soon as a new version is built or the configuration changes).
+2. **Picks the opponents**, in that format's ladder: the other `n - 1` players are drawn at random among the `max(M, n - 1)` teams ranked just above the challenger. Near the top, where there are not enough teams above, the window extends to the teams just below. A fraction of the matches (say 10%) take `n - 1` opponents at random among all teams instead, so that every team keeps meeting the whole field.
+3. **Draws the seats** at random (see Games and lineups), and plays the match.
 
-A run then plays, for each configured map, one complete round-robin with every lineup played N times (best of N). The matches of a run are queued in an interleaved random order rather than lineup by lineup, so that if the run is cut short, every bot has still played about the same mix. A run has a deadline (before the next run starts); matches not started by then are dropped and the run is marked incomplete on the site. With only two runs a day, there are many hours available (about 8 between runs), so there is room for many matches. The run size is adjustable to the number of teams: the number of repeats N and the set of maps are configuration, and can be raised with few teams (more games, tighter standard errors) or lowered as the pool grows and lineups multiply. There is no auto-sizing: staff set N and the maps by hand, and the current values are published on the site, so players know how many games a run contains. Whatever N is chosen, it is the same for every lineup in a run. Between runs the machine is idle, which is a good time for builds and pruning.
+Because challenges go upward, top teams are pulled into more matches than they start; counting every match in the quota keeps the totals per team close (a team that is often challenged starts fewer challenges itself). A team can exceed its quota by being challenged.
 
-**Staff bots.** There are no special house bots: the only way into the ladder is the registry. If wanted, staff register bots like any team (for instance the example agents, or a deliberately weak bot as a reference point), and they are ranked like everyone else. A format needs at least as many bots as players: with fewer registered bots, it is skipped in that run.
+**Nothing is kept in memory.** Every decision is made from the match history and the configuration file, both read before each match. A restart (an update, a crash, a reboot) resumes where the ladder left off: the match that was being played is lost and not counted, and the next pick looks at the same history.
 
-**Bot changes.** A team's new tag takes effect at the next run. Results are recorded with the commit that produced them.
+**Tunable while the ladder runs.** These settings are re-read from the configuration file before each match: the quota N, the window M, the share of random matches, the formats, the rating parameters, the build interval, and a `paused` switch (to stop playing, for instance while staff run the final tournament). An invalid file keeps the previous settings, with a warning on the status page. Changing a rating parameter recomputes every rating from the full history, so nothing is left in an inconsistent state. Settings that shape the machine (data directory, resource limits, listen address) still need a restart.
 
-**Pool changes.** A new team joins at the next run. A team whose bot repeatedly fails to build, join or finish (K matches in a row) is left out of the pool until it gets a good image; its old results age out of the window.
+**Demand and capacity.** The status page shows how many matches the quotas need per day and how many were played in the last 24 hours, with the time spent idle, so staff see when N is too high for the number of teams.
 
-## Scoring
+**Pool changes.** A new team enters at the bottom of every ladder, and is challenged and challenges like the others; its first matches move its rating fast (see Rating). A team whose new tag is built plays with it from its next match. A team whose bot fails (crashes or does not join) K matches in a row with the same version is left out until it pushes a new tag.
 
-Rank players by flowers in reserve; equal counts are ties. Each player scores, per match:
+**Staff bots.** There are no special house bots: the only way into the ladder is the registry. If wanted, staff register bots like any team (for instance the example agents, or a deliberately weak bot as a reference point), and they are ranked like everyone else.
 
-```
-points = 60 * (n - rank) / (n - 1)
-```
+## Rating
 
-Only 2, 3, 4 and 6 player games are played, so scores are scaled to integers: 60 is a multiple of every `n - 1` in use (1, 2, 3, 5), with a factor 2 to spare so that ties stay whole numbers too. Points per place, before ties:
+Each team has a **rating per format** (map and number of players), and a **global rating** fitted on all its matches in all formats. A rating is a skill estimate μ and an uncertainty σ, in the style of TrueSkill. Teams are **ranked by μ − 3σ**, a conservative estimate: a new team starts at μ = 25, σ = 25/3, which shows as 0, at the bottom, and climbs as it wins; a large σ means large updates, so a strong newcomer climbs within a few dozen matches.
 
-| players | 1st | 2nd | 3rd | 4th | 5th | 6th |
-|---|---|---|---|---|---|---|
-| 2 | 60 | 0 | | | | |
-| 3 | 60 | 30 | 0 | | | |
-| 4 | 60 | 40 | 20 | 0 | | |
-| 6 | 60 | 48 | 36 | 24 | 12 | 0 |
+The model is **OpenSkill's Plackett-Luce model** (Weng and Lin, 2011): a closed-form update for free-for-all matches of any number of players, with ties, so 2, 3, 4 and 6 player matches feed the same ratings. True TrueSkill needs an iterative approximation over a factor graph for more than 2 players, and is a Microsoft trademark; OpenSkill was published as an open alternative, and behaves practically the same with the same parameters.
 
-Tied bots share the average of the points of the places they span (two bots tied for 1st in a 4-player match get 50 each; all tied gives 30 each in a 3-player match). This puts maps with different player counts on one scale, and a bot's result is always an integer in 0-60, which is easy to read and to store. A match is never reduced to "winners vs. everyone else".
+- **Order of a match**: by flowers in reserve, equal counts tied. A bot that crashes or does not join is ranked last, tied with the other failed bots, as before.
+- **Skill changes**: a dynamics term τ adds a little uncertainty before every match, so σ never reaches 0 and the rating keeps following a team that improves (as in esports ladders).
+- **New versions**: bots change in jumps rather than gradually. When a team's version changes, its σ is raised to at least a configured value (half the initial σ, for instance), so the rating reacts within a few matches to a rewrite or a regression. 0 disables it.
+- **Recomputed, not stored**: ratings are computed by replaying all valid ladder matches in order, every time they are needed (thousands of matches take milliseconds). There is no rating state to corrupt, a rating parameter can change at any time, and the ratings at a past date are those of the matches before it (used to pick the top N for the final, see Live events).
 
-A bot that crashes or times out is ranked last, tied with other failed bots, so a broken bot loses points and cannot make others look good.
+Parameters (μ₀ = 25, σ₀ = 25/3, β = 25/6, τ = 25/300, the TrueSkill defaults) are configuration. Void matches and tournaments do not count.
 
-**Leaderboard score = mean points over a window of the last K runs** (K configurable; e.g. 2 runs for the last day, or more once there are enough games). Windows made of whole runs mean every bot in them has played the same lineups. Only recent runs count, so an updated bot is judged on its new behavior once the window has rolled over (and a team that pushed a new tag sees its effect after the next run). Each run's own standings are also shown, so a team can see directly what its latest tag did. Incomplete runs count with the matches they did play. There is no rating state to reset; the whole thing can be recomputed from the stored matches at any time. A fixed, all-vs-all format also means all teams play about the same number of games, so a win rate cannot be gamed by choosing when to play (the concern that made Elo unattractive).
+**Also shown, as statistics**: matches played, the mean points per match (`points = 60 * (n - rank) / (n - 1)`, ties averaged, the scale of the first design: 60 for the winner, 0 for the last) and the **head-to-head table**: how often A finished ahead of B (ties count half), in the matches they played together. These are computed on the matches of the last few days, and are what participants will want to look at; the ladder order is the rating.
 
-The leaderboard shows, for each bot: score, games played in the window, a standard error, and the commit/tag currently running. With few teams, two bots are often statistically tied, and the site says so openly. Per-map scores are available as a secondary view.
-
-A **head-to-head table** shows how often A finished ahead of B (ties count half), overall and per map. With 6 teams it is 15 cells, and it is what participants will want to look at.
-
-If many more teams show up (when full round-robins become too large), the options are evenly drawn random lineups, or a rating system such as OpenSkill fed with the same stored results. The match records support either without changes.
+Since challenges are automatic, a team cannot choose its opponents or when it plays, which was the concern with rating systems in the first design.
 
 ## Recording
 
 Every match is stored:
 
-- **In SQLite**: match id, timestamp, map, `n`, seat/player index, team and commit per seat, flowers, points, status per bot (finished, crashed, no-join), and whether the match is valid (failed matches are void, with their error, and not counted). Each run records the arena server image and the ladder revision that played it. The schema is versioned, with migrations (the database is copied before being migrated).
+- **In SQLite**: match id, timestamp, map, `n`, seat/player index, team and commit per seat, flowers, points, status per bot (finished, crashed, no-join), and whether the match is valid (failed matches are void, with their error, and not counted). Each match records the arena server image and the ladder revision that played it. The schema is versioned, with migrations (the database is copied before being migrated).
 - **As files**: the server's JSON report (the same format as `history/` today, so the existing viewer reads it unchanged), stored compressed, with container logs of each bot (truncated to a size limit) for debugging. Without accounts, logs are public like the rest of the site; teams should not print anything secret.
 
-Reports are large: the full state of every turn, so a long game (several thousand turns: the game has no turn limit) gives a report of 100-200 MB, 2-4 MB compressed. This is the main cost of storage and backups, and a reason for the game review to consider a turn limit or a more compact replay format.
+Reports are large: the full state of every turn, so a long game (several thousand turns: the game has no turn limit) gives a report of 100-200 MB, 2-4 MB compressed (they are compressed as they are downloaded, never stored raw). At a few hundred matches a day this adds up, so **results are kept forever, replays are not**:
 
-The store is the source of truth: leaderboards, head-to-head tables and windows are queries over it.
+- A team keeps the files (report and bot logs) of its last 100 matches; a match's files are deleted once none of its participants keeps it. Disk use is then bounded by the number of teams, and every team always has recent replays to study, however long ago it last played.
+- When disk space runs low, the oldest files are deleted first, instead of stopping the ladder.
+- An expired match keeps its page and its results; the replay link says the replay expired.
+- Backups contain the database (and the last registry), not the files: replays cannot be regenerated, but they are a convenience, and the backups stay small.
+
+A turn limit or a more compact replay format, for the game review, would reduce both the files and what the browser viewer has to load.
+
+The store is the source of truth: ratings, quotas, head-to-head tables and statistics are computed from it.
 
 **Durability.** Past data must never be lost:
 
 - The data lives on the VM's disk, outside any container: match servers and bots are disposable, restarting them or Docker touches nothing.
 - Each match is recorded as soon as it ends, in one transaction. Its files are written and synced to disk (written under a temporary name, synced, renamed) before the transaction that refers to them is committed. SQLite runs in WAL mode with full synchronization. A crash, a restart or a power loss loses at most the match being played.
-- The ladder never deletes results. On restart, leftover containers are removed and an interrupted run is marked incomplete, keeping its matches.
-- Low disk space is logged at start-up and before each run, and reported by `/health` (with Docker problems, failed runs, and a scheduler that stopped running), for the campus monitoring.
+- The ladder never deletes results (only replay files, see above). On restart, leftover containers are removed; the match that was being played is lost.
+- Low disk space is logged at start-up and before each match, and reported by `/health` (with Docker problems, repeated void matches, and a matchmaker that stopped running), for the campus monitoring.
 - Against the loss of the VM: a backup route protected by a URL token (`/backup?token=`) serves a tar archive named after the time, with a consistent database snapshot and all the files, to be fetched regularly by a backup system elsewhere.
 
 ## Public website
 
 Read-only, served by the same binary. No accounts.
 
-- **Leaderboard** with scores, games, standard errors, scores per format (map and number of players), and the head-to-head table.
+- **Ladder**: the global ladder and one per format (map and number of players), ranked by μ − 3σ, with μ, σ, matches played and mean points; the head-to-head table; a team's position over time.
 - **Match list**, filterable by team and map, each entry linking to its replay and report.
-- **Team page**: recent results, current commit, builds with their logs, and why the team does not play if it does not (no working build, left out for failing).
+- **Team page**: ratings (global and per format) and their history, its matches in the last 24 hours against the quota, recent results, current commit, builds with their logs, and why the team does not play if it does not (no working build, left out for failing).
+- **Status**: what is being played, quota demand against matches played in the last 24 hours, the settings in use, and configuration warnings.
 - **Report download**: the game JSON (`/matches/<id>/report.json`), usable with the desktop viewer.
 - **Replay in the browser**: the Ebitengine viewer compiled to WebAssembly, loading a match's report by URL (`viewer?match=<id>`), with the same controls as the desktop version. A proof of concept exists. The page for a match embeds it. Because of staff-run and campus-only access, no further access control is needed.
 - A JSON API for the same data (`/api/leaderboard`, `/api/matches`, ...) is provided for display purposes only, so that for instance the big-screen view can be a simple page polling it.
@@ -206,7 +206,7 @@ Access is restricted to the campus network at the network level, as for the aren
 
 ## Live events and the big screen
 
-The ladder runs twice a day during the competition week. For the end-of-week live event, the existing flow is kept: matches are played game by game on the regular server, with the teams' own bots, for show. The ladder helps with it: a **tournament mode** (`ladder tournament`) plays a one-off round-robin among chosen teams with its own formats, on the ladder machine, spawning matches the same way. It is recorded as a run of kind "tournament", shown with the runs on the website, and not counted in the leaderboard. It is a debugging and testing command: it must not run while the ladder service does (stop the service, or schedule it between runs). Seeding for the live event is taken from the ladder standings (top 8 if there are too many teams).
+The ladder runs continuously during the competition week. For the end-of-week live event, the existing flow is kept: matches are played game by game on the regular server, with the teams' own bots, for show. The ladder helps with it: a **tournament mode** (`ladder tournament`) plays a one-off round-robin among chosen teams with its own formats, on the ladder machine, spawning matches the same way. It is recorded as a tournament, shown on the website, and not counted in the ratings. It runs inside the service (staff pause the ladder from the configuration, and start the tournament), so the two never compete for the machine. **The final tournament is run by staff with the top N of the global ladder at a given time** (`--top 8 --at "2026-12-04 16:00"`): ratings at a past time are those of the matches played before it, and the versions that played them are pinned for the tournament.
 
 The **big-screen page** (`/screen`) shows the leaderboard next to the replays of the latest matches, autoplayed one after the other; a lunchtime tournament fills it with fresh matches. A true live view would need the ladder to relay the state of its private match servers to browsers; replays of matches that just ended are much simpler and look the same on a screen.
 
@@ -231,7 +231,7 @@ A campus VM, handed over with root. The ladder binary runs under systemd with ac
 
 - Docker installed, the arena server image built from the repo (`runDocker.sh` / `Dockerfile`),
 - a data directory (SQLite, reports, logs, cloned repos),
-- the configuration file: registry repo URL, run times, maps and formats, N, window (K runs), resource limits (CPU cores to split), timeouts,
+- the configuration file: registry repo URL, formats, quota and challenge window, rating parameters, resource limits (CPU cores to split), timeouts (the ladder settings are re-read before each match),
 - the web server on one port, behind the campus network restriction.
 
 If load grows, the one-VM design can be split later (runner vs web), as everything between them goes through the store.
@@ -242,7 +242,7 @@ All the steps of the plan are implemented, on the `server-ladder-support` branch
 
 0. **Server changes**: items 1-4 and 6-8 above. Item 5 (CORS) is not done: the ladder serves the viewer and reports itself, so it is only needed if the web viewer should talk to a live arena server.
 1. **Bot contract and templates**: [docs/docker.md](docs/docker.md); Dockerfiles for both example agents, which read `ARENA_HOST`, `ARENA_GAME_ID` and `ARENA_NAME`.
-2. **Match runner** (`ladder/runner.go`): with the example bots, a match takes 1-2 seconds; a full test run of 25 matches took under a minute. Real bots will be slower: measure with the first real teams and set `repeats` accordingly.
+2. **Match runner** (`ladder/runner.go`): with the example bots, a match takes 1-2 seconds; a full test run of 25 matches took under a minute. Real bots will be slower: measure with the first real teams.
 3. **Store and scoring** (`ladder/store.go`, `ladder/scoring.go`).
 4. **Scheduler** (`ladder/scheduler.go`): `ladder` runs the ladder (scheduled runs, SIGUSR1 for a run now, and the website); the other commands are for debugging and testing.
 5. **Registry and builder** (`ladder/registry.go`, `ladder/builder.go`). Failed builds are not retried automatically (a broken tag stays broken); `ladder rebuild <team>` forgets a failed build after a transient failure.
@@ -252,6 +252,15 @@ All the steps of the plan are implemented, on the `server-ladder-support` branch
 9. **Deployment**: `ladder/deploy/setup.sh` sets up or updates everything and restarts the service, then checks that it runs the pulled commit (see [ladder/deploy/setup.md](ladder/deploy/setup.md)). To do on the VM: dry run with the example bots and a few volunteer bots, then open registration.
 10. **Hardening**, after a review of security, reliability and maintainability: reserved seats, bounded logs, void matches, retried infrastructure failures, registry fallbacks, scheduler fixes, schema migrations, isolation of bots from the host, builds between runs. See the commit history for details.
 
+**Next: the continuous ladder** (this plan's Matchmaking and Rating sections replace the scheduled runs), one commit per step:
+
+11. **Ratings** (`ladder/rating.go`): the Plackett-Luce update with ties, τ and the version bump, replay over the history, global and per format; tested against reference values from the `openskill` Python library.
+12. **Store**: matches outside runs, with the server image and ladder revision; counts per team and format over the last 24 hours; replay retention and pruning when disk is low. Runs stay only for tournaments.
+13. **Matchmaker** (replaces `ladder/scheduler.go`): quotas, challenge windows, random matches, builds every 15 minutes between matches, the configuration re-read before each match, `paused`.
+14. **Website and status**: the ladders, rating history, quota and capacity, expired replays.
+15. **Tournament from the ladder**: `--top N --at <time>`, run inside the service while paused.
+16. **Cleanup**: remove run windows and schedules from the configuration, the code, the docs and the setup script. Defaults are tuned after measuring match durations with realistic bots.
+
 The game review happens after this work.
 
 ## Decisions
@@ -259,9 +268,12 @@ The game review happens after this work.
 - **Game review.** A pass over rules and balance, so this year's game is similar in accessibility but not identical, is separate and comes after the ladder. Maps, viewer and example agents may change with it, so the ladder treats them as data (maps are read from `maps/`, reports are in the standard format).
 - **Pacing.** Ladder servers run with `--dev`, with the standard turn timeout for all agents.
 - **Tags.** The latest tag on the `main` branch of a team's repo.
-- **Retention.** Reports, logs and results are kept forever (reports are compressed, and container logs truncated per match). Reports dominate the size: see "Recording".
-- **Hosting.** A campus VM with 2 virtual cores; see Running a match: matches run one at a time.
+- **Retention.** Results are kept forever; replays and logs for the last 100 matches of each team (see "Recording").
+- **Hosting.** A campus VM with 2 virtual cores; see Running a match: matches run one at a time, never in parallel, so every bot gets the same CPU.
+- **Scale.** About 10 teams. With N = 20 matches per format per day, about 210 matches a day.
+- **Ranking.** TrueSkill-style ratings (OpenSkill Plackett-Luce), ranked by μ − 3σ, σ partly reset on a new version; the final is a tournament among the top N, run by staff.
 
 ## Open questions
 
+- Default quota: N = 20 matches per format per day is a guess; measure match durations with realistic bots (from 15 s to 2 min per match gives 1 to 7 hours of play a day for 10 teams).
 - Is the VM's Docker access and the campus-only restriction confirmed, and where will the public site be reachable from (hostname)?
