@@ -30,10 +30,8 @@ type Rules struct {
 	MaxTurns uint `json:"maxTurns"`
 }
 
-// DefaultRules are the rules of the game. The values were tuned by playing
-// bots with different strategies against each other on random maps, so that
-// mixing mechanics (letting fields regrow, expanding, raiding) beats any
-// single one, and stripping fields as fast as possible does not pay.
+// DefaultRules are the rules of the game. The values were tuned by
+// simulation, playing bots against each other on random maps.
 func DefaultRules() Rules {
 	return Rules{
 		FieldFlowers:     8,
