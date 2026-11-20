@@ -183,8 +183,8 @@ func (web *Web) status() Status {
 	if m.SettingsWarning != "" {
 		warn("%s", m.SettingsWarning)
 	}
-	// A match lasts at most the match timeout; beyond, the matchmaker is stuck
-	if limit := web.Config.Runner.MatchTimeout.Duration + 10*time.Minute; !m.Heartbeat.IsZero() && time.Since(m.Heartbeat) > limit {
+	// A match lasts at most one time budget per player (6 at most), with the time to join; beyond, the matchmaker is stuck
+	if limit := 6*web.Config.Runner.TimeBudget.Duration + 15*time.Minute; !m.Heartbeat.IsZero() && time.Since(m.Heartbeat) > limit {
 		warn("the matchmaker has not looked for a match since %s: is it stuck?", m.Heartbeat.Format(time.DateTime))
 	}
 	if played, err := web.Store.PlayedSince(time.Now().Add(-24 * time.Hour)); err == nil {

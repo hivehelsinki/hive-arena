@@ -32,7 +32,6 @@ func TestBuilder(t *testing.T) {
 
 	store := newTestStore(t)
 	smoke := DefaultRunnerConfig()
-	smoke.MatchTimeout = 2 * time.Minute
 	builder := &Builder{
 		Store:        store,
 		DataDir:      t.TempDir(),

@@ -169,7 +169,6 @@ func openLadderWithFlags(flags *flag.FlagSet, args []string) (*Ladder, *flag.Fla
 	runnerConfig := config.RunnerConfig()
 	runnerConfig.TempDir = store.TempDir()
 	smoke := runnerConfig
-	smoke.MatchTimeout = 5 * time.Minute
 	builder := &Builder{
 		Store:        store,
 		DataDir:      config.DataDir,

@@ -40,7 +40,6 @@ func TestRunMatch(t *testing.T) {
 
 	config := DefaultRunnerConfig()
 	config.JoinTimeout = 20 * time.Second
-	config.MatchTimeout = 5 * time.Minute
 	runner := Runner{Config: config}
 
 	match := Match{Map: "random", Bots: []Bot{
@@ -200,11 +199,12 @@ func TestFailedMatchHasPartialResult(t *testing.T) {
 	requireDocker(t)
 
 	config := DefaultRunnerConfig()
-	config.MatchTimeout = 15 * time.Second
 	runner := Runner{Config: config}
 
-	// The idle bot makes every turn wait for the turn timeout
-	result, err := runner.Run(context.Background(), Match{Map: "random", Bots: []Bot{
+	// The idle bot makes every turn wait for the turn timeout: stop the match
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	result, err := runner.Run(ctx, Match{Map: "random", Bots: []Bot{
 		{Name: "good", Image: "example-agent-go"},
 		{Name: "idle", Image: "hive-ladder-idlebot"},
 	}})
@@ -223,7 +223,6 @@ func TestUnresponsiveBotTimesOut(t *testing.T) {
 
 	config := DefaultRunnerConfig()
 	config.TimeBudget = 6 * time.Second
-	config.MatchTimeout = 3 * time.Minute
 	runner := Runner{Config: config}
 
 	start := time.Now()

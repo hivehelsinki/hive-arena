@@ -128,7 +128,6 @@ type Config struct {
 		ServerMemory string   `json:"serverMemory"`
 		Pids         int      `json:"pids"`
 		JoinTimeout  Duration `json:"joinTimeout"`
-		MatchTimeout Duration `json:"matchTimeout"`
 		// Total time each bot may take to answer over a match (a missed turn counts as the whole 2 s turn timeout)
 		TimeBudget Duration `json:"timeBudget"`
 	} `json:"runner"`
@@ -180,7 +179,6 @@ func LoadConfig(path string) (*Config, error) {
 	config.Runner.ServerMemory = defaults.ServerMemory
 	config.Runner.Pids = defaults.Pids
 	config.Runner.JoinTimeout = Duration{defaults.JoinTimeout}
-	config.Runner.MatchTimeout = Duration{defaults.MatchTimeout}
 	config.Runner.TimeBudget = Duration{defaults.TimeBudget}
 
 	decoder := json.NewDecoder(strings.NewReader(string(data)))
@@ -203,8 +201,8 @@ func (c *Config) validate() error {
 	}
 
 	r := c.Runner
-	if r.ServerImage == "" || r.Memory == "" || r.ServerMemory == "" || r.CPUPerBot <= 0 || r.Pids <= 0 || r.JoinTimeout.Duration <= 0 || r.MatchTimeout.Duration <= 0 || r.TimeBudget.Duration <= 0 {
-		return fmt.Errorf("runner: serverImage and memory must be set, and cpuPerBot, pids, joinTimeout and matchTimeout positive")
+	if r.ServerImage == "" || r.Memory == "" || r.ServerMemory == "" || r.CPUPerBot <= 0 || r.Pids <= 0 || r.JoinTimeout.Duration <= 0 || r.TimeBudget.Duration <= 0 {
+		return fmt.Errorf("runner: serverImage and memory must be set, and cpuPerBot, pids, joinTimeout and timeBudget positive")
 	}
 	if c.Build.Timeout.Duration <= 0 || c.Build.KeepImages < 1 || c.Build.MaxImageMB < 0 || c.Build.Interval.Duration <= 0 {
 		return fmt.Errorf("build: timeout and interval must be positive, and keepImages at least 1")
@@ -224,7 +222,6 @@ func (c *Config) RunnerConfig() RunnerConfig {
 	config.ServerMemory = c.Runner.ServerMemory
 	config.Pids = c.Runner.Pids
 	config.JoinTimeout = c.Runner.JoinTimeout.Duration
-	config.MatchTimeout = c.Runner.MatchTimeout.Duration
 	config.TimeBudget = c.Runner.TimeBudget.Duration
 	return config
 }

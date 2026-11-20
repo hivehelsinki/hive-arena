@@ -26,11 +26,10 @@ type RunnerConfig struct {
 	// keeps the whole history of the game in memory.
 	ServerMemory string
 
-	JoinTimeout  time.Duration // time for all bots to join
-	MatchTimeout time.Duration // time for the whole match
-	TimeBudget   time.Duration // total time each bot may take to answer, over a game
-	ExitGrace    time.Duration // time for bots to exit by themselves after the end
-	LogLimit     int           // maximum size of the log kept per bot, in bytes
+	JoinTimeout time.Duration // time for all bots to join
+	TimeBudget  time.Duration // total time each bot may take to answer, over a game
+	ExitGrace   time.Duration // time for bots to exit by themselves after the end
+	LogLimit    int           // maximum size of the log kept per bot, in bytes
 }
 
 func DefaultRunnerConfig() RunnerConfig {
@@ -40,7 +39,6 @@ func DefaultRunnerConfig() RunnerConfig {
 		Memory:       "256m",
 		Pids:         64,
 		JoinTimeout:  time.Minute,
-		MatchTimeout: 10 * time.Minute,
 		TimeBudget:   5 * time.Minute,
 		ExitGrace:    5 * time.Second,
 		LogLimit:     256 * 1024,
@@ -164,15 +162,11 @@ func (runner *Runner) Run(ctx context.Context, match Match) (*MatchResult, error
 		forfeited:  make(map[int]bool),
 	}
 
-	matchCtx, cancel := context.WithTimeout(ctx, runner.Config.MatchTimeout)
-	defer cancel()
+	// No deadline for the match: the turn timeout and the time budget of the bots bound it
 	defer run.cleanup()
 
-	result, err := run.play(matchCtx)
+	result, err := run.play(ctx)
 	if err != nil {
-		if matchCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
-			err = fmt.Errorf("the match took more than %s: %w", runner.Config.MatchTimeout, err)
-		}
 		result.RemoveReport()
 		if run.started.IsZero() {
 			return nil, err

@@ -43,7 +43,6 @@ func (p *fakePlayer) Run(ctx context.Context, match Match) (*MatchResult, error)
 func newTestLadder(t *testing.T, teams []Bot, player MatchPlayer) *Ladder {
 	config := &Config{}
 	config.Build.Interval = Duration{time.Hour}
-	config.Runner.MatchTimeout = Duration{time.Hour}
 	settings := DefaultLadderSettings()
 	settings.Formats = []Format{{"m", 2}}
 	settings.Quota = 2

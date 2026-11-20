@@ -13,7 +13,6 @@ import (
 func TestStatusAndHealth(t *testing.T) {
 	store := newTestStore(t)
 	config := &Config{DataDir: store.dir, Timezone: "UTC", Ladder: testSettings(Format{"m", 2}, Format{"m", 3})}
-	config.Runner.MatchTimeout = Duration{30 * time.Minute}
 
 	a, b := Bot{Name: "a"}, Bot{Name: "b"}
 	store.RecordMatch(MatchInfo{}, fakeResult("m", []Bot{a, b}, []uint{1, 0}, []BotStatus{Finished, Finished}))

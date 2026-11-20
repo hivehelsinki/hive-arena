@@ -32,7 +32,7 @@ Configuration (`ladder.json`):
   - `headToHeadPeriod`: head-to-head results are computed over this period
   - `paused`: no match is started
   - `rating`: parameters of the ratings (see below); changing them recomputes every rating
-- `runner`: server image, CPU cores per bot (`cpuPerBot`, 1), per-bot memory and process limits, memory of the match server (`serverMemory`: it keeps the whole game in memory), timeouts (`joinTimeout`, `matchTimeout`) and the time budget of each bot over a match (`timeBudget`)
+- `runner`: server image, CPU cores per bot (`cpuPerBot`, 1), per-bot memory and process limits, memory of the match server (`serverMemory`: it keeps the whole game in memory), the time to join (`joinTimeout`) and the time budget of each bot over a match (`timeBudget`). A match has no other time limit: the 2 s turn timeout and the time budgets bound it (at most players × `timeBudget`, in the unlikely case where the bots are slow at different times)
 - `registry`: where teams are registered: a git repository (`url`, `branch`, `file`), or a local file (`path`)
 - `build`: build timeout, number of successful images kept per team, image size limit (`maxImageMB`), size of the docker build cache (`cacheLimit`), how often new versions are built (`interval`, between matches)
 - `minFreeDiskGB`: below this free space in `dataDir`, the report and logs of the oldest matches are deleted, a warning is logged and `/health` reports a problem

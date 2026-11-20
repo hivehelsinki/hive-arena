@@ -38,7 +38,7 @@
 <table>
 <tr><th>Containers</th><td>a fresh game server and one container per bot, on a private network without internet access</td></tr>
 <tr><th>Resources</th><td>per bot: {{.Config.Runner.CPUPerBot}} CPU core, {{.Config.Runner.Memory}} of memory, {{.Config.Runner.Pids}} processes</td></tr>
-<tr><th>Timing</th><td>bots must join within {{.Config.Runner.JoinTimeout}}; a turn ends when every bot has sent its orders, or after 2 seconds; each bot has {{.Config.Runner.TimeBudget}} in total over a match to answer (a turn without orders counts as 2 seconds), then it is forfeited and ranks last; a match is abandoned after {{.Config.Runner.MatchTimeout}}</td></tr>
+<tr><th>Timing</th><td>bots must join within {{.Config.Runner.JoinTimeout}}; a turn ends when every bot has sent its orders, or after 2 seconds; each bot has {{.Config.Runner.TimeBudget}} in total over a match to answer (a turn without orders counts as 2 seconds), then it is forfeited and ranks last</td></tr>
 <tr><th>Failures</th><td>a bot that exits before the end, never joins, or uses up its time budget ranks last; its seat plays no more orders</td></tr>
 </table>
 <p>The bot contract is described in the <a href="https://github.com/hivehelsinki/hive-arena/blob/main/docs/docker.md">repository's documentation</a>.</p>
