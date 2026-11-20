@@ -163,7 +163,7 @@ func TestServePlaysUntilQuotasAreMet(t *testing.T) {
 	}
 
 	// Quota 2 with 3 teams in pairs: at least 3 matches, and only a few more
-	counts, _ := ladder.Store.MatchCounts(time.Now().Add(-time.Hour))
+	counts, _ := ladder.Store.MatchCounts(time.Now().Add(-time.Hour), nil)
 	for _, bot := range testBots(3) {
 		if counts[bot.Name]["m:2"] < 2 {
 			t.Errorf("%s played %d matches, below its quota", bot.Name, counts[bot.Name]["m:2"])

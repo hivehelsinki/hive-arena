@@ -396,7 +396,11 @@ func (web *Web) handleTeam(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	counts, err := web.Store.MatchCounts(time.Now().Add(-24 * time.Hour))
+	commits := make(map[string]string)
+	if state != nil && state.Bot != nil {
+		commits[name] = state.Bot.Commit
+	}
+	counts, err := web.Store.MatchCounts(time.Now().Add(-24*time.Hour), commits)
 	if err != nil {
 		serverError(w, err)
 		return

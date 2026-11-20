@@ -23,7 +23,7 @@
 <script type="application/json" id="rating-data">{{.}}</script>
 {{end}}
 <table>
-<thead><tr><th>Format</th><th class="num">Rating</th><th class="num"><span class="nocase">μ ± σ</span></th><th class="num">Matches</th><th class="num">Last 24 hours</th></tr></thead>
+<thead><tr><th>Format</th><th class="num">Rating</th><th class="num"><span class="nocase">μ ± σ</span></th><th class="num">Matches</th><th class="num" title="Matches of the current version in the last 24 hours, against the quota">Last 24 hours</th></tr></thead>
 <tbody>
 {{range .Formats}}{{$r := index $.Row.PerFormat .Key}}
 <tr><td>{{.Players}} players</td><td class="num strong">{{rating $r}}</td><td class="num dim">{{musigma $r}}</td><td class="num">{{$r.Games}}</td><td class="num">{{index $.Counts .Key}} / {{$.Quota}}</td></tr>

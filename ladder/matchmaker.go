@@ -188,7 +188,11 @@ func (l *Ladder) NextMatch(pool []Bot, settings LadderSettings, now time.Time) (
 	if len(pool) < 2 {
 		return nil, fmt.Sprintf("%d teams can play", len(pool)), nil
 	}
-	counts, err := l.Store.MatchCounts(now.Add(-24 * time.Hour))
+	commits := make(map[string]string)
+	for _, bot := range pool {
+		commits[bot.Name] = bot.Commit
+	}
+	counts, err := l.Store.MatchCounts(now.Add(-24*time.Hour), commits)
 	if err != nil {
 		return nil, "", err
 	}

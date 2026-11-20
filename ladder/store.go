@@ -601,12 +601,14 @@ func (s *Store) ResultsSince(since time.Time) ([]BotResult, error) {
 }
 
 // MatchCounts returns how many valid ladder matches each team played in each
-// format (see Format.Key) since a time
-func (s *Store) MatchCounts(since time.Time) (map[string]map[string]int, error) {
-	rows, err := s.db.Query(`SELECT b.team, m.map, m.players, COUNT(*)
+// format (see Format.Key) since a time. For a team in commits (its current
+// version), only the matches of that version count: a new version starts
+// again with an empty quota.
+func (s *Store) MatchCounts(since time.Time, commits map[string]string) (map[string]map[string]int, error) {
+	rows, err := s.db.Query(`SELECT b.team, b.commit_id, m.map, m.players, COUNT(*)
 		FROM matches m JOIN match_bots b ON b.match_id = m.id
 		WHERE m.void = 0 AND m.ended_at >= ?
-		GROUP BY b.team, m.map, m.players`, since)
+		GROUP BY b.team, b.commit_id, m.map, m.players`, since)
 	if err != nil {
 		return nil, err
 	}
@@ -614,16 +616,19 @@ func (s *Store) MatchCounts(since time.Time) (map[string]map[string]int, error) 
 
 	counts := make(map[string]map[string]int)
 	for rows.Next() {
-		var team string
+		var team, commit string
 		var format Format
 		var count int
-		if err := rows.Scan(&team, &format.Map, &format.Players, &count); err != nil {
+		if err := rows.Scan(&team, &commit, &format.Map, &format.Players, &count); err != nil {
 			return nil, err
+		}
+		if current, ok := commits[team]; ok && current != commit {
+			continue
 		}
 		if counts[team] == nil {
 			counts[team] = make(map[string]int)
 		}
-		counts[team][format.Key()] = count
+		counts[team][format.Key()] += count
 	}
 	return counts, rows.Err()
 }

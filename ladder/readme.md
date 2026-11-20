@@ -59,7 +59,7 @@ A team whose bot failed (crashed or did not join) its last `maxFailures` matches
 
 ## Matchmaking and ratings
 
-Before every match, the matchmaker picks the team and format furthest below the quota (matches in the last 24 hours), and draws its opponents among the teams just above it in that format's ladder (or, for `randomShare` of the matches, among all teams). When every team has played its quota, it waits, and looks again every minute.
+Before every match, the matchmaker picks the team and format furthest below the quota (matches of its current version in the last 24 hours: a new version starts with an empty quota, so it plays at once), and draws its opponents among the teams just above it in that format's ladder (or, for `randomShare` of the matches, among all teams). When every team has played its quota, it waits, and looks again every minute.
 
 Ratings follow OpenSkill's Plackett-Luce model (TrueSkill-style: a skill estimate μ and an uncertainty σ per team), with ties, globally and per format. Teams are ranked by μ − 3σ, so a new team starts at 0. `rating.tau` adds uncertainty before every match, so that ratings follow teams that improve; when a team's version changes, its σ is raised to at least `rating.versionSigma`. Ratings are recomputed from all the valid ladder matches every time, so they can be computed at any past time. See "Design" below for the reasons.
 

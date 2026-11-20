@@ -245,14 +245,18 @@ func TestRatedMatchesAndCounts(t *testing.T) {
 		t.Errorf("expected no matches before an hour ago, got %d", len(before))
 	}
 
-	counts, err := store.MatchCounts(time.Now().Add(-24 * time.Hour))
+	counts, err := store.MatchCounts(time.Now().Add(-24*time.Hour), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if counts["a"]["m:2"] != 2 || counts["b"]["other:2"] != 1 {
 		t.Errorf("unexpected counts: %v", counts)
 	}
-	if counts, _ := store.MatchCounts(time.Now().Add(time.Hour)); len(counts) != 0 {
+	// Only the matches of a team's current version count
+	if counts, _ := store.MatchCounts(time.Now().Add(-24*time.Hour), map[string]string{"a": "a-new-version"}); counts["a"]["m:2"] != 0 || counts["b"]["other:2"] != 1 {
+		t.Errorf("a new version should start with an empty quota: %v", counts)
+	}
+	if counts, _ := store.MatchCounts(time.Now().Add(time.Hour), nil); len(counts) != 0 {
 		t.Errorf("expected no counts in the future: %v", counts)
 	}
 
