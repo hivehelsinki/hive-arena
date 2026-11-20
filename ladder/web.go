@@ -47,6 +47,7 @@ func NewWeb(config *Config, store *Store) (*Web, error) {
 			}
 			return base
 		},
+		"version": func(versions Versions, team, commit string) string { return versions.Label(team, commit) },
 		"short": func(commit string) string {
 			if len(commit) > 8 {
 				return commit[:8]
@@ -198,6 +199,9 @@ func viewerHandler(dir string) http.Handler {
 
 func (web *Web) render(w http.ResponseWriter, page string, data map[string]any) {
 	data["Settings"] = web.Settings.Get()
+	if versions, err := web.Store.VersionTags(); err == nil {
+		data["Versions"] = versions
+	}
 	data["Revision"] = gitRevision()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := web.templates[page].ExecuteTemplate(w, "layout", data); err != nil {

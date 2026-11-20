@@ -773,6 +773,37 @@ func (s *Store) scanBuilds(query string, args ...any) ([]Build, error) {
 	return builds, rows.Err()
 }
 
+// Versions gives the tag of the versions that were built, to show them
+// as "tag (revision)"
+type Versions map[string]string
+
+func (v Versions) Label(team, commit string) string {
+	rev := commit[:min(8, len(commit))]
+	if tag := v[team+"/"+commit]; tag != "" {
+		return tag + " (" + rev + ")"
+	}
+	return rev
+}
+
+// VersionTags returns the tag of every version built (the latest build
+// of a commit, when several tags point at it)
+func (s *Store) VersionTags() (Versions, error) {
+	rows, err := s.db.Query(`SELECT team, commit_id, tag FROM builds ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	versions := make(Versions)
+	for rows.Next() {
+		var team, commit, tag string
+		if err := rows.Scan(&team, &commit, &tag); err != nil {
+			return nil, err
+		}
+		versions[team+"/"+commit] = tag
+	}
+	return versions, rows.Err()
+}
+
 func firstBuild(builds []Build, err error) (*Build, error) {
 	if err != nil || len(builds) == 0 {
 		return nil, err

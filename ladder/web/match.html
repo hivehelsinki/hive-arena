@@ -22,7 +22,7 @@
 <tr>
 	<td>{{if ge .Seat 0}}{{.Seat}}{{end}}</td>
 	<td><a href="/teams/{{.Team}}">{{.Team}}</a></td>
-	<td class="mono">{{short .Commit}}</td>
+	<td class="mono">{{version $.Versions .Team .Commit}}</td>
 	<td class="num">{{.Flowers}}</td>
 	<td class="num strong">{{place .Place}}</td>
 	<td class="status-{{.Status}}">{{.Status}}{{if ne .Status "finished"}} (exit code {{.ExitCode}}){{end}}</td>

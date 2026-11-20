@@ -148,7 +148,7 @@ func TestChartHistory(t *testing.T) {
 		t.Fatalf("expected the rating after every match: %d points", len(history))
 	}
 
-	points := chartHistory(history, time.Unix(0, 0), time.Unix(999, 0), 100)
+	points := chartHistory(history, time.Unix(0, 0), time.Unix(999, 0), 100, func(commit string) string { return commit[:8] })
 	if len(points) > 105 || len(points) < 90 {
 		t.Errorf("expected about 100 points, got %d", len(points))
 	}

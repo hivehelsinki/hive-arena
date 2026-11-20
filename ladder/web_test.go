@@ -47,7 +47,7 @@ func TestWebPages(t *testing.T) {
 
 	id := func(i int64) string { return strconv.FormatInt(i, 10) }
 
-	get("/", 200, "alpha", "01234567", "Head to head", "100%", "<h2>3 players</h2>", "1 matches")
+	get("/", 200, "alpha", "v1 (01234567)", "Head to head", "100%", "<h2>3 players</h2>", "1 matches")
 	get("/runs", 404)
 	get("/matches", 200, "1st</span> alpha", "3rd</span> gamma")
 	get("/matches?team=gamma", 200, "gamma")
@@ -58,7 +58,7 @@ func TestWebPages(t *testing.T) {
 	get("/matches/"+id(match)+"/report.json", 200, `{"id":"game"}`)
 	get("/matches/"+id(match)+"/logs/alpha", 200, "log of alpha")
 	get("/matches/"+id(match)+"/logs/..%2F..%2Fx", 404)
-	get("/teams/alpha", 200, "https://example.com/alpha", "v1", "Recent matches", "Rating", "1 / 20")
+	get("/teams/alpha", 200, "https://example.com/alpha", "v1 (01234567)", "Recent matches", "Rating", "1 / 20")
 	get("/teams/nobody", 404)
 	get("/builds/1/log", 200, "build output")
 	get("/api/leaderboard", 200, `"team":"alpha"`, `"perFormat"`)

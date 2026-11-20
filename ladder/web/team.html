@@ -7,8 +7,8 @@
 	{{with .Team.Ref}}Pinned to <code>{{.}}</code>.{{end}}
 </p>
 {{if .Bot}}
-	{{if .LeftOut}}<p class="error">Version <span class="mono">{{short .Bot.Commit}}</span>: {{.LeftOut}}</p>
-	{{else}}<p>Playing: <span class="mono">{{short .Bot.Commit}}</span>.</p>{{end}}
+	{{if .LeftOut}}<p class="error">Version <span class="mono">{{version $.Versions $.Name .Bot.Commit}}</span>: {{.LeftOut}}</p>
+	{{else}}<p>Playing: <span class="mono">{{version $.Versions $.Name .Bot.Commit}}</span>.</p>{{end}}
 {{else}}<p class="error">No working version yet: this team does not play.</p>{{end}}
 {{with .Error}}<p class="error">The latest version is not playing: {{.}}</p>{{end}}
 {{end}}
@@ -16,7 +16,7 @@
 {{with .Row}}
 <h2>Rating</h2>
 <p><span class="big">{{rating .Global}}</span> <span class="dim">(μ ± σ: {{musigma .Global}})</span> over {{.Global.Games}} matches.
-{{if not .Global.Since.IsZero}}Version <span class="mono">{{short .Global.Commit}}</span> playing since {{time .Global.Since}}.{{end}}</p>
+{{if not .Global.Since.IsZero}}Version <span class="mono">{{version $.Versions $.Name .Global.Commit}}</span> playing since {{time .Global.Since}}.{{end}}</p>
 {{end}}
 {{with .History}}
 <div id="rating" data-chart="rating-data" data-highlight="1" data-versions="true" data-height="220" data-label="Global rating over time, with the start of each version"></div>

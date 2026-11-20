@@ -44,7 +44,7 @@ type TeamHistory struct {
 type ChartPoint struct {
 	Time    int64   `json:"t"`           // Unix seconds
 	Rating  float64 `json:"r"`           // the ordinal, rounded
-	Version string  `json:"v,omitempty"` // the short commit, where a new version starts
+	Version string  `json:"v,omitempty"` // "tag (revision)", where a new version starts
 }
 
 // Points of a team's history kept for charts: about one per pixel
@@ -52,7 +52,7 @@ const chartPoints = 400
 
 // chartHistory reduces a history to at most about `max` points: the last
 // one of each time slot, the first one, and the first match of each version
-func chartHistory(history []RatingPoint, from time.Time, to time.Time, max int) []ChartPoint {
+func chartHistory(history []RatingPoint, from time.Time, to time.Time, max int, label func(commit string) string) []ChartPoint {
 	slot := to.Sub(from) / time.Duration(max)
 	var points []ChartPoint
 	lastCommit := ""
@@ -60,7 +60,7 @@ func chartHistory(history []RatingPoint, from time.Time, to time.Time, max int) 
 		point := ChartPoint{Time: p.Time.Unix(), Rating: math.Round(p.Rating.Ordinal()*100) / 100}
 		newVersion := p.Commit != lastCommit
 		if newVersion {
-			point.Version = p.Commit[:min(8, len(p.Commit))]
+			point.Version = label(p.Commit)
 			lastCommit = p.Commit
 		}
 		// A point in the same slot as the previous one replaces it, unless
@@ -97,6 +97,10 @@ func (s *Store) Ladder(settings LadderSettings, now time.Time) (*LadderView, err
 	if err != nil {
 		return nil, err
 	}
+	versions, err := s.VersionTags()
+	if err != nil {
+		return nil, err
+	}
 	pool, err := s.PoolState()
 	if err != nil {
 		return nil, err
@@ -117,7 +121,8 @@ func (s *Store) Ladder(settings LadderSettings, now time.Time) (*LadderView, err
 		from, to = matches[0].Time, matches[len(matches)-1].Time
 	}
 	for _, t := range ratings.Global.Standings() {
-		view.History = append(view.History, TeamHistory{t.Team, chartHistory(ratings.Global.History(t.Team), from, to, chartPoints)})
+		team := t.Team
+		view.History = append(view.History, TeamHistory{team, chartHistory(ratings.Global.History(team), from, to, chartPoints, func(commit string) string { return versions.Label(team, commit) })})
 		row := LadderRow{Team: t.Team, Global: t, PerFormat: make(map[string]TeamRating), Playing: playing[t.Team]}
 		for key, table := range ratings.PerFormat {
 			if r := table.Rating(t.Team); r.Games > 0 {
