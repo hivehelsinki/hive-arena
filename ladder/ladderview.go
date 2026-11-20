@@ -57,7 +57,7 @@ func chartHistory(history []RatingPoint, from time.Time, to time.Time, max int, 
 	var points []ChartPoint
 	lastCommit := ""
 	for i, p := range history {
-		point := ChartPoint{Time: p.Time.Unix(), Rating: math.Round(p.Rating.Ordinal()*100) / 100}
+		point := ChartPoint{Time: p.Time.Unix(), Rating: math.Round(p.Score*100) / 100}
 		newVersion := p.Commit != lastCommit
 		if newVersion {
 			point.Version = label(p.Commit)

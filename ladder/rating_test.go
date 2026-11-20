@@ -61,11 +61,47 @@ func bot(team, commit string, flowers uint) RatedBot {
 	return RatedBot{Team: team, Commit: commit, Placement: Placement{Flowers: flowers}}
 }
 
-func TestNewTeamsStartAtTheBottom(t *testing.T) {
-	ratings := ComputeRatings(DefaultRatingParams(), nil)
-	r := ratings.Global.Rating("new")
-	if r.Games != 0 || math.Abs(r.Rating.Ordinal()) > 1e-9 {
-		t.Errorf("a new team should start at ordinal 0: %+v", r)
+func TestNewTeamsStartLow(t *testing.T) {
+	for _, k := range []float64{0, 1, 2, 3} {
+		params := DefaultRatingParams()
+		params.RankSigmas = k
+		r := ComputeRatings(params, nil).Global.Rating("new")
+		if want := params.Mu - k*params.Sigma; r.Games != 0 || math.Abs(r.Score-want) > 1e-9 {
+			t.Errorf("with %g sigmas a new team should start at %f: %+v", k, want, r)
+		}
+	}
+	// With 3 sigmas, the default initial values give 0
+	params := DefaultRatingParams()
+	params.RankSigmas = 3
+	if r := ComputeRatings(params, nil).Global.Rating("new"); math.Abs(r.Score) > 1e-9 {
+		t.Errorf("expected a score of 0: %+v", r)
+	}
+}
+
+// The more sigmas, the more a team with few matches is held back
+func TestRankSigmasOrdering(t *testing.T) {
+	var matches []RatedMatch
+	// "veteran" beats "mid" often, and "rookie" has played once and won
+	for i := range 40 {
+		matches = append(matches, match(int64(i), "a:2", bot("veteran", "v", 5), bot("mid", "m", uint(i%2))))
+	}
+	matches = append(matches, match(100, "a:2", bot("rookie", "r", 5), bot("mid", "m", 0)))
+
+	rank := func(k float64) []string {
+		params := DefaultRatingParams()
+		params.RankSigmas = k
+		var names []string
+		for _, team := range ComputeRatings(params, matches).Global.Standings() {
+			names = append(names, team.Team)
+		}
+		return names
+	}
+	if got := rank(0); got[0] != "rookie" && got[0] != "veteran" {
+		t.Errorf("unexpected ranking without sigmas: %v", got)
+	}
+	// With many sigmas, the rookie (large uncertainty) ranks below the veteran
+	if got := rank(3); got[0] != "veteran" {
+		t.Errorf("the veteran should lead with 3 sigmas: %v", got)
 	}
 }
 

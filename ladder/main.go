@@ -279,7 +279,7 @@ func cmdLeaderboard(args []string) {
 	fmt.Printf("Global ladder %s, over %d matches\n\n", when, len(matches))
 	fmt.Printf("%-4s %-24s %8s %8s %8s %8s  %s\n", "#", "team", "rating", "mu", "sigma", "matches", "commit")
 	for i, t := range ratings.Global.Standings() {
-		fmt.Printf("%-4d %-24s %8.2f %8.2f %8.2f %8d  %s\n", i+1, t.Team, t.Rating.Ordinal(), t.Rating.Mu, t.Rating.Sigma, t.Games, t.Commit)
+		fmt.Printf("%-4d %-24s %8.2f %8.2f %8.2f %8d  %s\n", i+1, t.Team, t.Score, t.Rating.Mu, t.Rating.Sigma, t.Games, t.Commit)
 	}
 }
 

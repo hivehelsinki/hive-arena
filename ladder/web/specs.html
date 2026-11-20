@@ -14,8 +14,9 @@
 </table>
 
 <h2>Ratings</h2>
-<p>Ratings follow OpenSkill's Plackett-Luce model: each team has a skill estimate μ and an uncertainty σ, updated after every match from the places of all its players (ties included). Teams are ranked by <span class="nocase">μ − 3σ</span>, so a new team starts at the bottom.</p>
+<p>Ratings follow OpenSkill's Plackett-Luce model: each team has a skill estimate μ and an uncertainty σ, updated after every match from the places of all its players (ties included). Teams are ranked by <span class="nocase">{{ranking .Rating}}</span>: the more sigmas, the more a team has to prove itself, so a new team starts low and a team that has just changed version drops a little.</p>
 <table>
+<tr><th>Ranked by</th><td><span class="nocase">{{ranking .Rating}}</span></td></tr>
 <tr><th>Initial μ, σ</th><td>{{printf "%.2f" .Rating.Mu}}, {{printf "%.2f" .Rating.Sigma}}</td></tr>
 <tr><th>β (noise in a performance)</th><td>{{printf "%.2f" .Rating.Beta}}</td></tr>
 <tr><th>τ (uncertainty added before every match)</th><td>{{printf "%.3f" .Rating.Tau}}</td></tr>

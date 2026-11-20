@@ -72,7 +72,7 @@ All routes are `GET`, and answer JSON unless said otherwise.
 
 `/api/leaderboard`: the ladder:
 
-- `ladder`: the global ladder, best first. For each team: `team`, `global` (its rating: `rating.mu` the estimated skill, `rating.sigma` the uncertainty, ranked by `mu - 3 * sigma`; `games`, `commit`), `perFormat` (the same, for each number of players: keys like `random:4`), and `playing` (whether it plays at the moment)
+- `ladder`: the global ladder, best first. For each team: `team`, `global` (its rating: `rating.mu` the estimated skill and `rating.sigma` the uncertainty; `score`, what teams are ranked by: `mu - k * sigma`, with k set by the ladder, 2 by default; `games`, `commit`), `perFormat` (the same, for each number of players: keys like `random:4`), and `playing` (whether it plays at the moment)
 - `perFormat`: the ladder of each format
 - `headToHead`: `headToHead[a][b]` is how often `a` finished ahead of `b` (`wins`, ties count half) in the `games` they played together, over `headToHeadPeriod`
 - `history`: each team's global rating over time (`t`: Unix time, `r`: rating, `v`: the version that started there)

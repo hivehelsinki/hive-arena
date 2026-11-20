@@ -105,8 +105,8 @@ func (s *LadderSettings) validate(c *Config) error {
 		return fmt.Errorf("ladder: headToHeadPeriod must be positive")
 	}
 	r := s.Rating
-	if r.Sigma <= 0 || r.Beta <= 0 || r.Tau < 0 || r.VersionSigma < 0 {
-		return fmt.Errorf("ladder.rating: sigma and beta must be positive, tau and versionSigma not negative")
+	if r.Sigma <= 0 || r.Beta <= 0 || r.Tau < 0 || r.VersionSigma < 0 || r.RankSigmas < 0 {
+		return fmt.Errorf("ladder.rating: sigma and beta must be positive, tau, versionSigma and rankSigmas not negative")
 	}
 	return nil
 }

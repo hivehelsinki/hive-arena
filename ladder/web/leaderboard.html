@@ -1,7 +1,7 @@
 {{define "content"}}
 <h1>Ladder</h1>
 <p class="dim">
-	Teams are ranked by their rating: a cautious estimate of their skill (μ − 3σ, where μ is the estimated skill and σ its uncertainty), from {{.Ladder.Rated}} matches (<a href="/specs">how the ladder works</a>).
+	Teams are ranked by their rating: a cautious estimate of their skill ({{ranking .Settings.Rating}}, where μ is the estimated skill and σ its uncertainty), from {{.Ladder.Rated}} matches (<a href="/specs">how the ladder works</a>).
 	Last 24 hours: {{.Played.Matches}} matches{{with .Played.Void}}, {{.}} failed{{end}}. {{with .Activity}}Now: {{.}}.{{end}}
 </p>
 {{template "ladder" .}}

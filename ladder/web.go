@@ -106,7 +106,17 @@ func NewWeb(config *Config, store *Store) (*Web, error) {
 			if t.Games == 0 {
 				return ""
 			}
-			return fmt.Sprintf("%.1f", t.Rating.Ordinal())
+			return fmt.Sprintf("%.1f", t.Score)
+		},
+		// The formula teams are ranked by: μ − 2σ
+		"ranking": func(p RatingParams) string {
+			switch p.RankSigmas {
+			case 0:
+				return "μ"
+			case 1:
+				return "μ − σ"
+			}
+			return fmt.Sprintf("μ − %gσ", p.RankSigmas)
 		},
 		"musigma": func(t TeamRating) string {
 			if t.Games == 0 {

@@ -67,7 +67,7 @@ async function updateBoard() {
 		ranks = {};
 		playing.forEach((r, i) => { ranks[r.team] = i + 1; });
 		const rows = playing.map((r, i) =>
-			`<tr><td>${i + 1}</td><td>${escape(r.team)}</td><td class="num score">${(r.global.rating.mu - 3 * r.global.rating.sigma).toFixed(1)}</td>` +
+			`<tr><td>${i + 1}</td><td>${escape(r.team)}</td><td class="num score">${r.global.score.toFixed(1)}</td>` +
 			`<td class="num dim">${r.global.games} matches</td></tr>`);
 		document.getElementById("standings").innerHTML = rows.join("") || "<tr><td class='dim'>No results yet.</td></tr>";
 	} catch (e) {

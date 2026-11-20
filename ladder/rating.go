@@ -18,6 +18,10 @@ type RatingParams struct {
 	// When a team's version changes, its uncertainty is raised to at least
 	// this value, so that its rating follows a rewrite quickly (0: unchanged)
 	VersionSigma float64 `json:"versionSigma"`
+	// Teams are ranked by their score: mu - RankSigmas * sigma. The more
+	// sigmas, the more a team has to prove itself (a new team starts low, and
+	// a new version drops a team further); 0 ranks by the skill estimate alone.
+	RankSigmas float64 `json:"rankSigmas"`
 }
 
 func DefaultRatingParams() RatingParams {
@@ -27,6 +31,7 @@ func DefaultRatingParams() RatingParams {
 		Beta:         25.0 / 6,
 		Tau:          25.0 / 300,
 		VersionSigma: 25.0 / 6,
+		RankSigmas:   2,
 	}
 }
 
@@ -38,9 +43,9 @@ type Rating struct {
 	Sigma float64 `json:"sigma"`
 }
 
-// Ordinal is the conservative skill estimate teams are ranked by
-func (r Rating) Ordinal() float64 {
-	return r.Mu - 3*r.Sigma
+// Score is the conservative skill estimate teams are ranked by
+func (p RatingParams) Score(r Rating) float64 {
+	return r.Mu - p.RankSigmas*r.Sigma
 }
 
 // rate returns the ratings of the players of a match after it, given their
@@ -120,10 +125,11 @@ type RatedMatch struct {
 }
 
 type TeamRating struct {
-	Team   string `json:"team"`
-	Rating Rating `json:"rating"`
-	Games  int    `json:"games"`
-	Commit string `json:"commit"` // of its most recent match
+	Team   string  `json:"team"`
+	Rating Rating  `json:"rating"`
+	Score  float64 `json:"score"` // what teams are ranked by, see RatingParams.RankSigmas
+	Games  int     `json:"games"`
+	Commit string  `json:"commit"` // of its most recent match
 	// When the team last played, and when its current version first played
 	LastPlayed time.Time `json:"lastPlayed"`
 	Since      time.Time `json:"since"`
@@ -141,6 +147,7 @@ type RatingTable struct {
 type RatingPoint struct {
 	Time   time.Time
 	Rating Rating
+	Score  float64
 	Commit string
 }
 
@@ -163,7 +170,8 @@ func (l *RatingTable) Rating(team string) TeamRating {
 	if t, ok := l.teams[team]; ok {
 		return *t
 	}
-	return TeamRating{Team: team, Rating: Rating{l.params.Mu, l.params.Sigma}}
+	initial := Rating{l.params.Mu, l.params.Sigma}
+	return TeamRating{Team: team, Rating: initial, Score: l.params.Score(initial)}
 }
 
 // Add rates a match
@@ -190,24 +198,25 @@ func (l *RatingTable) Add(match RatedMatch) {
 			t.Since = match.Time
 		}
 		t.Rating = updated[i]
+		t.Score = l.params.Score(t.Rating)
 		t.Games++
 		t.Commit = bot.Commit
 		t.LastPlayed = match.Time
 		l.teams[bot.Team] = &t
 		if l.history != nil {
-			l.history[bot.Team] = append(l.history[bot.Team], RatingPoint{match.Time, t.Rating, t.Commit})
+			l.history[bot.Team] = append(l.history[bot.Team], RatingPoint{match.Time, t.Rating, t.Score, t.Commit})
 		}
 	}
 }
 
-// Standings returns the teams that played, best first: by ordinal, then name
+// Standings returns the teams that played, best first: by score, then name
 func (l *RatingTable) Standings() []TeamRating {
 	var standings []TeamRating
 	for _, t := range l.teams {
 		standings = append(standings, *t)
 	}
 	slices.SortFunc(standings, func(a, b TeamRating) int {
-		if oa, ob := a.Rating.Ordinal(), b.Rating.Ordinal(); oa != ob {
+		if oa, ob := a.Score, b.Score; oa != ob {
 			if oa > ob {
 				return -1
 			}

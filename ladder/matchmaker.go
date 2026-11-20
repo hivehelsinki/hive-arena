@@ -249,7 +249,7 @@ func pickMatch(pool []Bot, settings LadderSettings, counts map[string]map[string
 	}
 	ladder := slices.Clone(pool)
 	slices.SortFunc(ladder, func(a, b Bot) int {
-		oa, ob := table.Rating(a.Name).Rating.Ordinal(), table.Rating(b.Name).Rating.Ordinal()
+		oa, ob := table.Rating(a.Name).Score, table.Rating(b.Name).Score
 		if oa != ob {
 			if oa > ob {
 				return -1
