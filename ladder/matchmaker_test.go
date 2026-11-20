@@ -46,6 +46,7 @@ func onlyBelowQuota(pool []Bot, formats []Format, quota int, team string) map[st
 func testSettings(formats ...Format) LadderSettings {
 	settings := DefaultLadderSettings()
 	settings.Formats = formats
+	settings.Quota = 20
 	settings.Window = 2
 	settings.RandomShare = 0
 	return settings
