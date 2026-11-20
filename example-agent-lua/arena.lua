@@ -15,7 +15,12 @@ local function req(host, route, method, payload)
 
 	local req = http.new_from_uri("http://" .. host .. route, headers)
 	if payload then
-		req:set_body(json.encode(payload))
+		-- An empty table would be encoded as an object: the server expects a list
+		if type(payload) == "table" and next(payload) == nil then
+			req:set_body("[]")
+		else
+			req:set_body(json.encode(payload))
+		end
 	end
 
 	local headers, stream = req:go()
