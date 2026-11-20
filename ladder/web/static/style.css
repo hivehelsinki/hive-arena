@@ -135,3 +135,8 @@ footer { max-width: 1080px; margin: 0 auto; padding: 1em 1.5em 2em; color: var(-
 :root[data-theme="dark"] .theme-switch { background: rgb(255 176 0 / 0.1); color: var(--accent); }
 :root[data-theme="dark"] .theme-switch:hover { background: rgb(255 176 0 / 0.22); }
 :root[data-theme="dark"] .theme-switch::before { content: "☀"; }
+
+/* The specifications page */
+table:not(.standings) th { text-align: left; vertical-align: top; width: 16em; }
+.rules h3 { margin-top: 1.6em; font-size: 1.1em; }
+.rules table th { width: auto; }

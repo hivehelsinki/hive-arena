@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"github.com/hivehelsinki/hive-arena/docs"
 	"html/template"
 	"io"
 	"io/fs"
@@ -121,6 +122,7 @@ func NewWeb(config *Config, store *Store) (*Web, error) {
 			}
 			return d.String()
 		},
+		"rules":      func() template.HTML { return renderMarkdown(docs.Rules, 1) },
 		"percent":    func(f float64) string { return fmt.Sprintf("%.0f%%", 100*f) },
 		"add":        func(a, b int) int { return a + b },
 		"trimPrefix": strings.TrimPrefix,
@@ -159,6 +161,7 @@ func (web *Web) Handler() http.Handler {
 	mux.HandleFunc("GET /matches/{id}/report.json", web.handleReport)
 	mux.HandleFunc("GET /matches/{id}/logs/{team}", web.handleMatchLog)
 	mux.HandleFunc("GET /teams/{name}", web.handleTeam)
+	mux.HandleFunc("GET /specs", web.handleSpecs)
 	mux.HandleFunc("GET /screen", web.handleScreen)
 	mux.HandleFunc("GET /builds/{id}/log", web.handleBuildLog)
 
@@ -464,4 +467,8 @@ func (web *Web) handleScreen(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write(data)
+}
+
+func (web *Web) handleSpecs(w http.ResponseWriter, r *http.Request) {
+	web.render(w, "specs", map[string]any{"Config": web.Config})
 }

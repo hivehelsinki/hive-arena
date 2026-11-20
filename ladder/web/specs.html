@@ -1,0 +1,46 @@
+{{define "content"}}
+<h1>Specifications</h1>
+<p>How the ladder works, with its current settings (they can change while it runs), then the rules of the game.</p>
+
+{{with .Settings}}
+<h2>Matchmaking</h2>
+<table>
+<tr><th>Formats</th><td>{{range $i, $f := .Formats}}{{if $i}}, {{end}}{{$f.Players}} players{{end}}: each format has its own ladder, and every match is played on a new random map</td></tr>
+<tr><th>Quota</th><td>{{.Quota}} matches per team and per format in any 24 hours (challenging or challenged)</td></tr>
+<tr><th>Opponents</th><td>a team challenges teams drawn among the {{.Window}} ranked just above it (the teams just below it, for those at the top); {{percent .RandomShare}} of the matches are against random opponents</td></tr>
+<tr><th>Order of play</th><td>one match at a time: the team and format furthest below the quota go next. When everyone has played its quota, the ladder waits and looks again every minute{{if .Paused}}<br><strong>Matches are paused at the moment.</strong>{{end}}</td></tr>
+<tr><th>Failing bots</th><td>a bot that crashes or does not join {{.MaxFailures}} matches in a row with the same version is left out until its next tag</td></tr>
+</table>
+
+<h2>Ratings</h2>
+<p>Ratings follow OpenSkill's Plackett-Luce model: each team has a skill estimate μ and an uncertainty σ, updated after every match from the places of all its players (ties included). Teams are ranked by <span class="nocase">μ − 3σ</span>, so a new team starts at the bottom.</p>
+<table>
+<tr><th>Initial μ, σ</th><td>{{printf "%.2f" .Rating.Mu}}, {{printf "%.2f" .Rating.Sigma}}</td></tr>
+<tr><th>β (noise in a performance)</th><td>{{printf "%.2f" .Rating.Beta}}</td></tr>
+<tr><th>τ (uncertainty added before every match)</th><td>{{printf "%.3f" .Rating.Tau}}</td></tr>
+<tr><th>New version</th><td>keeps its team's rating, with σ raised to at least {{printf "%.2f" .Rating.VersionSigma}}</td></tr>
+<tr><th>Head-to-head table</th><td>over the last {{days .HeadToHeadPeriod}}</td></tr>
+</table>
+
+<h2>Retention</h2>
+<p>Results are kept forever. Replays and bot outputs are kept for each team's last {{.KeepMatchFiles}} matches.</p>
+{{end}}
+
+<h2>Versions and builds</h2>
+<table>
+<tr><th>Version</th><td>the most recent tag (by commit date) on the <code>main</code> branch of the team's repository</td></tr>
+<tr><th>Build</th><td>new tags are looked for every {{.Config.Build.Interval}}; a build has {{.Config.Build.Timeout}} and an image up to {{.Config.Build.MaxImageMB}} MB</td></tr>
+<tr><th>Smoke test</th><td>before it plays, a version must complete a 1-player game on a random map</td></tr>
+</table>
+
+<h2>Running a match</h2>
+<table>
+<tr><th>Containers</th><td>a fresh game server and one container per bot, on a private network without internet access</td></tr>
+<tr><th>Resources</th><td>per bot: {{.Config.Runner.CPUPerBot}} CPU core, {{.Config.Runner.Memory}} of memory, {{.Config.Runner.Pids}} processes</td></tr>
+<tr><th>Timing</th><td>bots must join within {{.Config.Runner.JoinTimeout}}; a turn ends when every bot has sent its orders, or after 2 seconds; a match is abandoned after {{.Config.Runner.MatchTimeout}}</td></tr>
+<tr><th>Crashes</th><td>a bot that exits before the end, or never joins, ranks last; its seat plays no more orders</td></tr>
+</table>
+<p>The bot contract is described in the <a href="https://github.com/hivehelsinki/hive-arena/blob/main/docs/docker.md">repository's documentation</a>.</p>
+
+<div class="rules">{{rules}}</div>
+{{end}}

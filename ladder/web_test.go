@@ -68,6 +68,7 @@ func TestWebPages(t *testing.T) {
 	get("/api/matches?after="+id(match), 200, "[]")
 	get("/api/teams", 200, `"name":"alpha"`)
 	get("/static/style.css", 200, "body")
+	get("/specs", 200, "Specifications", "Quota", "<h3>Map</h3>", "<code>forage</code>")
 	get("/screen", 200, "/api/leaderboard")
 
 	// Expired replays
