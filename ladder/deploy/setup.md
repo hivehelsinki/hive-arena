@@ -31,6 +31,14 @@ The version is also shown at the bottom of every page of the website, and by `la
 
 Being in the `docker` group is equivalent to root access on the machine: the VM should be dedicated to the ladder.
 
+## Trying it with test teams
+
+To try the ladder before real teams register, make a throwaway registry and a few bot repositories on GitHub, and point `registry.url` at the registry: the ladder fetches, builds and smoke-tests them exactly as it does for real teams. Several teams can share one repository (a team's name is its registry entry, not its repository), so three repositories are enough for six teams, which lets every format be played.
+
+This was done live on 2026-11-20, with a public registry (`hive-ladder-test-registry`: a `teams.json` with six teams) and two bot repositories made of the random-walking example agents, each tagged `v1` on `main`: a Go one (a self-contained module, with its own copy of the `arena` package) and a Lua one (`hive-ladder-test-go`, `hive-ladder-test-lua`). `ladder build` fetched the registry, cloned the repositories, and built and smoke-tested all six teams, the tag and registry fetch included. The repositories are throwaway and can be deleted at any time.
+
+Before real teams register, point `registry.url` back at the real registry, and remove the test data (stop the service, delete the data directory).
+
 ## Day to day
 
 - Logs: `journalctl -u hive-ladder -f`
