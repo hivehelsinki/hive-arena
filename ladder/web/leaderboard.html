@@ -8,14 +8,8 @@
 
 {{with .Ladder.History}}
 <h2>Ratings over time</h2>
-<div id="ratings"></div>
+<div id="ratings" data-chart="ratings-data" data-highlight="3" data-label="Global ratings of the teams over time"></div>
 <script type="application/json" id="ratings-data">{{.}}</script>
-<script>
-document.addEventListener("DOMContentLoaded", () => {
-	const data = JSON.parse(document.getElementById("ratings-data").textContent);
-	ratingChart(document.getElementById("ratings"), data, { highlight: 3, label: "Global ratings of the teams over time" });
-});
-</script>
 {{end}}
 
 {{range .Ladder.Tables}}

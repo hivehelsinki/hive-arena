@@ -19,14 +19,8 @@
 {{if not .Global.Since.IsZero}}Version <span class="mono">{{short .Global.Commit}}</span> playing since {{time .Global.Since}}.{{end}}</p>
 {{end}}
 {{with .History}}
-<div id="rating"></div>
+<div id="rating" data-chart="rating-data" data-highlight="1" data-versions="true" data-height="220" data-label="Global rating over time, with the start of each version"></div>
 <script type="application/json" id="rating-data">{{.}}</script>
-<script>
-document.addEventListener("DOMContentLoaded", () => {
-	const data = JSON.parse(document.getElementById("rating-data").textContent);
-	ratingChart(document.getElementById("rating"), data, { highlight: 1, versions: true, height: 220, label: "Global rating over time, with the start of each version" });
-});
-</script>
 {{end}}
 <table>
 <thead><tr><th>Format</th><th class="num">Rating</th><th class="num"><span class="nocase">μ ± σ</span></th><th class="num">Matches</th><th class="num">Last 24 hours</th></tr></thead>

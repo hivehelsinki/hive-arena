@@ -226,3 +226,46 @@
 		new ResizeObserver(() => { draw(); }).observe(frame);
 	};
 })();
+
+// Charts declared in the page: <div data-chart="id of the JSON data" data-highlight data-versions data-height data-label>.
+// Drawn when the page loads, and again after each in-place refresh.
+(function () {
+	"use strict";
+	window.drawCharts = function () {
+		for (const node of document.querySelectorAll("[data-chart]")) {
+			const data = JSON.parse(document.getElementById(node.dataset.chart).textContent);
+			ratingChart(node, data, {
+				highlight: Number(node.dataset.highlight) || 0,
+				versions: node.dataset.versions === "true",
+				height: Number(node.dataset.height) || undefined,
+				label: node.dataset.label,
+			});
+		}
+	};
+	document.addEventListener("DOMContentLoaded", window.drawCharts);
+
+	// Every minute, while the page is visible, fetch the page again and swap
+	// in its content, unless the visitor is typing in a form
+	const REFRESH = 60 * 1000;
+	let last = Date.now();
+	async function refresh() {
+		last = Date.now();
+		const active = document.activeElement;
+		if (active && active.closest("main form")) return;
+		try {
+			const res = await fetch(location.href, { headers: { "X-Refresh": "1" } });
+			if (!res.ok) return;
+			const doc = new DOMParser().parseFromString(await res.text(), "text/html");
+			const main = document.querySelector("main"), fresh = doc.querySelector("main");
+			if (!main || !fresh) return;
+			const scroll = window.scrollY;
+			main.replaceChildren(...fresh.childNodes);
+			document.querySelector("footer").replaceWith(doc.querySelector("footer"));
+			window.drawCharts();
+			window.scrollTo(0, scroll);
+		} catch (e) { /* offline: try again next time */ }
+	}
+	setInterval(() => { if (!document.hidden) refresh(); }, REFRESH);
+	// A tab coming back to the foreground catches up at once
+	document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - last > REFRESH) refresh(); });
+})();
