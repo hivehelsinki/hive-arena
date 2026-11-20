@@ -57,6 +57,7 @@ th, td { padding: 0.5em 0.9em; border-bottom: 1px solid var(--line); text-align:
 tr:last-child td { border-bottom: 0; }
 th { color: var(--dim); font-weight: 600; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.04em; }
 .nocase { text-transform: none; letter-spacing: 0; }
+.formula { text-transform: none; letter-spacing: 0; white-space: nowrap; font-weight: normal; }
 tbody tr:hover td { background-color: var(--hover); }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 .strong { font-weight: bold; color: var(--accent-ink); text-shadow: var(--glow); }

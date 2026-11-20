@@ -246,16 +246,10 @@ func (web *Web) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	played, err := web.Store.PlayedSince(time.Now().Add(-24 * time.Hour))
-	if err != nil {
-		serverError(w, err)
-		return
-	}
 	web.render(w, "leaderboard", map[string]any{
 		"Ladder":     view,
 		"HeadToHead": view.HeadToHead,
 		"Teams":      view.Teams,
-		"Played":     played,
 		"Activity":   Activity(),
 	})
 }

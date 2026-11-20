@@ -36,7 +36,7 @@
 {{define "ladder"}}
 <table class="standings">
 <thead><tr>
-	<th>#</th><th>Team</th><th class="num">Rating</th><th class="num"><span class="nocase">μ ± σ</span></th><th class="num">Matches</th>
+	<th>#</th><th>Team</th><th class="num">Rating&nbsp;<span class="formula">({{ranking $.Settings.Rating}})</span></th><th class="num"><span class="nocase">μ ± σ</span></th><th class="num">Matches</th>
 	{{range .Ladder.Formats}}<th class="num" title="Rating in {{.Players}}-player matches">{{.Players}} players</th>{{end}}
 	<th>Version</th>
 </tr></thead>

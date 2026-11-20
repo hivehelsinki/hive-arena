@@ -1,9 +1,6 @@
 {{define "content"}}
 <h1>Ladder</h1>
-<p class="dim">
-	Teams are ranked by their rating: a cautious estimate of their skill ({{ranking .Settings.Rating}}, where μ is the estimated skill and σ its uncertainty), from {{.Ladder.Rated}} matches (<a href="/specs">how the ladder works</a>).
-	Last 24 hours: {{.Played.Matches}} matches{{with .Played.Void}}, {{.}} failed{{end}}. {{with .Activity}}Now: {{.}}.{{end}}
-</p>
+<p>Status: {{or .Activity "not playing"}}.</p>
 {{template "ladder" .}}
 
 {{with .Ladder.History}}
@@ -15,7 +12,7 @@
 {{range .Ladder.Tables}}
 <h2>{{.Format.Players}} players</h2>
 <table class="standings">
-<thead><tr><th>#</th><th>Team</th><th class="num">Rating</th><th class="num"><span class="nocase">μ ± σ</span></th><th class="num">Matches</th></tr></thead>
+<thead><tr><th>#</th><th>Team</th><th class="num">Rating&nbsp;<span class="formula">({{ranking $.Settings.Rating}})</span></th><th class="num"><span class="nocase">μ ± σ</span></th><th class="num">Matches</th></tr></thead>
 <tbody>
 {{range $i, $t := .Teams}}
 <tr><td>{{add $i 1}}</td><td><a href="/teams/{{$t.Team}}">{{$t.Team}}</a></td><td class="num strong">{{rating $t}}</td><td class="num dim">{{musigma $t}}</td><td class="num">{{$t.Games}}</td></tr>
