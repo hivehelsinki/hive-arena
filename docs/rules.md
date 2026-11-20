@@ -87,14 +87,14 @@ The game ends after a fixed number of turns, or earlier when all flower fields a
 
 The values of the game are part of the game state (`rules`, see the API). They are currently:
 
-|          | Cost |
-|----------|------|
-| Bee      | 6    |
-| Hive     | 16   |
-| Wax wall | 1    |
-
-- Flower field initial content: 8 flowers.
-- A field with flowers left regains one every 40 turns.
-- Field of view: 4 hexes away.
-- Attacks: 1 in 6 chance to destroy a wall, 1 in 2 chance to stun a bee.
-- Game length: 1000 turns at most.
+| Value                          | Amount                                  |
+|--------------------------------|-----------------------------------------|
+| Cost of a bee                  | 6 flowers                               |
+| Cost of a hive                 | 16 flowers                              |
+| Cost of a wax wall             | 1 flower                                |
+| Flower field initial content   | 8 flowers                               |
+| Flower field regrowth          | 1 flower every 40 turns, if not empty   |
+| Field of view                  | 4 hexes away                            |
+| Chance to destroy a wall       | 1 in 6 per attack                       |
+| Chance to stun a bee           | 1 in 2 per attack                       |
+| Game length                    | 1000 turns at most                      |

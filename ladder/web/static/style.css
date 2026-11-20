@@ -140,3 +140,5 @@ footer { max-width: 1080px; margin: 0 auto; padding: 1em 1.5em 2em; color: var(-
 table:not(.standings) th { text-align: left; vertical-align: top; width: 16em; }
 .rules h3 { margin-top: 1.6em; font-size: 1.1em; }
 .rules table th { width: auto; }
+.rules { margin-top: 4em; padding: 0.5em 1.5em 1.5em; border-top: 4px solid var(--accent, #f7c300); background: var(--card); border-radius: 0 0 12px 12px; }
+.rules > h2:first-child { margin-top: 0.8em; }
