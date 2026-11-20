@@ -73,7 +73,7 @@ type LadderSettings struct {
 
 func DefaultLadderSettings() LadderSettings {
 	return LadderSettings{
-		Quota:            20,
+		Quota:            1000,
 		Window:           4,
 		RandomShare:      0.1,
 		MaxFailures:      5,

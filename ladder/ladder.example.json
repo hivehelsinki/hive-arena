@@ -9,7 +9,7 @@
 			{"map": "random", "players": 4},
 			{"map": "random", "players": 6}
 		],
-		"quota": 20,
+		"quota": 1000,
 		"window": 4,
 		"randomShare": 0.1,
 		"maxFailures": 5,
