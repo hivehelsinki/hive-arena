@@ -17,6 +17,10 @@ import (
 const Dx = 32
 const Dy = 16
 
+// Size of the tile images, and the highest an entity is drawn above its tile
+const TileSize = 32
+const MaxEntityOffset = 12
+
 var PlayerColors = []color.Color{
 	color.RGBA{255, 100, 100, 255},
 	color.RGBA{255, 255, 100, 255},
@@ -58,6 +62,11 @@ type Viewer struct {
 	// available in the browser)
 	Width, Height int
 
+	// The camera fits the whole map, again when the screen is resized, until
+	// the user zooms or moves it
+	Manual              bool
+	fitWidth, fitHeight int
+
 	// Autoplay: Speed turns per second; Progress accumulates the fractions
 	// of a turn between ticks
 	Playing  bool
@@ -76,8 +85,12 @@ func (viewer *Viewer) Update() error {
 		zoom = -1
 	}
 	viewer.Scale = max(MinScale, min(MaxScale, viewer.Scale*math.Pow(ZoomFactor, zoom)))
+	if zoom != 0 {
+		viewer.Manual = true
+	}
 
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+		viewer.Manual = true
 		x, y := ebiten.CursorPosition()
 		m := viewer.CoordsToTransform(arena.Coords{Row: 0, Col: 0})
 		m.Invert()
@@ -134,6 +147,12 @@ func (viewer *Viewer) Update() error {
 
 	viewer.applyLiveUpdates()
 
+	if !viewer.Manual && len(viewer.Game.History) > 0 && viewer.Width > 0 &&
+		(viewer.Width != viewer.fitWidth || viewer.Height != viewer.fitHeight) {
+		viewer.Fit()
+		viewer.fitWidth, viewer.fitHeight = viewer.Width, viewer.Height
+	}
+
 	return nil
 }
 
@@ -142,9 +161,6 @@ func (viewer *Viewer) applyLiveUpdates() {
 		select {
 		case update := <-viewer.Live:
 			viewer.Game.History = append(viewer.Game.History, arena.Turn{Orders: nil, State: update.State})
-			if len(viewer.Game.History) == 1 {
-				viewer.CenterCamera()
-			}
 			if viewer.Turn == len(viewer.Game.History)-2 {
 				viewer.Turn++
 			}
@@ -275,20 +291,29 @@ func (viewer *Viewer) Layout(outsideWidth, outsideHeight int) (screenWidth, scre
 	return outsideWidth, outsideHeight
 }
 
-func (viewer *Viewer) CenterCamera() {
-	cx, cy := CenterTile(viewer.Game.History[0].State)
-	viewer.Cx, viewer.Cy = float64(cx), float64(cy)
-}
-
-func CenterTile(state *arena.GameState) (int, int) {
-	cx, cy := 0, 0
-	count := 0
-	for coords, _ := range state.Hexes {
-		cx += coords.Col
-		cy += coords.Row
-		count++
+// Fit centers the camera on the map, and zooms to the largest zoom step (a
+// power of ZoomFactor) at which the whole map is on the screen
+func (viewer *Viewer) Fit() {
+	minX, minY := math.Inf(1), math.Inf(1)
+	maxX, maxY := math.Inf(-1), math.Inf(-1)
+	for coords := range viewer.Game.History[0].State.Hexes {
+		// Where CoordsToTransform puts the tile, before the camera
+		x := float64(Dx*coords.Col/2 - Dx/2)
+		y := float64(Dy*coords.Row - Dy/2)
+		minX, maxX = min(minX, x), max(maxX, x+TileSize)
+		minY, maxY = min(minY, y-MaxEntityOffset), max(maxY, y+TileSize)
 	}
-	return cx / count, cy / count
+	if minX > maxX {
+		return
+	}
+
+	viewer.Cx = (minX + maxX) / Dx
+	viewer.Cy = (minY + maxY) / 2 / Dy
+
+	fit := min(float64(viewer.Width)/(maxX-minX), float64(viewer.Height)/(maxY-minY))
+	// (with a margin for rounding, when the map fits exactly)
+	steps := math.Floor(math.Log(fit)/math.Log(ZoomFactor) + 1e-9)
+	viewer.Scale = max(MinScale, min(MaxScale, math.Pow(ZoomFactor, steps)))
 }
 
 func main() {
@@ -326,9 +351,6 @@ func main() {
 	}
 	if viewer.Speed <= 0 {
 		viewer.Speed = DefaultSpeed
-	}
-	if len(game.History) > 0 {
-		viewer.CenterCamera()
 	}
 	err := ebiten.RunGame(viewer)
 

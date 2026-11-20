@@ -16,6 +16,8 @@ Input:
 - w/q or mouse wheel: zoom in/out
 - click: center view
 
+The view first fits the whole map in the window, and fits it again when the window is resized, until you zoom or click.
+
 ## In the browser
 
 `./build-web.sh` builds the viewer to WebAssembly in `web/` (`index.html`, `viewer.wasm` and its compressed version, `wasm_exec.js`). Serve that directory and open `index.html?url=<URL of a game report>` (add `&autoplay=1` to start playing right away, and `&speed=<turns per second>`, 6 by default; `--autoplay` and `--speed` on the desktop). When an autoplayed replay reaches its last turn, the browser viewer sends a `{type: "hive-replay-ended"}` message to the page that embeds it. The ladder serves it at `/viewer/`, where `?match=<id>` opens the replay of one of its matches.
