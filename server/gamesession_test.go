@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -244,5 +245,47 @@ func TestTooManyOrdersAreRejected(t *testing.T) {
 	}
 	if err := session.SetOrders(players[0].ID, 0, orders[:limit]); err != nil {
 		t.Errorf("%d orders should be accepted: %s", limit, err)
+	}
+}
+
+func TestTimeBudget(t *testing.T) {
+	TimeBudget = 5 * time.Second
+	defer func() { TimeBudget = 0 }()
+	session, players := newTestSession(t, 2)
+
+	fast, slow := players[0].ID, players[1].ID
+	// Player 0 answers at once, player 1 never does: each turn costs it the whole turn timeout
+	for turn := range uint(3) {
+		if err := session.SetOrders(fast, turn, []*arena.Order{}); err != nil {
+			t.Fatal(err)
+		}
+		session.mutex.Lock()
+		if turn < 2 && session.TimedOut[slow] {
+			t.Errorf("player 1 timed out too early, after %d turns", turn)
+		}
+		session.processTurn()
+		session.mutex.Unlock()
+	}
+
+	session.mutex.Lock()
+	timedOut := slices.Clone(session.TimedOut)
+	forfeited := slices.Clone(session.Forfeited)
+	used := slices.Clone(session.Used)
+	session.mutex.Unlock()
+	if !timedOut[slow] || !forfeited[slow] || timedOut[fast] || forfeited[fast] {
+		t.Errorf("expected only player 1 to be timed out: %v %v", timedOut, forfeited)
+	}
+	if used[fast] > time.Second || used[slow] != 3*TurnTimeout {
+		t.Errorf("unexpected time used: %v", used)
+	}
+	if err := session.SetOrders(slow, 3, []*arena.Order{}); err == nil {
+		t.Errorf("orders of a player who used up its budget should be rejected")
+	}
+	// The server no longer waits for it: player 0 alone completes the turn
+	if err := session.SetOrders(fast, 3, []*arena.Order{}); err != nil {
+		t.Fatal(err)
+	}
+	if turn := session.FullState().Turn; turn != 4 {
+		t.Errorf("expected turn 4, got %d", turn)
 	}
 }

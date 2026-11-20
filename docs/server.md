@@ -16,6 +16,7 @@ Options:
 - `-dev`: development mode, see below
 - `-history <dir>`: where the reports of finished games are saved (`history` by default; empty: not saved)
 - `-maps <dir>`: a directory of map files to load, see below
+- `-time-budget <duration>`: the total time each player may take to answer over a game, e.g. `5m`; a player who exceeds it is forfeited (0, the default: no limit; the ladder sets it for its matches)
 - `-max-games <n>`: create at most this many games, then refuse new ones (0, the default: no limit)
 
 The server hosts any number of games at the same time. Besides the API routes, `/status` shows the games currently running, `/history` the reports of the finished ones, and `/report?id=<game id>` returns the report of a finished game.

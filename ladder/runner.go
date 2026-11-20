@@ -28,6 +28,7 @@ type RunnerConfig struct {
 
 	JoinTimeout  time.Duration // time for all bots to join
 	MatchTimeout time.Duration // time for the whole match
+	TimeBudget   time.Duration // total time each bot may take to answer, over a game
 	ExitGrace    time.Duration // time for bots to exit by themselves after the end
 	LogLimit     int           // maximum size of the log kept per bot, in bytes
 }
@@ -39,7 +40,8 @@ func DefaultRunnerConfig() RunnerConfig {
 		Memory:       "256m",
 		Pids:         64,
 		JoinTimeout:  time.Minute,
-		MatchTimeout: 30 * time.Minute,
+		MatchTimeout: 10 * time.Minute,
+		TimeBudget:   5 * time.Minute,
 		ExitGrace:    5 * time.Second,
 		LogLimit:     256 * 1024,
 		ServerMemory: "512m",
@@ -70,6 +72,8 @@ const (
 	Finished BotStatus = "finished"
 	// Joined, but exited before the end of the game
 	Crashed BotStatus = "crashed"
+	// Used up its time budget (see runner.timeBudget): the server stopped waiting for it
+	TimedOut BotStatus = "timeout"
 	// Did not join in time. A stand-in played its seat, posting no orders.
 	NoJoin BotStatus = "no-join"
 )
@@ -219,7 +223,7 @@ func (run *matchRun) play(ctx context.Context) (*MatchResult, error) {
 		"--memory", run.config.ServerMemory, "--memory-swap", run.config.ServerMemory, "--pids-limit", serverPids,
 		"--log-driver", "json-file", "--log-opt", "max-size="+dockerLogMax, "--log-opt", "max-file=1",
 		"-p", "127.0.0.1::8080",
-		run.config.ServerImage, "server/server", "-p", "8080", "--dev", "-max-games", "1", "-history="); err != nil {
+		run.config.ServerImage, "server/server", "-p", "8080", "--dev", "-time-budget", run.config.TimeBudget.String(), "-max-games", "1", "-history="); err != nil {
 		return nil, err
 	}
 	if _, err := docker(ctx, "network", "connect", "--alias", "server", run.network(), run.server()); err != nil {
@@ -586,6 +590,8 @@ func (run *matchRun) outcomes(ctx context.Context, result *arena.GameResult) []B
 		switch {
 		case run.missing[i]:
 			outcome.Status = NoJoin
+		case outcome.Seat >= 0 && result.Players[outcome.Seat].TimedOut:
+			outcome.Status = TimedOut
 		case run.exitedLive[i]:
 			outcome.Status = Crashed
 		}

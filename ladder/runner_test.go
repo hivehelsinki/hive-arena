@@ -217,6 +217,34 @@ func TestFailedMatchHasPartialResult(t *testing.T) {
 	}
 }
 
+// A bot that stays alive but does not answer is forfeited once it has used up its time budget
+func TestUnresponsiveBotTimesOut(t *testing.T) {
+	requireDocker(t)
+
+	config := DefaultRunnerConfig()
+	config.TimeBudget = 6 * time.Second
+	config.MatchTimeout = 3 * time.Minute
+	runner := Runner{Config: config}
+
+	start := time.Now()
+	result, err := runner.Run(context.Background(), Match{Map: "random", Bots: []Bot{
+		{Name: "good", Image: "example-agent-go"},
+		{Name: "idle", Image: "hive-ladder-idlebot"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer result.RemoveReport()
+
+	if good, idle := result.Bots[0], result.Bots[1]; good.Status != Finished || idle.Status != TimedOut || !result.Result.Players[idle.Seat].TimedOut {
+		t.Errorf("expected the idle bot to time out: %+v", result.Bots)
+	}
+	// Without the budget, each of the 1000 turns would wait for the 2 s turn timeout
+	if elapsed := time.Since(start); elapsed > time.Minute {
+		t.Errorf("the match took %s", elapsed)
+	}
+}
+
 func TestValidateMatch(t *testing.T) {
 	if validateMatch(Match{Map: "random"}) == nil {
 		t.Error("a match without bots should be invalid")

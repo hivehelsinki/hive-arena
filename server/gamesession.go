@@ -40,7 +40,9 @@ type GameSession struct {
 
 	PendingOrders [][]*arena.Order
 	Posted        []bool
-	Forfeited     []bool // players the server no longer waits for
+	Forfeited     []bool          // players the server no longer waits for
+	TimedOut      []bool          // players forfeited for using up their time budget
+	Used          []time.Duration // time each player took to answer, over the game (see TimeBudget)
 	TurnStart     time.Time
 	History       []arena.Turn
 
@@ -75,6 +77,8 @@ func NewGameSession(id string, players int, mapname string, mapdata arena.MapDat
 		PlayerTokens: tokens[1:],
 		Seats:        make([]*Player, players),
 		Forfeited:    make([]bool, players),
+		TimedOut:     make([]bool, players),
+		Used:         make([]time.Duration, players),
 		State:        state,
 		History:      []arena.Turn{{Orders: nil, State: state.Clone()}},
 	}
@@ -288,6 +292,12 @@ func (session *GameSession) SetOrders(playerid int, turn uint, orders []*arena.O
 		return fmt.Errorf("Too many orders: %d, the limit is %d this turn", len(orders), limit)
 	}
 
+	if session.TimedOut[playerid] {
+		return fmt.Errorf("You have used up your time budget (%s) and no longer play", TimeBudget)
+	}
+	if !session.Posted[playerid] {
+		session.Used[playerid] += time.Since(session.TurnStart)
+	}
 	session.PendingOrders[playerid] = orders
 	session.Posted[playerid] = true
 
@@ -343,8 +353,28 @@ func (session *GameSession) allPlayed() bool {
 	return true
 }
 
+// chargeTime counts the turn that ends in the players' time budgets: the
+// players who posted were charged when they did, the others take the whole
+// timeout. A player who has used up its budget is forfeited.
+func (session *GameSession) chargeTime() {
+	for player := range session.Posted {
+		if session.Forfeited[player] {
+			continue
+		}
+		if !session.Posted[player] {
+			session.Used[player] += TurnTimeout
+		}
+		if TimeBudget > 0 && session.Used[player] > TimeBudget {
+			session.Forfeited[player] = true
+			session.TimedOut[player] = true
+			log.Printf("Player %s used up its time budget (%s) in game %s, turn %d", session.Seats[player].Name, TimeBudget, session.ID, session.State.Turn)
+		}
+	}
+}
+
 func (session *GameSession) processTurn() {
 	log.Printf("Processing orders for game %s, turn %d", session.ID, session.State.Turn)
+	session.chargeTime()
 
 	results, err := session.State.ProcessOrders(session.PendingOrders)
 	if err != nil {
@@ -441,6 +471,7 @@ func (session *GameSession) result() *arena.GameResult {
 	result := arena.NewGameResult(session.State, session.playerNames())
 	for player, forfeited := range session.Forfeited {
 		result.Players[player].Forfeited = forfeited
+		result.Players[player].TimedOut = session.TimedOut[player]
 	}
 	return result
 }

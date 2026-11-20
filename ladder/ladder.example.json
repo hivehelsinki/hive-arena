@@ -31,7 +31,8 @@
 		"serverMemory": "512m",
 		"pids": 64,
 		"joinTimeout": "1m",
-		"matchTimeout": "30m"
+		"matchTimeout": "10m",
+		"timeBudget": "5m"
 	},
 	"registry": {
 		"url": "https://github.com/hivehelsinki/hive-arena-teams.git",

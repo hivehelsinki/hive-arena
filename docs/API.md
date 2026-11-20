@@ -169,6 +169,8 @@ The payload is limited to 1 MB, and to 2 × (the player's bees and hives) + 16 c
 
 The turn is processed once commands from all players are received, or after a fixed timeout (2 seconds).
 
+A server can also limit the total time each player takes to answer over a game (`-time-budget`, see [server.md](server.md); the ladder uses 5 minutes). The time of a turn is the time from its start to the player's commands, or the whole timeout if they do not come. A player who exceeds the budget is forfeited (see `/forfeit`), its commands are rejected with error code Bad Request, and its result has `timedOut` set.
+
 ## GET /ws
 
 A websocket specific to each game, that clients can listen to in order to avoid polling the game state too often.

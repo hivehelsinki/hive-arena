@@ -64,7 +64,7 @@ tbody tr:hover td { background-color: var(--hover); }
 .dim { color: var(--dim); }
 .mono, code { font-family: ui-monospace, monospace; font-size: 0.9em; }
 .tag { font-size: 0.75em; border: 1px solid var(--dim); border-radius: 999px; padding: 0 0.45em; color: var(--dim); }
-.error, .status-crashed, .status-no-join, .status-build-failed, .status-smoke-failed, .status-failed { color: var(--bad); }
+.error, .status-crashed, .status-timeout, .status-no-join, .status-build-failed, .status-smoke-failed, .status-failed { color: var(--bad); }
 .status-incomplete { color: var(--accent-ink); }
 .good { color: var(--good); font-weight: bold; }
 .bad { color: var(--bad); }

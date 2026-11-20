@@ -9,6 +9,8 @@ type PlayerResult struct {
 	Rank int `json:"rank"`
 	// Whether the server stopped waiting for the player's orders (see the /forfeit route)
 	Forfeited bool `json:"forfeited,omitempty"`
+	// Whether the server stopped waiting because the player used up its time budget
+	TimedOut bool `json:"timedOut,omitempty"`
 }
 
 type GameResult struct {

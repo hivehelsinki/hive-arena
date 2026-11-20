@@ -32,7 +32,7 @@ Configuration (`ladder.json`):
   - `headToHeadPeriod`: head-to-head results are computed over this period
   - `paused`: no match is started
   - `rating`: parameters of the ratings (see below); changing them recomputes every rating
-- `runner`: server image, CPU cores per bot (`cpuPerBot`, 1), per-bot memory and process limits, memory of the match server (`serverMemory`: it keeps the whole game in memory), timeouts
+- `runner`: server image, CPU cores per bot (`cpuPerBot`, 1), per-bot memory and process limits, memory of the match server (`serverMemory`: it keeps the whole game in memory), timeouts (`joinTimeout`, `matchTimeout`) and the time budget of each bot over a match (`timeBudget`)
 - `registry`: where teams are registered: a git repository (`url`, `branch`, `file`), or a local file (`path`)
 - `build`: build timeout, number of successful images kept per team, image size limit (`maxImageMB`), size of the docker build cache (`cacheLimit`), how often new versions are built (`interval`, between matches)
 - `minFreeDiskGB`: below this free space in `dataDir`, the report and logs of the oldest matches are deleted, a warning is logged and `/health` reports a problem
@@ -55,7 +55,7 @@ Every `build.interval`, between matches, for each team, the ladder updates a mir
 
 In a registry fetched from git, teams must use `https://` repositories, and invalid entries are left out without affecting the others (see `registryProblems` in `/api/status`). When the registry cannot be fetched or is invalid, its last valid version is used. A local registry file (`registry.path`) accepts any repository.
 
-A team whose bot failed (crashed or did not join) its last `maxFailures` matches with the same commit is left out of the ladder until it pushes a new tag; its page says so.
+A team whose bot failed (crashed, did not join or used up its time budget) its last `maxFailures` matches with the same commit is left out of the ladder until it pushes a new tag; its page says so.
 
 ## Matchmaking and ratings
 
@@ -63,7 +63,7 @@ Before every match, the matchmaker picks the team and format furthest below the 
 
 Ratings follow OpenSkill's Plackett-Luce model (TrueSkill-style: a skill estimate μ and an uncertainty σ per team), with ties, globally and per format. Teams are ranked by μ − 3σ, so a new team starts at 0. `rating.tau` adds uncertainty before every match, so that ratings follow teams that improve; when a team's version changes, its σ is raised to at least `rating.versionSigma`. Ratings are recomputed from all the valid ladder matches every time, so they can be computed at any past time. See "Design" below for the reasons.
 
-Matches are played one at a time. Each bot joins through the private ID of its own seat, so it always plays under its team's name. A crashed bot's seat is forfeited (the server stops waiting for its orders), so it does not slow the game down. A match that fails (timeout, server error) is recorded as void, with the error and the bots' output.
+Matches are played one at a time. Each bot joins through the private ID of its own seat, so it always plays under its team's name. A crashed bot's seat is forfeited (the server stops waiting for its orders), so it does not slow the game down; a bot that stays alive but answers too slowly is forfeited by the server when it has used up its time budget (`runner.timeBudget`: 5 minutes of answering time over a game, a missed turn counting as the 2 s turn timeout), so that a hanging bot costs a few minutes, not a whole game of timeouts. A match that fails (timeout, server error) is recorded as void, with the error and the bots' output.
 
 ## Playing one match
 
@@ -80,6 +80,7 @@ Each bot is given as `name=image`. The runner creates a private network, starts 
 
 - `finished`: played until the end
 - `crashed`: joined, but exited before the end of the game
+- `timeout`: used up its time budget: the server forfeited it
 - `no-join`: did not join in time (or could not be started); a stand-in played its seat, posting no orders
 
 Containers and networks are always removed at the end. All of them have the `hive-ladder` label.
