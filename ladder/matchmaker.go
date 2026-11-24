@@ -185,8 +185,11 @@ func (l *Ladder) freeDisk() {
 // NextMatch chooses the next match to play, or returns nil and why there
 // is nothing to play
 func (l *Ladder) NextMatch(pool []Bot, settings LadderSettings, now time.Time) (*Match, string, error) {
-	if len(pool) < 2 {
-		return nil, fmt.Sprintf("%d teams can play", len(pool)), nil
+	switch len(pool) {
+	case 0:
+		return nil, "no team can play yet", nil
+	case 1:
+		return nil, "only 1 team can play", nil
 	}
 	commits := make(map[string]string)
 	for _, bot := range pool {
