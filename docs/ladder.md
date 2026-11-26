@@ -12,7 +12,8 @@ How bots are built and run: [docker.md](docker.md). The rules of the game: [rule
   { "name": "SuperTeam", "repo": "https://github.com/someone/superteam-bot", "members": ["alice", "bob"] }
   ```
 
-  Staff review and merge it; the ladder picks it up within about 15 minutes. Teams have at most 5 members. Repositories are public, with an `https://` URL: everyone can read everyone's bot.
+  Staff review and merge it; the ladder picks it up within about 15 minutes. Repositories are public, with an `https://` URL: everyone can read everyone's bot.
+- **Your team's name** is any text (at most 64 characters, no control or invisible characters): it is displayed as you write it. The ladder also gives your team an **identifier**, made from the name (lowercase letters and digits: `Les Abeilles 🐝` becomes `lesabeillesf77324`), which is shown on your team's page and used in URLs, in the API, and as the name your bot joins its games with (so it is what the replays show). Names that only differ by case or spacing are the same team. Changing the name changes the identifier: the ladder sees a new team.
 - **Submit a version by pushing a tag** on a commit of your `main` branch: the most recent tag (by commit date) among those on `main` plays. Tags elsewhere are ignored, and moving or deleting a tag changes nothing once its commit is built.
 - **A new team starts at the bottom** of the ladder, and climbs as it wins. Matches are automatic: teams are challenged by, and challenge, the teams near them on the ladder, every day. A new version keeps the team's rating, but makes it more uncertain, so that it can move quickly.
 - **A version that keeps failing** (crashing, not joining or using up its time budget) in its last matches is left out until you push a new tag. A version that does not build or does not pass the smoke test never plays: your previous version keeps playing, and your team's page shows why.
@@ -30,7 +31,7 @@ All routes are `GET`, and answer JSON unless said otherwise.
 
 `/api/matches`: matches, most recent first. Filters, all optional:
 
-- `team`: only the matches of a team
+- `team`: only the matches of a team (its identifier)
 - `players`: only the matches with this number of players
 - `limit`: how many matches (50 by default, at most 200)
 - `before=<id>`: only older matches than this one, to page back
@@ -51,7 +52,8 @@ All routes are `GET`, and answer JSON unless said otherwise.
 	"filesDeleted": (bool) the replay and the bot outputs have expired,
 	"bots": [ by seat (player number in the replay)
 		{
-			"team": (string),
+			"team": (string) the team's identifier,
+			"name": (string) its name,
 			"commit": (string) the version of the team's bot,
 			"seat": (int),
 			"flowers": (int) at the end of the game,
@@ -66,22 +68,22 @@ All routes are `GET`, and answer JSON unless said otherwise.
 ### Replays and outputs
 
 - `/matches/<id>/report.json`: the replay, in the same format as the reports of the arena server: the full state at every turn, the orders, and the result. Open it with the viewer: `go run ./viewer --file report.json`. Large: ask for it compressed (`Accept-Encoding: gzip`, as browsers and `curl --compressed` do).
-- `/matches/<id>/logs/<team>`: what the team's bot printed during the match (text, the last 256 kB at most).
+- `/matches/<id>/logs/<team>`: (`team`: the identifier) what the team's bot printed during the match (text, the last 256 kB at most).
 
 ### The ladder
 
-`/api/leaderboard`: the ladder:
+`/api/leaderboard`: the ladder (teams are given by their identifier, `team`; `names` gives the name of each):
 
 - `ladder`: the global ladder, best first. For each team: `team`, `global` (its rating: `rating.mu` the estimated skill and `rating.sigma` the uncertainty; `score`, what teams are ranked by: `mu - k * sigma`, with k set by the ladder, 2 by default; `games`, `commit`), `perFormat` (the same, for each number of players: keys like `random:4`), and `playing` (whether it plays at the moment)
 - `perFormat`: the ladder of each format
 - `headToHead`: `headToHead[a][b]` is how often `a` finished ahead of `b` (`wins`, ties count half) in the `games` they played together, over `headToHeadPeriod`
 - `history`: each team's global rating over time (`t`: Unix time, `r`: rating, `v`: the version that started there)
 
-`/api/teams`: the registered teams, with their current version and, if it is not playing, why (for instance a failed build).
+`/api/teams`: the registered teams (`id`, `name`, `repo`...), with their current version and, if it is not playing, why (for instance a failed build).
 
 ## Downloading your matches
 
-[scripts/ladder_download.py](../scripts/ladder_download.py) downloads a team's matches into a directory: the results (`<id>.result.json`), the replays (`<id>.json.gz`) and the bot's output (`<id>.log`). Run it again at any time: it only fetches the matches played since the last one it has. It needs Python 3, nothing else.
+[scripts/ladder_download.py](../scripts/ladder_download.py) downloads a team's matches (given by its name or its identifier) into a directory: the results (`<id>.result.json`), the replays (`<id>.json.gz`) and the bot's output (`<id>.log`). Run it again at any time: it only fetches the matches played since the last one it has. It needs Python 3, nothing else.
 
 ```sh
 python3 scripts/ladder_download.py https://<ladder address> <your team> [directory]

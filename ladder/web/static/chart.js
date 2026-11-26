@@ -2,7 +2,7 @@
 // crosshair and a tooltip. No dependencies.
 //
 // ratingChart(container, series, options)
-//   series: [{team, points: [{t: unix seconds, r: rating, v: version}]}], best first
+//   series: [{team (identifier), name, points: [{t: unix seconds, r: rating, v: version}]}], best first
 //   options.highlight: how many series (the first ones) get their own color;
 //     the others are drawn in gray, as context
 //   options.versions: mark the start of each version
@@ -78,7 +78,7 @@
 				const item = document.createElement("span");
 				const key = document.createElement("i");
 				key.className = "key series-" + s.slot;
-				item.append(key, document.createTextNode(s.team));
+				item.append(key, document.createTextNode(s.name || s.team));
 				legend.append(item);
 			}
 			if (series.some(s => !s.slot)) {
@@ -178,7 +178,7 @@
 				const value = document.createElement("b");
 				value.textContent = r.toFixed(1);
 				const name = document.createElement("span");
-				name.textContent = series.length > 1 ? s.team : "rating";
+				name.textContent = series.length > 1 ? (s.name || s.team) : "rating";
 				row.append(key, value, name);
 				tooltip.append(row);
 			}

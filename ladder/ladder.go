@@ -66,6 +66,20 @@ func (l *Ladder) playMatch(ctx context.Context, match Match) (result *MatchResul
 	return l.Player.Run(ctx, match)
 }
 
+// teamNames returns the names of the teams of the bots, for people (the
+// identifiers if the names cannot be read)
+func (l *Ladder) teamNames(bots []Bot) string {
+	names, err := l.Store.TeamNames()
+	if err != nil {
+		return botNames(bots)
+	}
+	var list []string
+	for _, bot := range bots {
+		list = append(list, teamName(names, bot.Name))
+	}
+	return strings.Join(list, ", ")
+}
+
 func botNames(bots []Bot) string {
 	var names []string
 	for _, bot := range bots {

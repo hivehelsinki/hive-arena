@@ -33,11 +33,14 @@ type LadderView struct {
 	Rated            int                              `json:"ratedMatches"`
 	// The global rating of each team over time, in ladder order, for charts
 	History []TeamHistory `json:"history"`
+	// The name of each team, by identifier (the "team" of the other fields)
+	Names map[string]string `json:"names"`
 }
 
 // A team's global rating over time, reduced to a chart's resolution
 type TeamHistory struct {
-	Team   string       `json:"team"`
+	Team   string       `json:"team"` // the identifier
+	Name   string       `json:"name"`
 	Points []ChartPoint `json:"points"`
 }
 
@@ -105,9 +108,13 @@ func (s *Store) Ladder(settings LadderSettings, now time.Time) (*LadderView, err
 	if err != nil {
 		return nil, err
 	}
+	names, err := s.TeamNames()
+	if err != nil {
+		return nil, err
+	}
 	playing := make(map[string]bool)
 	for _, state := range pool.Teams {
-		playing[state.Team.Name] = state.Bot != nil && state.LeftOut == ""
+		playing[state.Team.ID] = state.Bot != nil && state.LeftOut == ""
 	}
 
 	view := &LadderView{
@@ -115,6 +122,7 @@ func (s *Store) Ladder(settings LadderSettings, now time.Time) (*LadderView, err
 		HeadToHead:       HeadToHeads(results),
 		HeadToHeadPeriod: settings.HeadToHeadPeriod,
 		Rated:            len(matches),
+		Names:            make(map[string]string),
 	}
 	var from, to time.Time
 	if len(matches) > 0 {
@@ -122,7 +130,8 @@ func (s *Store) Ladder(settings LadderSettings, now time.Time) (*LadderView, err
 	}
 	for _, t := range ratings.Global.Standings() {
 		team := t.Team
-		view.History = append(view.History, TeamHistory{team, chartHistory(ratings.Global.History(team), from, to, chartPoints, func(commit string) string { return versions.Label(team, commit) })})
+		view.Names[team] = teamName(names, team)
+		view.History = append(view.History, TeamHistory{team, view.Names[team], chartHistory(ratings.Global.History(team), from, to, chartPoints, func(commit string) string { return versions.Label(team, commit) })})
 		row := LadderRow{Team: t.Team, Global: t, PerFormat: make(map[string]TeamRating), Playing: playing[t.Team]}
 		for key, table := range ratings.PerFormat {
 			if r := table.Rating(t.Team); r.Games > 0 {

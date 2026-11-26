@@ -85,7 +85,17 @@ func OpenStore(dir string) (*Store, error) {
 // Existing migrations must never change: add new ones at the end.
 var migrations = []string{
 	schema + buildsSchema,
+	teamsSchema,
 }
+
+// The name each team registered with, by identifier (what the other tables
+// call "team"): kept for the teams that left the registry too
+const teamsSchema = `
+CREATE TABLE teams (
+	id TEXT PRIMARY KEY,
+	name TEXT NOT NULL
+);
+`
 
 // migrate brings the database schema to the current version. A database
 // with data is first copied, in case a migration goes wrong.
@@ -331,7 +341,8 @@ func readGzip(path string) ([]byte, error) {
 }
 
 type MatchBot struct {
-	Team    string `json:"team"`
+	Team    string `json:"team"` // the team's identifier
+	Name    string `json:"name"` // its name
 	Image   string `json:"image"`
 	Commit  string `json:"commit"`
 	Seat    int    `json:"seat"`
@@ -402,6 +413,10 @@ func (s *Store) Matches(filter MatchFilter) ([]MatchSummary, error) {
 		query += fmt.Sprintf(" LIMIT %d", filter.Limit)
 	}
 
+	names, err := s.TeamNames()
+	if err != nil {
+		return nil, err
+	}
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, err
@@ -444,6 +459,7 @@ func (s *Store) Matches(filter MatchFilter) ([]MatchSummary, error) {
 		if err := bots.Scan(&matchID, &b.Team, &b.Image, &b.Commit, &b.Seat, &b.Flowers, &b.Status, &b.ExitCode); err != nil {
 			return nil, err
 		}
+		b.Name = teamName(names, b.Team)
 		m := &matches[index[matchID]]
 		m.Bots = append(m.Bots, b)
 	}
@@ -846,6 +862,15 @@ func (s *Store) SavePoolState(state *PoolState) error {
 	if err != nil {
 		return err
 	}
+	for _, state := range state.Teams {
+		if state.Team.ID == "" {
+			continue
+		}
+		if _, err := s.db.Exec(`INSERT INTO teams (id, name) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name`,
+			state.Team.ID, state.Team.Name); err != nil {
+			return err
+		}
+	}
 	return writeFileDurably(filepath.Join(s.dir, "teams.json"), data)
 }
 
@@ -873,4 +898,31 @@ func (s *Store) TeamStates() ([]TeamState, error) {
 func (s *Store) Counts() (matches int, builds int, err error) {
 	err = s.db.QueryRow(`SELECT (SELECT COUNT(*) FROM matches), (SELECT COUNT(*) FROM builds)`).Scan(&matches, &builds)
 	return matches, builds, err
+}
+
+// TeamNames returns the name of each team that was ever registered, by identifier
+func (s *Store) TeamNames() (map[string]string, error) {
+	rows, err := s.db.Query(`SELECT id, name FROM teams`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	names := make(map[string]string)
+	for rows.Next() {
+		var id, name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		names[id] = name
+	}
+	return names, rows.Err()
+}
+
+// teamName returns the name of a team from its identifier (the identifier
+// itself if the team is not known)
+func teamName(names map[string]string, id string) string {
+	if name := names[id]; name != "" {
+		return name
+	}
+	return id
 }

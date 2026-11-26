@@ -1,7 +1,10 @@
 {{define "content"}}
-<h1>Matches{{with .Filter.Team}} of {{.}}{{end}}{{with .Filter.Players}}, {{.}} players{{end}}</h1>
+<h1>Matches{{with .Filter.Team}} of {{teamName $.Names .}}{{end}}{{with .Filter.Players}}, {{.}} players{{end}}</h1>
 <form class="filter" method="get">
-	<input name="team" placeholder="Team" value="{{.Filter.Team}}">
+	<select name="team">
+		<option value="">Any team</option>
+		{{range .Teams}}<option value="{{.ID}}"{{if eq .ID $.Filter.Team}} selected{{end}}>{{.Name}}</option>{{end}}
+	</select>
 	<select name="players">
 		<option value="">Any number of players</option>
 		{{range .Formats}}<option value="{{.Players}}"{{if eq .Players $.Filter.Players}} selected{{end}}>{{.Players}} players</option>{{end}}

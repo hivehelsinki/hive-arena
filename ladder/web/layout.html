@@ -44,7 +44,7 @@
 {{range $i, $r := .Ladder.Rows}}
 <tr data-team="{{$r.Team}}"{{if not $r.Playing}} class="dim" title="Not playing at the moment"{{end}}>
 	<td>{{add $i 1}}</td>
-	<td><a href="/teams/{{$r.Team}}">{{$r.Team}}</a></td>
+	<td><a href="/teams/{{$r.Team}}">{{teamName $.Names $r.Team}}</a></td>
 	<td class="num strong">{{rating $r.Global}}</td>
 	<td class="num dim">{{musigma $r.Global}}</td>
 	<td class="num">{{$r.Global.Games}}</td>
@@ -61,11 +61,11 @@
 {{define "h2h"}}
 {{if .Teams}}
 <table class="h2h">
-<thead><tr><th></th>{{range .Teams}}<th class="vertical"><span>{{.}}</span></th>{{end}}</tr></thead>
+<thead><tr><th></th>{{range .Teams}}<th class="vertical"><span>{{teamName $.Names .}}</span></th>{{end}}</tr></thead>
 <tbody>
 {{range $a := .Teams}}
 <tr>
-	<th><a href="/teams/{{$a}}">{{$a}}</a></th>
+	<th><a href="/teams/{{$a}}">{{teamName $.Names $a}}</a></th>
 	{{range $b := $.Teams}}
 	{{if eq $a $b}}<td class="self"></td>{{else}}{{with index (index $.HeadToHead $a) $b}}<td class="{{h2hclass .}}" title="{{.Wins}} / {{.Games}}">{{h2h .}}</td>{{else}}<td></td>{{end}}{{end}}
 	{{end}}
@@ -86,7 +86,7 @@
 	<td><a href="/matches/{{.ID}}">{{.ID}}</a></td>
 	<td>{{time .StartedAt}}</td>
 	<td class="num">{{.Players}}</td>
-	<td>{{range .ByPlace}}<span class="result place{{.Place}} {{.Status}}" title="{{place .Place}}, {{.Flowers}} flowers, {{.Status}}">{{with place .Place}}<span class="place">{{.}}</span> {{end}}{{.Team}}</span> {{end}}</td>
+	<td>{{range .ByPlace}}<span class="result place{{.Place}} {{.Status}}" title="{{place .Place}}, {{.Flowers}} flowers, {{.Status}}">{{with place .Place}}<span class="place">{{.}}</span> {{end}}{{.Name}}</span> {{end}}</td>
 	<td class="num">{{if .Error}}<span class="error" title="{{.Error}}">failed</span>{{else}}{{.Turns}}{{end}}</td>
 </tr>
 {{else}}

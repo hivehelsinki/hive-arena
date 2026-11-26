@@ -41,17 +41,17 @@ func TestBuilder(t *testing.T) {
 	}
 
 	repo := newTestRepo(t)
-	team := Team{Name: "Testers", Repo: repo.dir}
+	team := Team{Name: "Testers", ID: "testers", Repo: repo.dir}
 
 	// A working agent
 	good := repo.commit(luaAgentFiles(t), 10)
 	repo.git("tag", "v1", good)
 
 	bots, states := builder.Pool(ctx, []Team{team})
-	if len(bots) != 1 || bots[0].Commit != good || bots[0].Image != imageName("Testers", good) || states[0].Error != "" {
+	if len(bots) != 1 || bots[0].Commit != good || bots[0].Image != imageName("testers", good) || states[0].Error != "" {
 		t.Fatalf("expected the v1 bot, got %+v %+v", bots, states)
 	}
-	build, _ := store.BuildFor("Testers", good)
+	build, _ := store.BuildFor("testers", good)
 	if build == nil || build.Status != BuildOK || build.Tag != "v1" {
 		t.Fatalf("unexpected build: %+v", build)
 	}
@@ -75,7 +75,7 @@ func TestBuilder(t *testing.T) {
 	interrupted, cancel := context.WithTimeout(ctx, 5*time.Second)
 	builder.Pool(interrupted, []Team{team})
 	cancel()
-	if build, _ := store.BuildFor("Testers", slow); build != nil {
+	if build, _ := store.BuildFor("testers", slow); build != nil {
 		t.Errorf("an interrupted build should not be recorded: %+v", build)
 	}
 
@@ -98,9 +98,9 @@ func TestBuilder(t *testing.T) {
 	}
 
 	// Failed builds are not retried
-	before, _ := store.Builds("Testers", 100)
+	before, _ := store.Builds("testers", 100)
 	builder.Pool(ctx, []Team{team})
-	after, _ := store.Builds("Testers", 100)
+	after, _ := store.Builds("testers", 100)
 	if len(after) != len(before) {
 		t.Errorf("a failed build should not be retried: %d builds, then %d", len(before), len(after))
 	}
@@ -109,7 +109,7 @@ func TestBuilder(t *testing.T) {
 	other := newTestRepo(t)
 	other.commit(map[string]string{"Dockerfile": "FROM busybox\nRUN exit 1\n"}, 10)
 	other.git("tag", "v1")
-	bots, _ = builder.Pool(ctx, []Team{{Name: "other", Repo: other.dir}})
+	bots, _ = builder.Pool(ctx, []Team{{Name: "other", ID: "other", Repo: other.dir}})
 	if len(bots) != 0 {
 		t.Errorf("expected no bot, got %+v", bots)
 	}
@@ -119,14 +119,14 @@ func TestBuilder(t *testing.T) {
 	large.commit(map[string]string{"Dockerfile": "FROM busybox\n"}, 10)
 	large.git("tag", "v1")
 	builder.MaxImageSize = 1 << 20
-	_, states = builder.Pool(ctx, []Team{{Name: "large", Repo: large.dir}})
+	_, states = builder.Pool(ctx, []Team{{Name: "large", ID: "large", Repo: large.dir}})
 	builder.MaxImageSize = 0
 	if build, _ := store.LastBuild("large"); build == nil || build.Status != BuildFailed || !strings.Contains(build.Error, "too large") {
 		t.Errorf("expected the build to fail because of the image size: %+v %+v", build, states)
 	}
 
 	// Unreachable repository
-	bots, states = builder.Pool(ctx, []Team{{Name: "Testers", Repo: "/nonexistent"}})
+	bots, states = builder.Pool(ctx, []Team{{Name: "Testers", ID: "testers", Repo: "/nonexistent"}})
 	if len(bots) != 1 || bots[0].Commit != good || states[0].Error == "" {
 		t.Errorf("expected the last good build as a fallback, got %+v %+v", bots, states)
 	}

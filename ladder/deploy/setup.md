@@ -44,7 +44,7 @@ Before real teams register, point `registry.url` back at the real registry, and 
 - Logs: `journalctl -u hive-ladder -f`
 - Change the quota or formats, or pause the ladder (`"paused": true`): edit the `ladder` section of `ladder.json`; it applies at the next match (within a minute when idle). An invalid file is not applied, and `/health` says why.
 - Build new versions now: `systemctl kill -s USR1 hive-ladder`
-- A team's build failed for a transient reason (e.g. network): `sudo -u ladder ladder/ladder rebuild -config ladder.json <team>` (safe while the service runs)
+- A team's build failed for a transient reason (e.g. network): `sudo -u ladder ladder/ladder rebuild -config ladder.json <team identifier>` (safe while the service runs)
 
 - The ladder at a given time, e.g. to seed a live event: `ladder/ladder leaderboard -config ladder.json -at "2026-12-04 16:00"` (with the version each team had then)
 

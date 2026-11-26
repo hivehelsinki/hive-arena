@@ -3,7 +3,9 @@
 
     python3 scripts/ladder_download.py <ladder URL> <team> [directory]
 
-For each match, in the directory (default: ladder-<team>):
+The team is its name, or its identifier (shown on its page, and in its URL).
+
+For each match, in the directory (default: ladder-<identifier>):
   <id>.result.json   the results (always available)
   <id>.json.gz       the replay, for the viewer: go run ./viewer --file <file>
                      (gunzip it first), while the ladder still keeps it
@@ -17,6 +19,7 @@ so run it regularly to keep them all. Only uses the Python standard library.
 import json
 import os
 import sys
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -43,11 +46,28 @@ def last_match(directory):
     return max(ids, default=0)
 
 
+def same_name(a, b):
+    # As the ladder compares names: case, spacing and Unicode normalization aside
+    def key(s):
+        return " ".join(unicodedata.normalize("NFKC", s).split()).lower()
+    return key(a) == key(b)
+
+
+def team_id(base, team):
+    """The identifier of a team given by its name or identifier (as is if unknown)"""
+    for entry in json.loads(get(f"{base}/api/teams")):
+        t = entry["team"]
+        if team == t.get("id") or same_name(team, t.get("name", "")):
+            return t.get("id") or team
+    return team
+
+
 def main():
     if len(sys.argv) < 3:
         print(__doc__)
         sys.exit(2)
-    base, team = sys.argv[1].rstrip("/"), sys.argv[2]
+    base = sys.argv[1].rstrip("/")
+    team = team_id(base, sys.argv[2])
     directory = sys.argv[3] if len(sys.argv) > 3 else "ladder-" + team
     os.makedirs(directory, exist_ok=True)
 

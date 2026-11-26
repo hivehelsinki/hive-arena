@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"compress/gzip"
 	"embed"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -47,7 +49,8 @@ func NewWeb(config *Config, store *Store) (*Web, error) {
 			}
 			return base
 		},
-		"version": func(versions Versions, team, commit string) string { return versions.Label(team, commit) },
+		"version":  func(versions Versions, team, commit string) string { return versions.Label(team, commit) },
+		"teamName": teamName,
 		"short": func(commit string) string {
 			if len(commit) > 8 {
 				return commit[:8]
@@ -212,6 +215,9 @@ func (web *Web) render(w http.ResponseWriter, page string, data map[string]any) 
 	if versions, err := web.Store.VersionTags(); err == nil {
 		data["Versions"] = versions
 	}
+	if names, err := web.Store.TeamNames(); err == nil {
+		data["Names"] = names
+	}
 	data["Revision"] = gitRevision()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := web.templates[page].ExecuteTemplate(w, "layout", data); err != nil {
@@ -283,7 +289,20 @@ func (web *Web) handleMatches(w http.ResponseWriter, r *http.Request) {
 		q.Set("before", fmt.Sprint(matches[len(matches)-1].ID))
 		next = "/matches?" + q.Encode()
 	}
-	web.render(w, "matches", map[string]any{"Matches": matches, "Filter": filter, "Next": next, "Formats": web.formats()})
+	names, err := web.Store.TeamNames()
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	type teamOption struct{ ID, Name string }
+	var teams []teamOption
+	for id, name := range names {
+		teams = append(teams, teamOption{id, name})
+	}
+	slices.SortFunc(teams, func(a, b teamOption) int {
+		return cmp.Or(strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)), strings.Compare(a.ID, b.ID))
+	})
+	web.render(w, "matches", map[string]any{"Matches": matches, "Filter": filter, "Next": next, "Formats": web.formats(), "Teams": teams})
 }
 
 func (web *Web) handleMatch(w http.ResponseWriter, r *http.Request) {
@@ -374,7 +393,7 @@ func (web *Web) handleBuildLog(w http.ResponseWriter, r *http.Request) {
 }
 
 func (web *Web) handleTeam(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+	id := r.PathValue("name")
 
 	states, err := web.Store.TeamStates()
 	if err != nil {
@@ -383,17 +402,17 @@ func (web *Web) handleTeam(w http.ResponseWriter, r *http.Request) {
 	}
 	var state *TeamState
 	for i := range states {
-		if states[i].Team.Name == name {
+		if states[i].Team.ID == id {
 			state = &states[i]
 		}
 	}
 
-	builds, err := web.Store.Builds(name, 20)
+	builds, err := web.Store.Builds(id, 20)
 	if err != nil {
 		serverError(w, err)
 		return
 	}
-	matches, err := web.Store.Matches(MatchFilter{Team: name, Limit: 30})
+	matches, err := web.Store.Matches(MatchFilter{Team: id, Limit: 30})
 	if err != nil {
 		serverError(w, err)
 		return
@@ -406,7 +425,7 @@ func (web *Web) handleTeam(w http.ResponseWriter, r *http.Request) {
 	}
 	commits := make(map[string]string)
 	if state != nil && state.Bot != nil {
-		commits[name] = state.Bot.Commit
+		commits[id] = state.Bot.Commit
 	}
 	counts, err := web.Store.MatchCounts(time.Now().Add(-24*time.Hour), commits)
 	if err != nil {
@@ -418,10 +437,16 @@ func (web *Web) handleTeam(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	// Empty for a team that has not played yet
+	row := view.Row(id)
+	perFormat := map[string]TeamRating{}
+	if row != nil {
+		perFormat = row.PerFormat
+	}
 	web.render(w, "team", map[string]any{
-		"Name": name, "State": state, "Builds": builds, "Matches": matches,
-		"Row": view.Row(name), "History": view.TeamHistory(name), "Formats": view.Formats, "H2H": view.HeadToHead[name],
-		"HeadToHeadPeriod": view.HeadToHeadPeriod, "Counts": counts[name], "Quota": settings.Quota,
+		"ID": id, "State": state, "Builds": builds, "Matches": matches,
+		"Row": row, "PerFormat": perFormat, "History": view.TeamHistory(id), "Formats": view.Formats, "H2H": view.HeadToHead[id],
+		"HeadToHeadPeriod": view.HeadToHeadPeriod, "Counts": counts[id], "Quota": settings.Quota,
 	})
 }
 

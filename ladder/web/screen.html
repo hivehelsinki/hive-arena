@@ -67,7 +67,7 @@ async function updateBoard() {
 		ranks = {};
 		playing.forEach((r, i) => { ranks[r.team] = i + 1; });
 		const rows = playing.map((r, i) =>
-			`<tr><td>${i + 1}</td><td>${escape(r.team)}</td><td class="num score">${r.global.score.toFixed(1)}</td>` +
+			`<tr><td>${i + 1}</td><td>${escape((data.names || {})[r.team] || r.team)}</td><td class="num score">${r.global.score.toFixed(1)}</td>` +
 			`<td class="num dim">${r.global.games} matches</td></tr>`);
 		document.getElementById("standings").innerHTML = rows.join("") || "<tr><td class='dim'>No results yet.</td></tr>";
 	} catch (e) {
@@ -112,7 +112,7 @@ async function nextReplay() {
 				`<span class="format">${bots.length} players</span>` +
 				bots.map(b =>
 					`<span class="bot${b.place === 1 ? " first" : ""}"><span class="place">${ordinal(b.place)}</span>` +
-					`<span class="team">${escape(b.team)}</span><span class="flowers">${b.flowers}</span>` +
+					`<span class="team">${escape(b.name || b.team)}</span><span class="flowers">${b.flowers}</span>` +
 					(ranks[b.team] ? `<span class="rank" title="Rank on the ladder">#${ranks[b.team]}</span>` : "") +
 					`</span>`).join("");
 

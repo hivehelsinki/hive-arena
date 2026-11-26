@@ -70,7 +70,7 @@ func leaveOutFailing(store *Store, maxFailures int, states []TeamState) ([]Bot, 
 			}
 			if failures >= maxFailures {
 				state.LeftOut = fmt.Sprintf("left out of the runs: failed its last %d matches (crashed or did not join) with this version. Push a new tag to play again.", failures)
-				log.Printf("Team %s: %s", state.Team.Name, state.LeftOut)
+				log.Printf("Team %s: %s", state.Team.ID, state.LeftOut)
 				continue
 			}
 		}

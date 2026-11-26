@@ -188,6 +188,7 @@ func TestMigrations(t *testing.T) {
 	}
 	store.RecordMatch(MatchInfo{}, fakeResult("m", []Bot{{Name: "a"}, {Name: "b"}}, []uint{1, 2}, []BotStatus{Finished, Finished}))
 	store.Close()
+	before := len(migrations)
 
 	// A later version adds a column
 	defer func(original []string) { migrations = original }(migrations)
@@ -205,7 +206,7 @@ func TestMigrations(t *testing.T) {
 	if version != len(migrations) || note != "migrated" {
 		t.Errorf("expected version %d with the new column, got %d, %q", len(migrations), version, note)
 	}
-	if backups, _ := filepath.Glob(filepath.Join(dir, "ladder-v1-*.db")); len(backups) != 1 {
+	if backups, _ := filepath.Glob(filepath.Join(dir, fmt.Sprintf("ladder-v%d-*.db", before))); len(backups) != 1 {
 		t.Errorf("expected a copy of the database before the migration, got %v", backups)
 	}
 

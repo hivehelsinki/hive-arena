@@ -1,5 +1,6 @@
 {{define "content"}}
-<h1>{{.Name}}</h1>
+<h1>{{teamName $.Names .ID}}</h1>
+<p class="dim">Identifier: <code>{{.ID}}</code></p>
 
 {{with .State}}
 <p>
@@ -7,8 +8,8 @@
 	{{with .Team.Ref}}Pinned to <code>{{.}}</code>.{{end}}
 </p>
 {{if .Bot}}
-	{{if .LeftOut}}<p class="error">Version <span class="mono">{{version $.Versions $.Name .Bot.Commit}}</span>: {{.LeftOut}}</p>
-	{{else}}<p>Playing: <span class="mono">{{version $.Versions $.Name .Bot.Commit}}</span>.</p>{{end}}
+	{{if .LeftOut}}<p class="error">Version <span class="mono">{{version $.Versions $.ID .Bot.Commit}}</span>: {{.LeftOut}}</p>
+	{{else}}<p>Playing: <span class="mono">{{version $.Versions $.ID .Bot.Commit}}</span>.</p>{{end}}
 {{else}}<p class="error">No working version yet: this team does not play.</p>{{end}}
 {{with .Error}}<p class="error">The latest version is not playing: {{.}}</p>{{end}}
 {{end}}
@@ -16,7 +17,7 @@
 {{with .Row}}
 <h2>Rating</h2>
 <p><span class="big">{{rating .Global}}</span> <span class="dim">(μ ± σ: {{musigma .Global}})</span> over {{.Global.Games}} matches.
-{{if not .Global.Since.IsZero}}Version <span class="mono">{{version $.Versions $.Name .Global.Commit}}</span> playing since {{time .Global.Since}}.{{end}}</p>
+{{if not .Global.Since.IsZero}}Version <span class="mono">{{version $.Versions $.ID .Global.Commit}}</span> playing since {{time .Global.Since}}.{{end}}</p>
 {{end}}
 {{with .History}}
 <div id="rating" data-chart="rating-data" data-highlight="1" data-versions="true" data-height="220" data-label="Global rating over time, with the start of each version"></div>
@@ -25,7 +26,7 @@
 <table>
 <thead><tr><th>Format</th><th class="num">Rating</th><th class="num"><span class="nocase">μ ± σ</span></th><th class="num">Matches</th><th class="num" title="Matches of the current version in the last 24 hours, against the quota">Last 24 hours</th></tr></thead>
 <tbody>
-{{range .Formats}}{{$r := index $.Row.PerFormat .Key}}
+{{range .Formats}}{{$r := index $.PerFormat .Key}}
 <tr><td>{{.Players}} players</td><td class="num strong">{{rating $r}}</td><td class="num dim">{{musigma $r}}</td><td class="num">{{$r.Games}}</td><td class="num">{{index $.Counts .Key}} / {{$.Quota}}</td></tr>
 {{end}}
 </tbody>
@@ -36,7 +37,7 @@
 <p class="dim">Over the last {{days $.HeadToHeadPeriod}}.</p>
 <table>
 <thead><tr><th>Opponent</th><th class="num">Finished ahead</th><th class="num">Matches together</th></tr></thead>
-<tbody>{{range $team, $h := .}}<tr><td><a href="/teams/{{$team}}">{{$team}}</a></td><td class="num {{h2hclass $h}}">{{h2h $h}}</td><td class="num">{{$h.Games}}</td></tr>{{end}}</tbody>
+<tbody>{{range $team, $h := .}}<tr><td><a href="/teams/{{$team}}">{{teamName $.Names $team}}</a></td><td class="num {{h2hclass $h}}">{{h2h $h}}</td><td class="num">{{$h.Games}}</td></tr>{{end}}</tbody>
 </table>
 {{end}}
 
@@ -54,5 +55,5 @@
 
 <h2>Recent matches</h2>
 {{template "matchrows" .Matches}}
-<p><a href="/matches?team={{.Name}}">All matches</a></p>
+<p><a href="/matches?team={{.ID}}">All matches</a></p>
 {{end}}

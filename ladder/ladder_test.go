@@ -66,7 +66,7 @@ func TestLeaveOutFailing(t *testing.T) {
 		store.RecordMatch(MatchInfo{}, fakeResult("m", bots, []uint{2, 1}, []BotStatus{Finished, Crashed}))
 	}
 
-	states := []TeamState{{Team: Team{Name: "bot0"}, Bot: &bots[0]}, {Team: Team{Name: "bot1"}, Bot: &bots[1]}}
+	states := []TeamState{{Team: Team{Name: "bot0", ID: "bot0"}, Bot: &bots[0]}, {Team: Team{Name: "bot1", ID: "bot1"}, Bot: &bots[1]}}
 	pool, err := leaveOutFailing(store, 2, states)
 	if err != nil {
 		t.Fatal(err)

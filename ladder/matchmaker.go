@@ -116,7 +116,7 @@ func (l *Ladder) Serve(ctx context.Context, wake <-chan struct{}) error {
 			continue
 		}
 
-		SetActivity(fmt.Sprintf("playing %s: %s", Format{match.Map, len(match.Bots)}, botNames(match.Bots)))
+		SetActivity(fmt.Sprintf("playing %s: %s", Format{match.Map, len(match.Bots)}, l.teamNames(match.Bots)))
 		log.Printf("Match: %s, %s", Format{match.Map, len(match.Bots)}, botNames(match.Bots))
 		result, err := l.playMatch(ctx, *match)
 		if ctx.Err() != nil {

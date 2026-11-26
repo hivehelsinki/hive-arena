@@ -201,10 +201,10 @@ func (web *Web) status() Status {
 			status.Teams.Playing++
 		}
 		if state.Error != "" {
-			status.Teams.Errors = append(status.Teams.Errors, state.Team.Name)
+			status.Teams.Errors = append(status.Teams.Errors, state.Team.ID)
 		}
 		if state.LeftOut != "" {
-			status.Teams.LeftOut = append(status.Teams.LeftOut, state.Team.Name)
+			status.Teams.LeftOut = append(status.Teams.LeftOut, state.Team.ID)
 		}
 	}
 	m.Demand = demand(settings, status.Teams.Playing)

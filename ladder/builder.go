@@ -79,7 +79,7 @@ func (b *Builder) Pool(ctx context.Context, teams []Team) ([]Bot, []TeamState) {
 	for _, team := range teams {
 		state := b.resolve(ctx, team)
 		if state.Error != "" {
-			log.Printf("Team %s: %s", team.Name, state.Error)
+			log.Printf("Team %s: %s", team.ID, state.Error)
 		}
 		if state.Bot != nil {
 			bots = append(bots, *state.Bot)
@@ -110,20 +110,20 @@ func (b *Builder) resolve(ctx context.Context, team Team) TeamState {
 	// The previous good build whose image is still there
 	fallback := func(err error) TeamState {
 		state.Error = err.Error()
-		builds, ferr := b.Store.GoodBuilds(team.Name)
+		builds, ferr := b.Store.GoodBuilds(team.ID)
 		if ferr != nil {
 			return state
 		}
 		for _, build := range builds {
 			if imageExists(build.Image) {
-				state.Bot = &Bot{Name: team.Name, Image: build.Image, Commit: build.Commit}
+				state.Bot = &Bot{Name: team.ID, Image: build.Image, Commit: build.Commit}
 				break
 			}
 		}
 		return state
 	}
 
-	dir := filepath.Join(b.DataDir, "repos", strings.ToLower(team.Name)+".git")
+	dir := filepath.Join(b.DataDir, "repos", team.ID+".git")
 	fetchCtx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	err := Mirror(fetchCtx, team.Repo, dir)
 	cancel()
@@ -146,14 +146,14 @@ func (b *Builder) resolve(ctx context.Context, team Team) TeamState {
 		tag = *latest
 	}
 
-	build, err := b.Store.BuildFor(team.Name, tag.Commit)
+	build, err := b.Store.BuildFor(team.ID, tag.Commit)
 	if err != nil {
 		return fallback(err)
 	}
 	// A good build whose image disappeared (pruned, or restored data on
 	// another machine) is built again
 	if build != nil && build.Status == BuildOK && !imageExists(build.Image) {
-		log.Printf("Team %s: the image %s is missing, building it again", team.Name, build.Image)
+		log.Printf("Team %s: the image %s is missing, building it again", team.ID, build.Image)
 		build = nil
 	}
 	if build == nil {
@@ -166,7 +166,7 @@ func (b *Builder) resolve(ctx context.Context, team Team) TeamState {
 		return fallback(fmt.Errorf("%s (%s): %s", tag.Name, tag.Commit[:12], build.Status))
 	}
 
-	state.Bot = &Bot{Name: team.Name, Image: build.Image, Commit: build.Commit}
+	state.Bot = &Bot{Name: team.ID, Image: build.Image, Commit: build.Commit}
 	return state
 }
 
@@ -174,13 +174,13 @@ func (b *Builder) resolve(ctx context.Context, team Team) TeamState {
 // that are not the team's are not recorded: they return an error.
 func (b *Builder) build(ctx context.Context, team Team, dir string, tag Tag) (*Build, error) {
 	build := &Build{
-		Team:      team.Name,
+		Team:      team.ID,
 		Tag:       tag.Name,
 		Commit:    tag.Commit,
-		Image:     imageName(team.Name, tag.Commit),
+		Image:     imageName(team.ID, tag.Commit),
 		StartedAt: time.Now(),
 	}
-	log.Printf("Team %s: building %s (%s)", team.Name, tag.Name, tag.Commit[:12])
+	log.Printf("Team %s: building %s (%s)", team.ID, tag.Name, tag.Commit[:12])
 
 	if b.IsolateCaches {
 		b.clearCacheMounts()
@@ -214,19 +214,19 @@ func (b *Builder) build(ctx context.Context, team Team, dir string, tag Tag) (*B
 		if ctx.Err() != nil {
 			err = fmt.Errorf("interrupted")
 		}
-		log.Printf("Team %s: build %s not completed: %s", team.Name, tag.Name, err)
+		log.Printf("Team %s: build %s not completed: %s", team.ID, tag.Name, err)
 		return nil, err
 	}
 
 	id, err := b.Store.RecordBuild(build, output.String())
 	if err != nil {
-		log.Printf("Team %s: could not record the build: %s", team.Name, err)
+		log.Printf("Team %s: could not record the build: %s", team.ID, err)
 	}
 	build.ID = id
-	log.Printf("Team %s: build %s: %s", team.Name, tag.Name, build.Status)
+	log.Printf("Team %s: build %s: %s", team.ID, tag.Name, build.Status)
 
 	if build.Status == BuildOK {
-		b.prune(team.Name)
+		b.prune(team.ID)
 	}
 	return build, nil
 }
@@ -308,7 +308,7 @@ func (b *Builder) dockerBuild(ctx context.Context, team Team, dir string, build 
 	archive.Stderr = output
 
 	builder := exec.CommandContext(ctx, "docker", "build", "--progress=plain",
-		"--label", DockerLabel+".team="+team.Name,
+		"--label", DockerLabel+".team="+team.ID,
 		"-t", build.Image, "-f", dockerfile, "-")
 	builder.Stdin = stdout
 	builder.Stdout = output

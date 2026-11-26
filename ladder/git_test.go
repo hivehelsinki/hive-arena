@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -122,7 +123,7 @@ func TestLatestTagNone(t *testing.T) {
 }
 
 func TestParseTeams(t *testing.T) {
-	valid := `[{"name": "Super-Team_1", "repo": "https://example.com/a.git", "members": ["x"]}, {"name": "b", "repo": "https://example.com/b", "ref": "v1", "dockerfile": "bot/Dockerfile", "context": "bot"}]`
+	valid := `[{"name": "Super-Team_1", "repo": "https://example.com/a.git", "members": ["x", "y", "z", "u", "v", "w"]}, {"name": "b", "repo": "https://example.com/b", "ref": "v1", "dockerfile": "bot/Dockerfile", "context": "bot"}]`
 	teams, problems, err := ParseTeams([]byte(valid), true)
 	if err != nil || len(problems) != 0 || len(teams) != 2 || teams[1].Ref != "v1" {
 		t.Errorf("unexpected result: %+v, %v, %v", teams, problems, err)
@@ -130,10 +131,16 @@ func TestParseTeams(t *testing.T) {
 
 	// Invalid entries are left out, without affecting the others
 	invalid := []string{
-		`{"name": "a b", "repo": "https://r"}`,
 		`{"name": "", "repo": "https://r"}`,
+		`{"name": "  ", "repo": "https://r"}`,
+		`{"name": "line\nbreak", "repo": "https://r"}`,
+		`{"name": "evil\u202etext", "repo": "https://r"}`,
+		`{"name": "zero\u200bwidth", "repo": "https://r"}`,
+		`{"name": "mark\u200e", "repo": "https://r"}`,
+		`{"name": "` + strings.Repeat("x", 65) + `", "repo": "https://r"}`,
 		`{"name": "c", "repo": ""}`,
-		`{"name": "Super-team_1", "repo": "https://r"}`,
+		`{"name": " super-TEAM_1 ", "repo": "https://r"}`,
+		`{"name": "SUPER-Team_1", "id": "other", "repo": "https://r"}`,
 		`{"name": "c", "repo": "https://r", "context": "../x"}`,
 		`{"name": "c", "repo": "/home/someone/repo"}`,
 		`{"name": "c", "repo": "file:///etc"}`,
@@ -179,5 +186,38 @@ func TestLoadTeamsFromRepository(t *testing.T) {
 	teams, problems, err = LoadTeams(context.Background(), RegistryConfig{URL: "/nonexistent"}, dataDir)
 	if err != nil || len(teams) != 1 || len(problems) == 0 {
 		t.Errorf("expected the last fetched registry, with a problem: %+v, %v, %v", teams, problems, err)
+	}
+}
+
+func TestTeamID(t *testing.T) {
+	// Free names are accepted, and the identifier is plain lowercase ASCII
+	if err := validTeamName("👩\u200d🚀 🏳️\u200d🌈"); err != nil {
+		t.Errorf("emoji sequences should be valid names: %v", err)
+	}
+	for _, name := range []string{"SuperTeam", "Les Abeilles 🐝", "Équipe Ruche", "蜂", "!!!", "a/../b", "-x", strings.Repeat("long", 16)} {
+		id := TeamID(name)
+		if !regexp.MustCompile(`^[a-z0-9]+$`).MatchString(id) {
+			t.Errorf("the identifier of %q should be lowercase letters and digits: %q", name, id)
+		}
+	}
+	if id := TeamID("Équipe Ruche"); !strings.HasPrefix(id, "equiperuche") {
+		t.Errorf("accents should be removed: %q", id)
+	}
+
+	// Stable, and the same for names that only differ by case, spacing or normalization
+	if TeamID("Super Team") != TeamID("  super   TEAM ") || TeamID("é") != TeamID("e\u0301") {
+		t.Error("names that only differ by case, spacing or normalization should have the same identifier")
+	}
+	// Different names that look alike in ASCII are different teams
+	for _, pair := range [][2]string{{"蜂", "蝶"}, {"a-b", "ab"}, {"a b", "ab"}, {"!!!", "???"}} {
+		if TeamID(pair[0]) == TeamID(pair[1]) {
+			t.Errorf("%q and %q should have different identifiers", pair[0], pair[1])
+		}
+	}
+
+	// The identifier of an entry comes from its name, never from the file; the name is displayed as written
+	teams, problems, err := ParseTeams([]byte(`[{"name": " Les Abeilles 🐝 ", "id": "root", "repo": "https://r"}]`), true)
+	if err != nil || len(problems) != 0 || len(teams) != 1 || teams[0].Name != "Les Abeilles 🐝" || teams[0].ID != TeamID("Les Abeilles 🐝") {
+		t.Errorf("unexpected result: %+v, %v, %v", teams, problems, err)
 	}
 }

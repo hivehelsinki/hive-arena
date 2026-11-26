@@ -15,7 +15,7 @@
 <thead><tr><th>#</th><th>Team</th><th class="num">Rating&nbsp;<span class="formula">({{ranking $.Settings.Rating}})</span></th><th class="num"><span class="nocase">μ ± σ</span></th><th class="num">Matches</th></tr></thead>
 <tbody>
 {{range $i, $t := .Teams}}
-<tr><td>{{add $i 1}}</td><td><a href="/teams/{{$t.Team}}">{{$t.Team}}</a></td><td class="num strong">{{rating $t}}</td><td class="num dim">{{musigma $t}}</td><td class="num">{{$t.Games}}</td></tr>
+<tr><td>{{add $i 1}}</td><td><a href="/teams/{{$t.Team}}">{{teamName $.Names $t.Team}}</a></td><td class="num strong">{{rating $t}}</td><td class="num dim">{{musigma $t}}</td><td class="num">{{$t.Games}}</td></tr>
 {{else}}
 <tr><td colspan="5" class="dim">No matches yet.</td></tr>
 {{end}}

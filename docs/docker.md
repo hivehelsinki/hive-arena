@@ -15,7 +15,7 @@ The ladder builds and runs every team's agent with Docker (its website and data:
 - **Configuration comes from environment variables:**
   - `ARENA_HOST`: host and port of the game server, e.g. `server:8080`
   - `ARENA_GAME_ID`: the ID of the game to join, private to your agent: use it for every call (`/join`, `/game`, `/orders`, `/ws`)
-  - `ARENA_NAME`: the name to join with (your team's name: with your private game ID, you always play under it)
+  - `ARENA_NAME`: the name to join with (your team's identifier, the one in its page's URL: with your private game ID, you always play under it)
 - **Join, play until the game is over, exit.** Exit with status 0 once the game is over. A container that exits before the end of the game, or never joins, counts as a crash: it ranks last in that match.
 - **No network access** other than the game server. Everything your agent needs must be in the image: fetch dependencies during the build, not when the agent starts.
 - **Read-only filesystem**, except `/tmp` (which counts in the memory limit). The agent runs as an unprivileged user (uid 65534, whatever `USER` the image sets): files it needs must be readable by everyone.

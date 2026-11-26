@@ -39,7 +39,7 @@ to run while the ladder does.
       time zone), with the version each team had then
   ladder build [-config ladder.json]
       Fetch the registered teams, build and smoke-test their new versions
-  ladder rebuild [-config ladder.json] <team>
+  ladder rebuild [-config ladder.json] <team identifier>
       Forget the failed build of a team's current version, so it is built again
   ladder match [-server-image IMAGE] [-cpu-per-bot N] [-report FILE] [-logs DIR] <map> <name>=<image>...
       Play one match in containers with the given images, and print its
@@ -277,9 +277,13 @@ func cmdLeaderboard(args []string) {
 		when = "at " + before.Format("2006-01-02 15:04 MST")
 	}
 	fmt.Printf("Global ladder %s, over %d matches\n\n", when, len(matches))
-	fmt.Printf("%-4s %-24s %8s %8s %8s %8s  %s\n", "#", "team", "rating", "mu", "sigma", "matches", "commit")
+	names, err := ladder.Store.TeamNames()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("%-4s %8s %8s %8s %8s  %-12s  %-32s %s\n", "#", "rating", "mu", "sigma", "matches", "commit", "identifier", "team")
 	for i, t := range ratings.Global.Standings() {
-		fmt.Printf("%-4d %-24s %8.2f %8.2f %8.2f %8d  %s\n", i+1, t.Team, t.Score, t.Rating.Mu, t.Rating.Sigma, t.Games, t.Commit)
+		fmt.Printf("%-4d %8.2f %8.2f %8.2f %8d  %-12.12s  %-32s %s\n", i+1, t.Score, t.Rating.Mu, t.Rating.Sigma, t.Games, t.Commit, t.Team, teamName(names, t.Team))
 	}
 }
 
