@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/gorilla/websocket"
 
@@ -181,4 +183,76 @@ func StartLiveWatch(host string, gameId string, token string) (*arena.PersistedG
 	go updateGame()
 
 	return &arena.PersistedGame{Id: gameId}, updates
+}
+
+// The states of the live manual match of the ladder, from its /live/states route
+type ladderLiveStates struct {
+	GameID      string            `json:"gameId"`
+	Map         string            `json:"map"`
+	CreatedDate time.Time         `json:"createdDate"`
+	Players     []string          `json:"players"`
+	From        int               `json:"from"`
+	States      []json.RawMessage `json:"states"`
+	Over        bool              `json:"over"`
+}
+
+// StartLadderLive follows a live game of the ladder in the background, by
+// asking for its new states regularly (url: its /live/states address,
+// with the game), and sends them to the returned channel. It works in the
+// browser, where the server's websocket is not available.
+func StartLadderLive(url string) (*arena.PersistedGame, <-chan LiveUpdate) {
+	updates := make(chan LiveUpdate)
+	separator := "?"
+	if strings.Contains(url, "?") {
+		separator = "&"
+	}
+
+	go func() {
+		next := 0
+		hasInfo := false
+		for {
+			res, err := http.Get(fmt.Sprintf("%s%sfrom=%d", url, separator, next))
+			if err != nil {
+				fmt.Println(err)
+				time.Sleep(2 * time.Second)
+				continue
+			}
+			var live ladderLiveStates
+			err = json.NewDecoder(res.Body).Decode(&live)
+			status := res.StatusCode
+			res.Body.Close()
+			if status == http.StatusNotFound {
+				fmt.Println("The live game is over, or was replaced by another one")
+				return
+			}
+			if err != nil || status != http.StatusOK {
+				fmt.Println("Live states:", status, err)
+				time.Sleep(2 * time.Second)
+				continue
+			}
+
+			for _, data := range live.States {
+				var state arena.GameState
+				if err := json.Unmarshal(data, &state); err != nil {
+					fmt.Println("Invalid game state:", err)
+					continue
+				}
+				update := LiveUpdate{State: &state}
+				if !hasInfo && len(live.Players) > 0 {
+					update.Info = &arena.SessionStatus{Id: live.GameID, Map: live.Map, CreatedDate: live.CreatedDate,
+						NumPlayers: len(live.Players), Players: live.Players}
+					hasInfo = true
+				}
+				updates <- update
+			}
+			next = live.From + len(live.States)
+			if live.Over && len(live.States) == 0 {
+				return
+			}
+			// Turns last at least half a second
+			time.Sleep(250 * time.Millisecond)
+		}
+	}()
+
+	return &arena.PersistedGame{}, updates
 }

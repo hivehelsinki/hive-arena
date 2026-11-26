@@ -6,6 +6,7 @@ import "flag"
 
 type Args struct {
 	URL, File           string
+	Live                string // the /live/states address of the live manual match of the ladder
 	Host, GameID, Token string
 	Autoplay            bool
 	Speed               float64 // turns per second when playing
@@ -19,6 +20,7 @@ func readArgs() Args {
 	flag.StringVar(&args.Host, "host", "", "host for the live game to watch")
 	flag.StringVar(&args.GameID, "id", "", "ID of the live game to watch")
 	flag.StringVar(&args.Token, "token", "", "access token for the live game to watch")
+	flag.StringVar(&args.Live, "live", "", "address of a live game of the ladder to watch (http://<ladder>/live/states?game=<id>)")
 	flag.BoolVar(&args.Autoplay, "autoplay", false, "start playing the game right away")
 	flag.Float64Var(&args.Speed, "speed", DefaultSpeed, "turns per second when playing")
 	flag.Parse()

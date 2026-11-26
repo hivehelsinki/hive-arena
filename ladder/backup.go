@@ -2,7 +2,6 @@ package main
 
 import (
 	"archive/tar"
-	"crypto/subtle"
 	"fmt"
 	"io"
 	"io/fs"
@@ -82,23 +81,10 @@ func (s *Store) SnapshotDatabase() (string, error) {
 	return path, nil
 }
 
-// The backup route is enabled when a token is configured
-func (web *Web) backupAllowed(w http.ResponseWriter, r *http.Request) bool {
-	token := web.Config.Web.BackupToken
-	given := r.URL.Query().Get("token")
-	if token == "" || subtle.ConstantTimeCompare([]byte(given), []byte(token)) != 1 {
-		http.NotFound(w, r)
-		return false
-	}
-	return true
-}
-
-// GET /backup?token=: everything in one tar archive, named after the time
-// of the backup: a consistent snapshot of the database, and all the files
+// GET /backup (with the admin password, see Web.admin): everything in one
+// tar archive, named after the time of the backup: a consistent snapshot of
+// the database, and all the files
 func (web *Web) handleBackup(w http.ResponseWriter, r *http.Request) {
-	if !web.backupAllowed(w, r) {
-		return
-	}
 	now := time.Now()
 	// The snapshot first: every match it has then has its files in the list
 	snapshot, err := web.Store.SnapshotDatabase()

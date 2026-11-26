@@ -10,11 +10,12 @@ cd /opt/hive-arena
 sudo ladder/deploy/setup.sh
 ```
 
-The first time, the script creates `ladder.json` (from [ladder.example.json](../ladder.example.json), with a random backup token) and stops: edit it, then run the script again. Set at least:
+The first time, the script creates `ladder.json` (from [ladder.example.json](../ladder.example.json), with a random admin password) and stops: edit it, then run the script again. Set at least:
 
 - `registry.url`: the public repository where teams register with pull requests (holding `teams.json`, initially `[]`)
 - `ladder`: formats and quota (matches per team per format per 24 hours). They are shown publicly on the website, and can be changed at any time: they apply from the next match, without a restart.
 - `web.listen`: e.g. `:80`, or a high port behind a reverse proxy
+- `web.adminPassword`: the operator's password (user `admin`), for manual matches such as the finals (`/live`) and backups (`/backup`); created at random
 
 To update the ladder later, run the same script again. Every time, it:
 
@@ -46,13 +47,14 @@ Before real teams register, point `registry.url` back at the real registry, and 
 - Build new versions now: `systemctl kill -s USR1 hive-ladder`
 - A team's build failed for a transient reason (e.g. network): `sudo -u ladder ladder/ladder rebuild -config ladder.json <team identifier>` (safe while the service runs)
 
+- Play the finals, or any match, and watch it live: pause the ladder, then `/live` (see the [readme](../readme.md#manual-matches))
 - The ladder at a given time, e.g. to seed a live event: `ladder/ladder leaderboard -config ladder.json -at "2026-12-04 16:00"` (with the version each team had then)
 
 The other commands (`ladder/ladder help`) are for debugging and testing. `build` builds images: it refuses to start while the service runs (stop it first: `systemctl stop hive-ladder`). Run commands as the `ladder` user (`sudo -u ladder ...`), so that the files they write in the data directory belong to it.
 
 ## Network access
 
-The website has no write routes and no accounts. Restrict access to the campus network (firewall or reverse proxy), as for the arena server.
+The website has no accounts for players. Restrict access to the campus network (firewall or reverse proxy), as for the arena server. The operator's routes, `/live` (manual matches, see the [readme](../readme.md#manual-matches), its only write routes) and `/backup`, are behind a password: user `admin`, password `web.adminPassword` (created at random by the setup script; without one, they are disabled). The password is sent with every request: serve the website over HTTPS (reverse proxy), or it can be read on the network. Restricting them to the organizers' addresses in the proxy as well does no harm.
 
 Match servers and bots run on private Docker networks; bots have no network access other than their match server. The service adds a firewall rule at start (`iptables -I INPUT -i hl-+ -j DROP`): match networks have interfaces named `hl-*`, and without it bots could reach services listening on the host (the website, sshd) through their network's gateway. Docker images and repository mirrors grow over time: old team images are pruned automatically (`build.keepImages`), and the build cache is kept under `build.cacheLimit`. A missing team image is simply built again, so `docker system prune -a` does no harm (pause the ladder first, so that no match is running).
 
@@ -66,10 +68,10 @@ Match servers and bots run on private Docker networks; bots have no network acce
 
 Results are never deleted by the ladder (only the reports and logs of old matches: each team keeps those of its last `ladder.keepMatchFiles` matches), and each match is written durably before it is recorded: a crash, a restart of the service or of Docker, or a reboot loses at most the match being played. What remains is losing the VM or its disk: back up the data elsewhere.
 
-Set `web.backupToken` to a long random string (e.g. `openssl rand -hex 24`), then have the backup machine fetch, for instance daily:
+The backup route uses the operator's password (`web.adminPassword`, a long random string, e.g. `openssl rand -hex 24`): have the backup machine fetch, for instance daily:
 
 ```sh
-curl -fsS -OJ "https://<ladder>/backup?token=$TOKEN"
+curl -fsS -OJ -u "admin:$TOKEN" "https://<ladder>/backup"
 ```
 
 This downloads `ladder-backup-<UTC time>.tar`: a consistent snapshot of the database, taken while the ladder keeps running, and the build logs. Each archive is complete on its own, and small. `curl -f` fails on an error status; if the server fails midway, the archive is truncated, which `tar tf` detects.

@@ -148,8 +148,9 @@ type Config struct {
 		Listen string `json:"listen"` // address of the public website, e.g. ":8080"
 		// Directory of the browser build of the viewer (see viewer/build-web.sh), served at /viewer/
 		ViewerDir string `json:"viewerDir"`
-		// Token for the backup route (/backup?token=), disabled if empty
-		BackupToken string `json:"backupToken"`
+		// Password of the operator's routes (/live, /backup; user "admin"),
+		// disabled if empty
+		AdminPassword string `json:"adminPassword"`
 	} `json:"web"`
 }
 

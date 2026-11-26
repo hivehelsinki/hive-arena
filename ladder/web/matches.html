@@ -9,6 +9,11 @@
 		<option value="">Any number of players</option>
 		{{range .Formats}}<option value="{{.Players}}"{{if eq .Players $.Filter.Players}} selected{{end}}>{{.Players}} players</option>{{end}}
 	</select>
+	<select name="kind">
+		<option value="">Ladder and manual matches</option>
+		<option value="ladder"{{if eq .Filter.Kind "ladder"}} selected{{end}}>Ladder matches</option>
+		<option value="manual"{{if eq .Filter.Kind "manual"}} selected{{end}}>Manual matches</option>
+	</select>
 	<button>Filter</button>
 </form>
 {{template "matchrows" .Matches}}

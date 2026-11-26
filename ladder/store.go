@@ -86,7 +86,16 @@ func OpenStore(dir string) (*Store, error) {
 var migrations = []string{
 	schema + buildsSchema,
 	teamsSchema,
+	`ALTER TABLE matches ADD COLUMN kind TEXT NOT NULL DEFAULT 'ladder'`,
 }
+
+// Kinds of matches. Manual matches are chosen by the operator (e.g. for the
+// finals): they are recorded and shown like the others, but do not count for
+// the ladder (ratings, head-to-head, quotas, failures), and keep their files.
+const (
+	KindLadder = "ladder"
+	KindManual = "manual"
+)
 
 // The name each team registered with, by identifier (what the other tables
 // call "team"): kept for the teams that left the registry too
@@ -168,6 +177,7 @@ type MatchInfo struct {
 	// What played the match: the arena server image, and the ladder's revision
 	ServerImage    string
 	LadderRevision string
+	Kind           string // KindLadder (default) or KindManual
 }
 
 // RecordMatch stores a played match: its results, its report and the bot
@@ -199,9 +209,13 @@ func (s *Store) RecordMatch(info MatchInfo, result *MatchResult) (int64, error) 
 	}
 	defer tx.Rollback()
 
-	res, err := tx.Exec(`INSERT INTO matches (game_id, map, players, started_at, ended_at, turns, void, error, server_image, ladder_revision)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		result.GameID, result.Map, len(result.Bots), result.Started, result.Ended, turns, void, result.Error, info.ServerImage, info.LadderRevision)
+	kind := info.Kind
+	if kind == "" {
+		kind = KindLadder
+	}
+	res, err := tx.Exec(`INSERT INTO matches (game_id, map, players, started_at, ended_at, turns, void, error, server_image, ladder_revision, kind)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		result.GameID, result.Map, len(result.Bots), result.Started, result.Ended, turns, void, result.Error, info.ServerImage, info.LadderRevision, kind)
 	if err != nil {
 		return 0, err
 	}
@@ -363,6 +377,7 @@ type MatchSummary struct {
 	EndedAt   time.Time  `json:"endedAt"`
 	Turns     int        `json:"turns"`
 	Void      bool       `json:"void"`
+	Kind      string     `json:"kind"`            // "ladder", or "manual": chosen by the operator, not rated
 	Error     string     `json:"error,omitempty"` // why the match failed or was voided
 	Bots      []MatchBot `json:"bots"`            // by seat
 	// The report and logs were deleted (see PruneFiles)
@@ -373,8 +388,9 @@ type MatchSummary struct {
 
 type MatchFilter struct {
 	Team    string
-	Players int   // 0: any number
-	Before  int64 // only matches with a smaller ID, for paging back
+	Kind    string // only matches of this kind (empty: all)
+	Players int    // 0: any number
+	Before  int64  // only matches with a smaller ID, for paging back
 	// Only matches with a larger ID than *After, oldest first: to fetch the
 	// matches played since a known one (0: from the first one)
 	After *int64
@@ -388,6 +404,10 @@ func (s *Store) Matches(filter MatchFilter) ([]MatchSummary, error) {
 	if filter.Team != "" {
 		where = append(where, "EXISTS (SELECT 1 FROM match_bots t WHERE t.match_id = m.id AND t.team = ?)")
 		args = append(args, filter.Team)
+	}
+	if filter.Kind != "" {
+		where = append(where, "m.kind = ?")
+		args = append(args, filter.Kind)
 	}
 	if filter.Players != 0 {
 		where = append(where, "m.players = ?")
@@ -403,7 +423,7 @@ func (s *Store) Matches(filter MatchFilter) ([]MatchSummary, error) {
 		args = append(args, *filter.After)
 		order = "ASC"
 	}
-	query := `SELECT m.id, m.game_id, m.map, m.players, m.started_at, m.ended_at, m.turns, m.void, m.error,
+	query := `SELECT m.id, m.game_id, m.map, m.players, m.started_at, m.ended_at, m.turns, m.void, m.kind, m.error,
 		m.files_deleted, m.server_image, m.ladder_revision FROM matches m`
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
@@ -424,7 +444,7 @@ func (s *Store) Matches(filter MatchFilter) ([]MatchSummary, error) {
 	var matches []MatchSummary
 	for rows.Next() {
 		var m MatchSummary
-		if err := rows.Scan(&m.ID, &m.GameID, &m.Map, &m.Players, &m.StartedAt, &m.EndedAt, &m.Turns, &m.Void, &m.Error,
+		if err := rows.Scan(&m.ID, &m.GameID, &m.Map, &m.Players, &m.StartedAt, &m.EndedAt, &m.Turns, &m.Void, &m.Kind, &m.Error,
 			&m.FilesDeleted, &m.ServerImage, &m.LadderRevision); err != nil {
 			rows.Close()
 			return nil, err
@@ -513,7 +533,7 @@ func (s *Store) SetVoid(id int64, void bool, reason string) error {
 func (s *Store) ConsecutiveFailures(team string, commit string) (int, error) {
 	rows, err := s.db.Query(`
 		SELECT b.status FROM match_bots b JOIN matches m ON m.id = b.match_id
-		WHERE b.team = ? AND b.commit_id = ? AND m.void = 0
+		WHERE b.team = ? AND b.commit_id = ? AND m.void = 0 AND m.kind = 'ladder'
 		ORDER BY m.id DESC LIMIT 100`, team, commit)
 	if err != nil {
 		return 0, err
@@ -539,7 +559,7 @@ func (s *Store) ConsecutiveFailures(team string, commit string) (int, error) {
 func (s *Store) RatedMatches(before time.Time) ([]RatedMatch, error) {
 	query := `SELECT m.id, m.ended_at, m.map, m.players, b.team, b.commit_id, b.flowers, b.status
 		FROM matches m JOIN match_bots b ON b.match_id = m.id
-		WHERE m.void = 0`
+		WHERE m.void = 0 AND m.kind = 'ladder'`
 	var args []any
 	if !before.IsZero() {
 		query += ` AND m.ended_at < ?`
@@ -577,7 +597,7 @@ func (s *Store) ResultsSince(since time.Time) ([]BotResult, error) {
 	rows, err := s.db.Query(`
 		SELECT m.id, b.team, b.flowers, b.status
 		FROM matches m JOIN match_bots b ON b.match_id = m.id
-		WHERE m.void = 0 AND m.ended_at >= ?
+		WHERE m.void = 0 AND m.kind = 'ladder' AND m.ended_at >= ?
 		ORDER BY m.id, b.seat`, since)
 	if err != nil {
 		return nil, err
@@ -623,7 +643,7 @@ func (s *Store) ResultsSince(since time.Time) ([]BotResult, error) {
 func (s *Store) MatchCounts(since time.Time, commits map[string]string) (map[string]map[string]int, error) {
 	rows, err := s.db.Query(`SELECT b.team, b.commit_id, m.map, m.players, COUNT(*)
 		FROM matches m JOIN match_bots b ON b.match_id = m.id
-		WHERE m.void = 0 AND m.ended_at >= ?
+		WHERE m.void = 0 AND m.kind = 'ladder' AND m.ended_at >= ?
 		GROUP BY b.team, b.commit_id, m.map, m.players`, since)
 	if err != nil {
 		return nil, err
@@ -680,23 +700,24 @@ func (s *Store) PlayedSince(since time.Time) (Played, error) {
 	return a, rows.Err()
 }
 
-// PruneFiles deletes the report and logs of the matches that are not among
-// the last `keep` matches of any of their teams, and returns how many
-// matches lost their files
+// PruneFiles deletes the report and logs of the ladder matches that are not
+// among the last `keep` ladder matches of any of their teams, and returns how
+// many matches lost their files. Manual matches keep theirs.
 func (s *Store) PruneFiles(keep int) (int, error) {
 	return s.deleteFiles(`SELECT m.id FROM matches m
-		WHERE m.files_deleted = 0 AND NOT EXISTS (
+		WHERE m.files_deleted = 0 AND m.kind = 'ladder' AND NOT EXISTS (
 			SELECT 1 FROM (
-				SELECT match_id, ROW_NUMBER() OVER (PARTITION BY team ORDER BY match_id DESC) AS n
-				FROM match_bots
+				SELECT b.match_id, ROW_NUMBER() OVER (PARTITION BY b.team ORDER BY b.match_id DESC) AS n
+				FROM match_bots b JOIN matches x ON x.id = b.match_id WHERE x.kind = 'ladder'
 			) r WHERE r.match_id = m.id AND r.n <= ?)`, keep)
 }
 
 // DeleteOldestFiles deletes the report and logs of the `count` oldest
-// matches that still have them, when disk space is low
+// matches that still have them, when disk space is low: ladder matches
+// first, manual matches last
 func (s *Store) DeleteOldestFiles(count int) (int, error) {
 	return s.deleteFiles(`SELECT id FROM matches WHERE files_deleted = 0
-		ORDER BY id LIMIT ?`, count)
+		ORDER BY kind = 'manual', id LIMIT ?`, count)
 }
 
 func (s *Store) deleteFiles(query string, args ...any) (int, error) {
@@ -925,4 +946,55 @@ func teamName(names map[string]string, id string) string {
 		return name
 	}
 	return id
+}
+
+// A version of a team, as the operator chooses them for manual matches
+type TeamVersion struct {
+	Team   string    `json:"team"`
+	Tag    string    `json:"tag"`
+	Commit string    `json:"commit"`
+	Image  string    `json:"image"`
+	Since  time.Time `json:"since"` // when the ladder first built it
+}
+
+// VersionsAt returns the version of each team at a time: among the commits
+// that built and passed the smoke test, the one the ladder got last before
+// that time. The time a version was submitted is when the ladder first
+// built it (tag and commit dates are set by the teams; an image built again
+// later does not make its version newer).
+func (s *Store) VersionsAt(at time.Time) (map[string]TeamVersion, error) {
+	rows, err := s.db.Query(`SELECT team, commit_id, tag, image, started_at FROM builds WHERE status = ? ORDER BY id`, BuildOK)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	// Each version, when it was first built, with its latest build's tag and image
+	type key struct{ team, commit string }
+	versions := make(map[key]*TeamVersion)
+	for rows.Next() {
+		var v TeamVersion
+		if err := rows.Scan(&v.Team, &v.Commit, &v.Tag, &v.Image, &v.Since); err != nil {
+			return nil, err
+		}
+		k := key{v.Team, v.Commit}
+		if first, ok := versions[k]; ok {
+			v.Since = first.Since
+		}
+		versions[k] = &v
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	latest := make(map[string]TeamVersion)
+	for _, v := range versions {
+		if v.Since.After(at) {
+			continue
+		}
+		if l, ok := latest[v.Team]; !ok || v.Since.After(l.Since) {
+			latest[v.Team] = *v
+		}
+	}
+	return latest, nil
 }

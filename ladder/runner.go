@@ -61,6 +61,12 @@ type Bot struct {
 type Match struct {
 	Map  string
 	Bots []Bot
+	// Played in real time: turns last at least the server's minimum turn
+	// duration, so that people can follow the game (otherwise the server
+	// runs in dev mode, and turns end as soon as all bots played)
+	RealTime bool
+	// If set, follows the game as it is played, for live viewers
+	Live *LiveGame
 }
 
 type BotStatus string
@@ -212,12 +218,16 @@ func (run *matchRun) play(ctx context.Context) (*MatchResult, error) {
 	}
 
 	// The server accepts a single game (the runner's), and keeps no files
-	if _, err := docker(ctx, "run", "-d", label, "--name", run.server(),
+	serverArgs := []string{"run", "-d", label, "--name", run.server(),
 		"--pull=never",
 		"--memory", run.config.ServerMemory, "--memory-swap", run.config.ServerMemory, "--pids-limit", serverPids,
-		"--log-driver", "json-file", "--log-opt", "max-size="+dockerLogMax, "--log-opt", "max-file=1",
+		"--log-driver", "json-file", "--log-opt", "max-size=" + dockerLogMax, "--log-opt", "max-file=1",
 		"-p", "127.0.0.1::8080",
-		run.config.ServerImage, "server/server", "-p", "8080", "--dev", "-time-budget", run.config.TimeBudget.String(), "-max-games", "1", "-history="); err != nil {
+		run.config.ServerImage, "server/server", "-p", "8080", "-time-budget", run.config.TimeBudget.String(), "-max-games", "1", "-history="}
+	if !run.match.RealTime {
+		serverArgs = append(serverArgs, "--dev")
+	}
+	if _, err := docker(ctx, serverArgs...); err != nil {
 		return nil, err
 	}
 	if _, err := docker(ctx, "network", "connect", "--alias", "server", run.network(), run.server()); err != nil {
@@ -259,6 +269,10 @@ func (run *matchRun) play(ctx context.Context) (*MatchResult, error) {
 	var waiting sync.WaitGroup
 	for _, i := range rand.Perm(len(run.match.Bots)) {
 		if err := run.startBot(ctx, i); err != nil {
+			if ctx.Err() != nil {
+				// Interrupted: the match is abandoned
+				return nil, ctx.Err()
+			}
 			log.Printf("%s: could not start bot %s: %s", run.prefix, run.match.Bots[i].Name, err)
 			run.mutex.Lock()
 			run.startErr[i] = err.Error()
@@ -275,6 +289,12 @@ func (run *matchRun) play(ctx context.Context) (*MatchResult, error) {
 
 	if err := run.waitForJoins(ctx); err != nil {
 		return nil, err
+	}
+
+	if run.match.Live != nil {
+		follow, stop := context.WithCancel(ctx)
+		defer stop()
+		go run.follow(follow, run.match.Live)
 	}
 
 	status, err := run.waitForEnd(ctx)
@@ -618,5 +638,47 @@ func sleep(ctx context.Context, d time.Duration) error {
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+}
+
+// follow records the states of the game as it is played, for live viewers:
+// the server tells the turns on a websocket, and the full state of each
+// turn is fetched with the admin token
+func (run *matchRun) follow(ctx context.Context, live *LiveGame) {
+	if status, err := run.client.GameStatus(ctx, run.gameID); err == nil && status != nil {
+		live.Start(run.gameID, status.Map, status.CreatedDate, status.Players)
+	}
+	defer live.End()
+
+	ws, err := run.client.Watch(ctx, run.gameID)
+	if err != nil {
+		log.Printf("%s: cannot follow the game live: %s", run.prefix, err)
+		return
+	}
+	defer ws.Close()
+	go func() {
+		<-ctx.Done()
+		ws.Close()
+	}()
+
+	for {
+		var message struct {
+			Turn     uint `json:"turn"`
+			GameOver bool `json:"gameOver"`
+		}
+		if err := ws.ReadJSON(&message); err != nil {
+			return
+		}
+		state, err := run.client.GameRaw(ctx, run.gameID, run.adminToken)
+		if err != nil {
+			if ctx.Err() == nil {
+				log.Printf("%s: live state of turn %d: %s", run.prefix, message.Turn, err)
+			}
+			continue
+		}
+		live.Add(state)
+		if message.GameOver {
+			return
+		}
 	}
 }

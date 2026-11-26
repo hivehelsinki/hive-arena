@@ -189,6 +189,7 @@ func openLadderWithFlags(flags *flag.FlagSet, args []string) (*Ladder, *flag.Fla
 		Rand:     rand.New(rand.NewSource(time.Now().UnixNano())),
 		// Only one ladder process plays at a time (see mustLock)
 		RemoveLeftovers: RemoveLeftovers,
+		EnsureImage:     builder.EnsureImage,
 	}
 	pool := &PoolResolver{
 		Registry: config.Registry,
@@ -220,6 +221,7 @@ func cmdServe(ctx context.Context, args []string) {
 		}
 	}()
 
+	ladder.Manual = NewManualGame()
 	go serveWeb(ladder)
 
 	if err := ladder.Serve(ctx, wake); err != nil {
@@ -233,6 +235,7 @@ func serveWeb(ladder *Ladder) {
 		log.Fatal(err)
 	}
 	web.Settings = ladder.Settings
+	web.Manual = ladder.Manual
 	log.Printf("Website on %s", ladder.Config.Web.Listen)
 	// No write timeout: backups and reports can take a while to download
 	server := &http.Server{
