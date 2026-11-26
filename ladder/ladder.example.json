@@ -49,6 +49,6 @@
 	"web": {
 		"listen": ":8080",
 		"viewerDir": "viewer/web",
-		"backupToken": ""
+		"adminPassword": ""
 	}
 }

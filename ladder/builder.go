@@ -170,6 +170,33 @@ func (b *Builder) resolve(ctx context.Context, team Team) TeamState {
 	return state
 }
 
+// EnsureImage builds the image of a team's version again if it is missing
+// (old images are pruned), for manual matches
+func (b *Builder) EnsureImage(ctx context.Context, team Team, version TeamVersion) error {
+	if imageExists(version.Image) {
+		return nil
+	}
+	if team.ID == "" {
+		return fmt.Errorf("the team is not registered anymore")
+	}
+	log.Printf("Team %s: the image of %s is missing, building it again", team.ID, version.Tag)
+	dir := filepath.Join(b.DataDir, "repos", team.ID+".git")
+	fetchCtx, cancel := context.WithTimeout(ctx, fetchTimeout)
+	err := Mirror(fetchCtx, team.Repo, dir)
+	cancel()
+	if err != nil {
+		return fmt.Errorf("fetching the repository: %w", err)
+	}
+	build, err := b.build(ctx, team, dir, Tag{Name: version.Tag, Commit: version.Commit})
+	if err != nil {
+		return err
+	}
+	if build.Status != BuildOK {
+		return fmt.Errorf("%s: %s", build.Status, build.Error)
+	}
+	return nil
+}
+
 // build builds and smoke-tests a commit, and records the result. Failures
 // that are not the team's are not recorded: they return an error.
 func (b *Builder) build(ctx context.Context, team Team, dir string, tag Tag) (*Build, error) {

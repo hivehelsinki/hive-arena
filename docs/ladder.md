@@ -21,6 +21,7 @@ How bots are built and run: [docker.md](docker.md). The rules of the game: [rule
 ## What is kept
 
 - **Results are kept forever**: every match, its players, their places and flowers.
+- **Manual matches**, such as the finals, are chosen and played by the organizers. They are listed with the other matches, marked as manual, but do not count for the ladder (ratings, head-to-head, quotas), and keep their replays.
 - **Replays and bot outputs are kept for each team's last 100 matches.** A match keeps them as long as one of its teams keeps it; older ones are deleted. To keep all of yours, download them regularly (see the script below).
 
 ## The data
@@ -33,6 +34,7 @@ All routes are `GET`, and answer JSON unless said otherwise.
 
 - `team`: only the matches of a team (its identifier)
 - `players`: only the matches with this number of players
+- `kind`: `ladder` or `manual`: only the matches of this kind
 - `limit`: how many matches (50 by default, at most 200)
 - `before=<id>`: only older matches than this one, to page back
 - `after=<id>`: only newer matches than this one, **oldest first**; `after=0` starts from the first match. To fetch the matches played since the last one you have, ask for `after=<its id>` until the answer is empty.
@@ -48,6 +50,7 @@ All routes are `GET`, and answer JSON unless said otherwise.
 	"startedAt", "endedAt": (string) ISO 8601 times,
 	"turns": (int) the turns played,
 	"void": (bool) the match failed (for instance the server crashed): it is not rated, and has no replay,
+	"kind": (string) "ladder", or "manual": chosen by the organizers (e.g. the finals), not rated,
 	"error": (string) why, for a void match,
 	"filesDeleted": (bool) the replay and the bot outputs have expired,
 	"bots": [ by seat (player number in the replay)

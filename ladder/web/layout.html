@@ -23,7 +23,7 @@
 <body>
 <header>
 	<a class="title" href="/">Hive Arena ladder</a>
-	<nav><a href="/">Ladder</a> <a href="/matches">Matches</a> <a href="/specs">Specs</a> <a href="/screen">Big screen</a></nav>
+	<nav><a href="/">Ladder</a> <a href="/matches">Matches</a> <a href="/specs">Specs</a> <a href="/screen">Big screen</a>{{if .Admin}} <a href="/live" class="admin" title="The operator's page: manual matches">Live</a>{{end}}</nav>
 	<button class="theme-switch" type="button" onclick="switchTheme()" aria-label="Switch between light and dark" title="Switch between light and dark"></button>
 </header>
 <main>
@@ -83,7 +83,7 @@
 <tbody>
 {{range .}}
 <tr{{if .Void}} class="void"{{end}}>
-	<td><a href="/matches/{{.ID}}">{{.ID}}</a></td>
+	<td><a href="/matches/{{.ID}}">{{.ID}}</a>{{if eq .Kind "manual"}} <span class="tag" title="Chosen by the organizers: not rated">manual</span>{{end}}</td>
 	<td>{{time .StartedAt}}</td>
 	<td class="num">{{.Players}}</td>
 	<td>{{range .ByPlace}}<span class="result place{{.Place}} {{.Status}}" title="{{place .Place}}, {{.Flowers}} flowers, {{.Status}}">{{with place .Place}}<span class="place">{{.}}</span> {{end}}{{.Name}}</span> {{end}}</td>

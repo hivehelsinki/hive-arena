@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/hivehelsinki/hive-arena/arena"
 )
 
@@ -126,6 +127,19 @@ func (c *ArenaClient) Game(ctx context.Context, id string, token string) (*arena
 	var state arena.GameState
 	err := c.get(ctx, "/game", url.Values{"id": {id}, "token": {token}}, &state)
 	return &state, err
+}
+
+// GameRaw returns the state of a game as the server sends it (the full
+// state with the admin token)
+func (c *ArenaClient) GameRaw(ctx context.Context, id string, token string) ([]byte, error) {
+	return c.request(ctx, "GET", "/game", url.Values{"id": {id}, "token": {token}}, "")
+}
+
+// Watch opens the websocket on which the server tells each new turn of a game
+func (c *ArenaClient) Watch(ctx context.Context, id string) (*websocket.Conn, error) {
+	address := "ws" + strings.TrimPrefix(c.Base, "http") + "/ws?" + url.Values{"id": {id}}.Encode()
+	ws, _, err := websocket.DefaultDialer.DialContext(ctx, address, nil)
+	return ws, err
 }
 
 func (c *ArenaClient) PostOrders(ctx context.Context, id string, token string, turn uint, orders string) error {

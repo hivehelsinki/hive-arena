@@ -37,7 +37,7 @@ Configuration (`ladder.json`):
 - `build`: build timeout, number of successful images kept per team, image size limit (`maxImageMB`), size of the docker build cache (`cacheLimit`), how often new versions are built (`interval`, between matches)
 - `minFreeDiskGB`: below this free space in `dataDir`, the report and logs of the oldest matches are deleted, a warning is logged and `/health` reports a problem
 - `web.listen`: address of the website
-- `web.backupToken`: enables the backup route (`/backup?token=`), see [deploy/setup.md](deploy/setup.md)
+- `web.adminPassword`: the password of the operator's routes, `/live` and `/backup` (user `admin`), which are disabled without one
 
 ## Teams and builds
 
@@ -97,13 +97,27 @@ Read-only, no accounts: the global ladder and one per format, the head-to-head t
 
 `/screen` is meant for a big screen: the leaderboard, and the replays of the latest matches, one after the other.
 
-Replays open in the browser version of the viewer, served at `/viewer/` from `web.viewerDir` (default `viewer/web`, relative to the working directory). Build it first with `viewer/build-web.sh`.
+## Manual matches
+
+For the finals, or any match the organizers choose, the operator's page `/live`:
+
+1. lists the registered teams, in the order of the ladder, with their latest working version, or the version they had at a given time (a version counts from when the ladder first built it: tag and commit dates are set by the teams);
+2. **Play**, with 2, 3, 4 or 6 teams chosen, starts the match, with random seats, and the page becomes the live view: the viewer, and a side bar with the teams, their rank and rating on the ladder, **Abort match** (not recorded) and **Full screen** (the viewer alone);
+3. once the match is over, **Close** goes back to choosing the teams.
+
+There is one manual match at a time. It is played in real time: the server runs without `--dev`, so turns last at least half a second (a 1000-turn game takes over 8 minutes). The ladder follows the game on the server's websocket, keeps every turn in memory, and serves them (`/live/states?game=<id>&from=<n>`) to the browser viewer (`/viewer/?live=<game id>`).
+
+Pause the ladder first (`"paused": true`): a manual match is played even when it is paused. Otherwise, the ladder match being played is interrupted (and not recorded, as on a restart), and ladder matches go on after the manual match. A version whose image was pruned is built again first, and a match waits for a build of new versions in progress to end.
+
+A manual match is recorded, shown with the others (marked as manual, and filterable), but does not count for the ladder: no rating, head-to-head, quota or failures. It keeps its replay and outputs (when disk space is low, ladder matches lose theirs first).
+
+The operator's page (`/live`) asks for a password: HTTP basic authentication, user `admin`, password `web.adminPassword` (disabled without one). Once authenticated, a **Live** link to the operator's page appears in the top bar of the website (a cookie tells the public pages to show it; it grants nothing by itself). The password travels with every request, so the website must be served over HTTPS (see [deploy/setup.md](deploy/setup.md)). Requests that change something are only accepted from the ladder's own pages, so that another site cannot use the operator's logged-in browser. Manual matches are played by the ladder process: the website alone (`ladder web`) cannot play them.
 
 ## Status and backups
 
 - `/health`: `ok`, or the list of problems with status 503 (for monitoring)
 - `/api/status`: disk space, Docker, database, what the ladder is doing (`activity`), the matchmaker (paused, last error, matches in the last 24 hours against the quotas' demand, configuration warnings), teams with problems, registry problems
-- `/backup?token=`: a tar archive named after the time, with a consistent snapshot of the database and the build logs (not the match reports and logs, which expire), to be fetched by a backup system elsewhere. See [deploy/setup.md](deploy/setup.md).
+- `/backup` (with the admin password): a tar archive named after the time, with a consistent snapshot of the database and the build logs (not the match reports and logs, which expire), to be fetched by a backup system elsewhere. See [deploy/setup.md](deploy/setup.md).
 
 ## Code
 
@@ -114,6 +128,7 @@ One Go binary, in package `main`:
 - `matchmaker.go`: choosing and playing matches; `ladder.go`: what it shares with the commands
 - `runner.go`, `arenaclient.go`, `docker.go`: playing one match in containers, talking to its arena server
 - `store.go`: the SQLite database and the match files; `rating.go`, `scoring.go`: ratings, places and head-to-head results; `ladderview.go`: the ladders as the website shows them
+- `manual.go`, `web_manual.go`: manual matches, the operator's page and the live game
 - `web.go`, `web/`: the website and the API; `status.go`: `/health` and `/api/status`; `backup.go`: `/backup`
 - `lock_*.go`, `disk_*.go`: the data directory lock and free disk space, per platform
 

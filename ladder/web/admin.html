@@ -1,0 +1,69 @@
+{{define "content"}}
+<h1>Manual match</h1>
+<p>Choose the teams, and play a match between them right away, in real time, to watch it live. It is recorded, but does not count for the ladder. Seats are drawn at random.</p>
+{{if not .Running}}<p class="error">The ladder does not run in this process (<code>ladder web</code>): manual matches cannot be played from here.</p>
+{{else if not .Paused}}<p class="error">The ladder is not paused: the ladder match being played will be interrupted (and not recorded), and ladder matches go on after this one. Pause it first (<code>"paused": true</code> in the configuration) to play only manual matches.</p>{{end}}
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+
+<form class="filter" method="get">
+	<label>Versions submitted before <input type="datetime-local" name="at" value="{{.At}}"></label>
+	<button>Show</button>
+	{{if .AtGiven}}<a href="/live">Latest versions</a>{{else}}<span class="dim">(the latest versions)</span>{{end}}
+</form>
+
+<form method="post" action="/live">
+<input type="hidden" name="at" value="{{if .AtGiven}}{{.At}}{{end}}">
+<table class="choices">
+<thead><tr><th></th><th>#</th><th>Team</th><th class="num">Rating</th><th>Version</th><th>Submitted</th><th></th></tr></thead>
+<tbody>
+{{range .Choices}}
+<tr{{if not .Version}} class="dim"{{end}}>
+	<td><input type="checkbox" name="team" value="{{.Team.ID}}" id="team-{{.Team.ID}}"{{if not .Version}} disabled{{end}}></td>
+	<td>{{if .Rank}}{{.Rank}}{{end}}</td>
+	<td><label for="team-{{.Team.ID}}">{{.Team.Name}}</label></td>
+	<td class="num">{{.Rating}}</td>
+	{{with .Version}}<td class="mono">{{.Tag}} ({{short .Commit}})</td><td>{{time .Since}}</td>
+	{{else}}<td colspan="2">no working version at that time</td>{{end}}
+	<td>{{with .Problem}}<span class="dim" title="{{.}}">not playing on the ladder</span>{{end}}</td>
+</tr>
+{{else}}
+<tr><td colspan="7" class="dim">No registered teams.</td></tr>
+{{end}}
+</tbody>
+</table>
+<p class="filter">
+	{{if gt (len .Maps) 1}}<label>Map <select name="map">{{range .Maps}}<option>{{.}}</option>{{end}}</select></label>
+	{{else}}<input type="hidden" name="map" value="{{index .Maps 0}}">{{end}}
+	<button id="play" disabled>Play</button>
+	<span class="dim" id="selected">Choose 2, 3, 4 or 6 teams.</span>
+</p>
+</form>
+
+<script>
+// A click anywhere on a team's row chooses it. The button says how many teams
+// are chosen, and is only enabled for a valid number.
+(function () {
+	const boxes = document.querySelectorAll('input[name="team"]');
+	for (const box of boxes) {
+		const row = box.closest("tr");
+		if (box.disabled) continue;
+		row.classList.add("choice");
+		row.addEventListener("click", e => {
+			// The box and the name's label toggle it by themselves
+			if (e.target.closest("input, label, a")) return;
+			box.click();
+		});
+	}
+	const play = document.getElementById("play");
+	const selected = document.getElementById("selected");
+	const update = () => {
+		const n = [...boxes].filter(b => b.checked).length;
+		const valid = [2, 3, 4, 6].includes(n);
+		play.disabled = !valid;
+		selected.textContent = n === 0 ? "Choose 2, 3, 4 or 6 teams." : `${n} team${n > 1 ? "s" : ""} chosen` + (valid ? "." : ": choose 2, 3, 4 or 6.");
+	};
+	boxes.forEach(b => b.addEventListener("change", update));
+	update();
+})();
+</script>
+{{end}}

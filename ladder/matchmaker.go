@@ -68,6 +68,7 @@ func (l *Ladder) Serve(ctx context.Context, wake <-chan struct{}) error {
 		case <-wake:
 			log.Print("Matchmaker woken up: rebuilding the pool")
 			poolTime = time.Time{}
+		case <-l.Manual.Wake():
 		}
 	}
 
@@ -97,6 +98,11 @@ func (l *Ladder) Serve(ctx context.Context, wake <-chan struct{}) error {
 		}
 		l.freeDisk()
 
+		// Manual matches first, even when the ladder is paused
+		if l.playManual(ctx, info) {
+			continue
+		}
+
 		if settings.Paused {
 			SetActivity("paused")
 			wait(idleWait)
@@ -118,13 +124,24 @@ func (l *Ladder) Serve(ctx context.Context, wake <-chan struct{}) error {
 
 		SetActivity(fmt.Sprintf("playing %s: %s", Format{match.Map, len(match.Bots)}, l.teamNames(match.Bots)))
 		log.Printf("Match: %s, %s", Format{match.Map, len(match.Bots)}, botNames(match.Bots))
-		result, err := l.playMatch(ctx, *match)
+		// A manual match interrupts it
+		matchCtx, interrupt := context.WithCancel(ctx)
+		l.Manual.setInterrupt(interrupt)
+		result, err := l.playMatch(matchCtx, *match)
+		l.Manual.setInterrupt(nil)
+		interrupted := matchCtx.Err() != nil
+		interrupt()
 		if ctx.Err() != nil {
 			// Stopping: the match is lost, and not recorded
 			if result != nil {
 				result.RemoveReport()
 			}
 			break
+		}
+		if interrupted {
+			result.RemoveReport()
+			log.Print("Match interrupted for a manual match: not recorded")
+			continue
 		}
 		if err != nil {
 			log.Printf("Match failed: %s", err)

@@ -27,8 +27,10 @@ var webFiles embed.FS
 type Web struct {
 	Config *Config
 	// The ladder settings, shared with the matchmaker when it runs
-	Settings  *LiveSettings
-	Store     *Store
+	Settings *LiveSettings
+	Store    *Store
+	// Manual matches, when the ladder runs in this process (nil otherwise)
+	Manual    *ManualGame
 	templates map[string]*template.Template
 	docker    dockerCheck
 }
@@ -179,7 +181,15 @@ func (web *Web) Handler() http.Handler {
 	mux.HandleFunc("GET /screen", web.handleScreen)
 	mux.HandleFunc("GET /builds/{id}/log", web.handleBuildLog)
 
-	mux.HandleFunc("GET /backup", web.handleBackup)
+	// The operator's page, behind a password (see web_manual.go)
+	mux.Handle("GET /live", web.admin(web.handleAdmin))
+	mux.Handle("POST /live", web.admin(web.handleAdminPlay))
+	mux.Handle("POST /live/abort", web.admin(web.handleAdminAbort))
+	mux.Handle("POST /live/close", web.admin(web.handleAdminClose))
+	mux.Handle("GET /live/status", web.admin(web.apiLive))
+	mux.Handle("GET /live/states", web.admin(web.apiLiveStates))
+
+	mux.Handle("GET /backup", web.admin(web.handleBackup))
 
 	mux.HandleFunc("GET /health", web.handleHealth)
 	mux.HandleFunc("GET /api/status", web.handleStatus)
@@ -210,7 +220,7 @@ func viewerHandler(dir string) http.Handler {
 	})
 }
 
-func (web *Web) render(w http.ResponseWriter, page string, data map[string]any) {
+func (web *Web) render(w http.ResponseWriter, r *http.Request, page string, data map[string]any) {
 	data["Settings"] = web.Settings.Get()
 	if versions, err := web.Store.VersionTags(); err == nil {
 		data["Versions"] = versions
@@ -219,6 +229,7 @@ func (web *Web) render(w http.ResponseWriter, page string, data map[string]any) 
 		data["Names"] = names
 	}
 	data["Revision"] = gitRevision()
+	data["Admin"] = isAdmin(r)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := web.templates[page].ExecuteTemplate(w, "layout", data); err != nil {
 		log.Printf("Rendering %s: %s", page, err)
@@ -252,7 +263,7 @@ func (web *Web) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	web.render(w, "leaderboard", map[string]any{
+	web.render(w, r, "leaderboard", map[string]any{
 		"Ladder":     view,
 		"HeadToHead": view.HeadToHead,
 		"Teams":      view.Teams,
@@ -268,7 +279,7 @@ func matchFilter(r *http.Request) MatchFilter {
 		limit = 50
 	}
 	players, _ := strconv.Atoi(q.Get("players"))
-	filter := MatchFilter{Team: q.Get("team"), Players: players, Before: before, Limit: limit}
+	filter := MatchFilter{Team: q.Get("team"), Kind: q.Get("kind"), Players: players, Before: before, Limit: limit}
 	if q.Has("after") {
 		after, _ := strconv.ParseInt(q.Get("after"), 10, 64)
 		filter.After = &after
@@ -302,7 +313,7 @@ func (web *Web) handleMatches(w http.ResponseWriter, r *http.Request) {
 	slices.SortFunc(teams, func(a, b teamOption) int {
 		return cmp.Or(strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)), strings.Compare(a.ID, b.ID))
 	})
-	web.render(w, "matches", map[string]any{"Matches": matches, "Filter": filter, "Next": next, "Formats": web.formats(), "Teams": teams})
+	web.render(w, r, "matches", map[string]any{"Matches": matches, "Filter": filter, "Next": next, "Formats": web.formats(), "Teams": teams})
 }
 
 func (web *Web) handleMatch(w http.ResponseWriter, r *http.Request) {
@@ -324,7 +335,7 @@ func (web *Web) handleMatch(w http.ResponseWriter, r *http.Request) {
 			logs[bot.Team] = true
 		}
 	}
-	web.render(w, "match", map[string]any{"Match": match, "Logs": logs})
+	web.render(w, r, "match", map[string]any{"Match": match, "Logs": logs})
 }
 
 // serveGzip serves a gzipped file, compressed if the client accepts it
@@ -443,7 +454,7 @@ func (web *Web) handleTeam(w http.ResponseWriter, r *http.Request) {
 	if row != nil {
 		perFormat = row.PerFormat
 	}
-	web.render(w, "team", map[string]any{
+	web.render(w, r, "team", map[string]any{
 		"ID": id, "State": state, "Builds": builds, "Matches": matches,
 		"Row": row, "PerFormat": perFormat, "History": view.TeamHistory(id), "Formats": view.Formats, "H2H": view.HeadToHead[id],
 		"HeadToHeadPeriod": view.HeadToHeadPeriod, "Counts": counts[id], "Quota": settings.Quota,
@@ -507,5 +518,5 @@ func (web *Web) handleScreen(w http.ResponseWriter, r *http.Request) {
 }
 
 func (web *Web) handleSpecs(w http.ResponseWriter, r *http.Request) {
-	web.render(w, "specs", map[string]any{"Config": web.Config})
+	web.render(w, r, "specs", map[string]any{"Config": web.Config})
 }

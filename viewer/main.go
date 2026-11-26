@@ -325,6 +325,8 @@ func main() {
 		game = GetURL(args.URL)
 	} else if args.File != "" {
 		game = GetFile(args.File)
+	} else if args.Live != "" {
+		game, live = StartLadderLive(args.Live)
 	} else if args.Host != "" && args.GameID != "" && args.Token != "" {
 		game, live = StartLiveWatch(args.Host, args.GameID, args.Token)
 	} else {

@@ -155,11 +155,11 @@ docker image prune -f >/dev/null
 
 step "Configuration"
 if [ ! -f "$CONFIG" ]; then
-	token=$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')
-	sed "s/\"backupToken\": \"\"/\"backupToken\": \"$token\"/" ladder/ladder.example.json > "$CONFIG"
+	password=$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')
+	sed "s/\"adminPassword\": \"\"/\"adminPassword\": \"$password\"/" ladder/ladder.example.json > "$CONFIG"
 	chown "root:$SERVICE_USER" "$CONFIG"
 	chmod 640 "$CONFIG"
-	echo "Created $CONFIG, with a random backup token."
+	echo "Created $CONFIG, with a random admin password (web.adminPassword)."
 	echo "Edit it (at least registry.url, and the ladder formats and quota), then run this script again."
 	exit 1
 fi

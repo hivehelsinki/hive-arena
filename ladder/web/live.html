@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hive Arena: manual match</title>
+<style>
+	/* The look of the big screen page */
+	html, body { margin: 0; height: 100%; color: #ece8f5; font: 18px/1.4 ui-rounded, "SF Pro Rounded", system-ui, sans-serif; overflow: hidden;
+		background: radial-gradient(1400px 600px at 20% -250px, #2a1f3d 0%, #121019 70%) no-repeat, #121019; }
+	#layout { display: flex; height: 100%; }
+	#side { width: 22%; min-width: 260px; padding: 1.2em; box-sizing: border-box; border-right: 1px solid #3a2a10; display: flex; flex-direction: column; gap: 1em;
+		background: linear-gradient(180deg, rgb(255 176 0 / 0.06), transparent 40%); }
+	h1 { margin: 0; font-size: 1.5em; font-weight: 800; color: #ffb000; text-shadow: 0 0 12px rgb(255 176 0 / 0.5); }
+	h1::before { content: "⬢ "; }
+	.dim { color: #8c86a0; }
+	.state { align-self: flex-start; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.08em; border: 1px solid #3a3550; border-radius: 999px; padding: 0 0.6em; }
+	.state.playing { color: #121019; background: #ff5a5a; border-color: #ff5a5a; }
+	table { width: 100%; border-collapse: collapse; }
+	td { padding: 0.45em 0.3em; border-bottom: 1px solid #2a2738; vertical-align: baseline; }
+	td.rank { width: 2.2em; color: #ffb000; font-weight: 800; }
+	td.num { text-align: right; font-family: ui-monospace, "SF Mono", Menlo, monospace; color: #8c86a0; }
+	.team { font-weight: 700; }
+	.version { display: block; font-size: 0.7em; color: #8c86a0; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+	.error { color: #ff7a7a; }
+	a { color: inherit; }
+	#controls { margin-top: auto; display: flex; flex-wrap: wrap; gap: 0.5em; }
+	#controls form { margin: 0; }
+	button { font: inherit; font-size: 0.85em; padding: 0.35em 0.9em; border-radius: 999px; border: 1px solid #3a3550; background: #1a1824; color: inherit; cursor: pointer; }
+	button:hover { border-color: #ffb000; }
+	button.danger:hover { border-color: #ff5a5a; color: #ff7a7a; }
+	#main { flex: 1; display: flex; }
+	#waiting { margin: auto; color: #8c86a0; font-size: 1.2em; }
+	iframe { flex: 1; border: 0; }
+	/* Full screen: the side bar folds away */
+	body.full #side { display: none; }
+</style>
+</head>
+<body>
+<div id="layout">
+	<div id="side">
+		<h1>Hive Arena</h1>
+		<span class="state" id="state"></span>
+		<div>
+			<table id="teams"></table>
+			<p class="dim" style="font-size: 0.75em">Rank and rating on the ladder when the match started.</p>
+		</div>
+		<p id="message"></p>
+		<div id="controls">
+			<form method="post" action="/live/abort" id="abort" hidden onsubmit="return confirm('Abort this match? It will not be recorded.')"><button class="danger">Abort match</button></form>
+			<form method="post" action="/live/close" id="close" hidden><button>Close</button></form>
+			<button type="button" onclick="fullScreen()">Full screen</button>
+		</div>
+	</div>
+	<div id="main">
+		<div id="waiting">Starting the match...</div>
+		<iframe id="viewer" hidden></iframe>
+	</div>
+</div>
+<script>
+function escape(s) {
+	return String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+}
+
+// Full screen: the whole page, without the side bar (Escape comes back)
+function fullScreen() {
+	document.documentElement.requestFullscreen().then(() => document.body.classList.add("full")).catch(e => console.log(e));
+}
+document.addEventListener("fullscreenchange", () => document.body.classList.toggle("full", !!document.fullscreenElement));
+
+const STATES = {starting: "starting", preparing: "preparing", playing: "live", finished: "finished", failed: "failed", aborted: "aborted"};
+let shownGame = null;
+let teamsShown = false;
+
+async function update() {
+	try {
+		const m = await (await fetch("/live/status", {cache: "no-store"})).json();
+		if (!m) {
+			// Closed (here or elsewhere): back to choosing the teams
+			location.reload();
+			return;
+		}
+		if (m.gameId && m.gameId !== shownGame) {
+			shownGame = m.gameId;
+			const viewer = document.getElementById("viewer");
+			viewer.src = `/viewer/?live=${encodeURIComponent(m.gameId)}`;
+			viewer.hidden = false;
+			document.getElementById("waiting").hidden = true;
+		}
+		if (!teamsShown) {
+			document.getElementById("teams").innerHTML = m.bots.map(b =>
+				`<tr><td class="rank">${b.rank ? "#" + b.rank : ""}</td>` +
+				`<td><span class="team">${escape(b.name)}</span><span class="version">${escape(b.tag)} (${escape(b.commit.slice(0, 8))})</span></td>` +
+				`<td class="num">${escape(b.rating || "")}</td></tr>`).join("");
+			teamsShown = true;
+		}
+
+		const state = document.getElementById("state");
+		state.textContent = STATES[m.status] || m.status;
+		state.className = "state " + m.status;
+		const over = ["finished", "failed", "aborted"].includes(m.status);
+		document.getElementById("abort").hidden = over;
+		document.getElementById("close").hidden = !over;
+
+		let message = "";
+		if (m.status === "starting") message = "Waiting for the ladder to be free...";
+		if (m.status === "preparing") message = "Preparing the bots...";
+		if (m.error) message = `<span class="error">${escape(m.error)}</span>`;
+		if (m.matchId) message += ` <a href="/matches/${m.matchId}" target="_blank">Match #${m.matchId}</a>`;
+		document.getElementById("message").innerHTML = message;
+		if (over && !m.gameId) document.getElementById("waiting").textContent = "The match did not start.";
+	} catch (e) {
+		console.log(e);
+	}
+}
+
+update();
+setInterval(update, 1000);
+</script>
+</body>
+</html>

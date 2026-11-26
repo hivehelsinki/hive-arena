@@ -143,3 +143,11 @@ table:not(.standings) th { text-align: left; vertical-align: top; width: 16em; }
 .rules table th { width: auto; }
 .rules { margin-top: 4em; padding: 0.5em 1.5em 1.5em; border-top: 4px solid var(--accent, #f7c300); background: var(--card); border-radius: 0 0 12px 12px; }
 .rules > h2:first-child { margin-top: 0.8em; }
+
+/* The operator's page: a team's whole row chooses it */
+table.choices tr.choice { cursor: pointer; user-select: none; }
+table.choices tr.choice label { cursor: pointer; }
+table.choices tr:has(input:checked) td { background-color: var(--hover); }
+table.choices tr:has(input:checked) td:nth-child(3) { font-weight: 700; color: var(--accent-ink); }
+header nav a.admin { background: rgb(255 90 90 / 0.3); }
+header nav a.admin:hover { background: rgb(255 90 90 / 0.5); }

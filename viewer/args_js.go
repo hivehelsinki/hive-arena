@@ -12,14 +12,16 @@ import (
 
 type Args struct {
 	URL, File           string
+	Live                string // the /live/states address of the live manual match of the ladder
 	Host, GameID, Token string
 	Autoplay            bool
 	Speed               float64 // turns per second when playing
 }
 
 // readArgs reads the options from the query string of the page:
-// ?url=<report URL>, or ?match=<id> for a match of the ladder website, and
-// optionally autoplay=1 and speed=<turns per second>
+// ?url=<report URL>, or ?match=<id> for a match of the ladder website, or
+// ?live=<game ID> for the live manual match of the ladder website, and optionally
+// autoplay=1 and speed=<turns per second>
 func readArgs() Args {
 	search := js.Global().Get("location").Get("search").String()
 	query, _ := url.ParseQuery(strings.TrimPrefix(search, "?"))
@@ -28,6 +30,9 @@ func readArgs() Args {
 	args.Speed, _ = strconv.ParseFloat(query.Get("speed"), 64)
 	if match := query.Get("match"); match != "" {
 		args.URL = "/matches/" + url.PathEscape(match) + "/report.json"
+	}
+	if game := query.Get("live"); game != "" {
+		args.Live = "/live/states?" + url.Values{"game": {game}}.Encode()
 	}
 	return args
 }

@@ -4,6 +4,7 @@
 <p>
 	{{.Players}} players, {{.Turns}} turns. Played {{time .StartedAt}} in {{duration .StartedAt .EndedAt}}.
 	{{if .Void}}<strong>Void: not counted.</strong>{{end}}
+	{{if eq .Kind "manual"}}<span class="tag">manual</span> A manual match, chosen by the organizers: it does not count for the ladder.{{end}}
 </p>
 {{if .Error}}<p class="error">This match failed: {{.Error}}</p>{{end}}
 {{if .FilesDeleted}}

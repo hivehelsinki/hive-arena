@@ -37,6 +37,11 @@ type Ladder struct {
 	// Removes the containers and networks left by a previous process (nil:
 	// none, as in tests, which must not touch the real ones)
 	RemoveLeftovers func(ctx context.Context) error
+	// The manual match, played first (nil: none)
+	Manual *ManualGame
+	// Builds the image of a version again if it is missing (nil: images are
+	// assumed to be there)
+	EnsureImage func(ctx context.Context, team Team, version TeamVersion) error
 }
 
 // After this many runner errors in a row (not bot failures), the

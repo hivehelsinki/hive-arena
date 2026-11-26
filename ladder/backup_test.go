@@ -15,7 +15,7 @@ import (
 func TestBackup(t *testing.T) {
 	store := newTestStore(t)
 	config := &Config{Timezone: "UTC"}
-	config.Web.BackupToken = "secret"
+	config.Web.AdminPassword = "secret"
 
 	a, b := Bot{Name: "a"}, Bot{Name: "b"}
 	match, _ := store.RecordMatch(MatchInfo{}, fakeResult("m", []Bot{a, b}, []uint{1, 0}, []BotStatus{Finished, Finished}))
@@ -29,16 +29,24 @@ func TestBackup(t *testing.T) {
 	server := httptest.NewServer(web.Handler())
 	defer server.Close()
 
-	// Without the right token, the route does not exist
-	for _, path := range []string{"/backup", "/backup?token=nope"} {
-		res, _ := http.Get(server.URL + path)
+	// The admin password is needed (the old token in the URL is not enough)
+	for _, password := range []string{"", "nope", "?token=secret"} {
+		req, _ := http.NewRequest("GET", server.URL+"/backup", nil)
+		if password == "?token=secret" {
+			req, _ = http.NewRequest("GET", server.URL+"/backup"+password, nil)
+		} else if password != "" {
+			req.SetBasicAuth("admin", password)
+		}
+		res, _ := http.DefaultClient.Do(req)
 		res.Body.Close()
-		if res.StatusCode != 404 {
-			t.Errorf("%s: expected 404, got %d", path, res.StatusCode)
+		if res.StatusCode != 401 {
+			t.Errorf("%q: expected 401, got %d", password, res.StatusCode)
 		}
 	}
 
-	res, err := http.Get(server.URL + "/backup?token=secret")
+	req, _ := http.NewRequest("GET", server.URL+"/backup", nil)
+	req.SetBasicAuth("admin", "secret")
+	res, err := http.DefaultClient.Do(req)
 	if err != nil || res.StatusCode != 200 {
 		t.Fatalf("backup failed: %v %v", res.StatusCode, err)
 	}
@@ -96,9 +104,11 @@ func TestBackupDisabledWithoutToken(t *testing.T) {
 	server := httptest.NewServer(web.Handler())
 	defer server.Close()
 
-	res, _ := http.Get(server.URL + "/backup?token=")
+	req, _ := http.NewRequest("GET", server.URL+"/backup", nil)
+	req.SetBasicAuth("admin", "")
+	res, _ := http.DefaultClient.Do(req)
 	res.Body.Close()
 	if res.StatusCode != 404 {
-		t.Errorf("backups should be disabled without a token, got %d", res.StatusCode)
+		t.Errorf("backups should be disabled without a password, got %d", res.StatusCode)
 	}
 }
